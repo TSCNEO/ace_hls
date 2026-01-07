@@ -1,0 +1,52 @@
+services:
+  ace-hls:
+    build: .
+    container_name: ace_hls_viewer
+    restart: unless-stopped
+    ports:
+      - "${ACE_HLS_PORT}:5000"
+    volumes:
+      - ace_hls_data:/app/data
+    environment:
+      - ACEXY_IP=${ACEXY_IP}
+      - ACEXY_PORT=${ACEXY_PORT}
+      - CACHE_DURATION=${CACHE_DURATION}
+      - URL_ORIGEN=${URL_ORIGEN}
+    networks:
+      - ace_hls_stream
+
+  acestream:
+    image: martinbjeldbak/acestream-http-proxy:latest
+    container_name: acestream
+    restart: unless-stopped
+    networks:
+      - ace_hls_stream
+
+  acexy:
+    image: ghcr.io/javinator9889/acexy:0.2.0
+    container_name: acexy
+    restart: unless-stopped
+    ports:
+      - "${ACEXY_PORT_HOST}:8090"
+    environment:
+      ACEXY_LISTEN_ADDR: "${ACEXY_LISTEN_ADDR}"
+      ACEXY_SCHEME: "${ACEXY_SCHEME}"
+      ACEXY_HOST: "${ACEXY_HOST}"
+      ACEXY_PORT: "${ACESTREAM_PORT}"
+      ACEXY_M3U8_STREAM_TIMEOUT: "${ACEXY_M3U8_STREAM_TIMEOUT}"
+      ACEXY_M3U8: "${ACEXY_M3U8}"
+      ACEXY_EMPTY_TIMEOUT: "${ACEXY_EMPTY_TIMEOUT}"
+      ACEXY_BUFFER_SIZE: "${ACEXY_BUFFER_SIZE}"
+      ACEXY_NO_RESPONSE_TIMEOUT: "${ACEXY_NO_RESPONSE_TIMEOUT}"
+    depends_on:
+      - acestream
+    networks:
+      - ace_hls_stream
+
+volumes:
+  ace_hls_data:
+
+
+networks:
+  ace_hls_stream:
+    name: ace_hls_stream

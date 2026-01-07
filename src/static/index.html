@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AceHLS Viewer</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-color: #e0e0e0;
+            --accent-color: #bb86fc;
+            --card-hover: #2c2c2c;
+            --input-bg: #2d2d2d;
+        }
+
+        /* Modal Styles */
+        #player-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        #player-container {
+            width: 90%;
+            max-width: 1000px;
+            background: #000;
+            position: relative;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(187, 134, 252, 0.2);
+        }
+
+        video {
+            width: 100%;
+            height: auto;
+            max-height: 80vh;
+            display: block;
+            border-radius: 0 0 8px 8px;
+        }
+
+        .modal-header {
+            padding: 15px;
+            background: #1f1f1f;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 8px 8px 0 0;
+        }
+
+        .modal-title {
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .close-btn {
+            background: transparent;
+            border: none;
+            color: #fff;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .close-btn:hover {
+            color: var(--accent-color);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: var(--accent-color);
+            margin: 0;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .filter-container {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        input[type="text"],
+        select {
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #444;
+            background-color: var(--input-bg);
+            color: white;
+            font-size: 1rem;
+        }
+
+        input[type="text"] {
+            flex-grow: 1;
+            min-width: 200px;
+        }
+
+        select {
+            min-width: 150px;
+        }
+
+        button {
+            background-color: var(--accent-color);
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 5px;
+            transition: opacity 0.3s;
+        }
+
+        button:hover {
+            opacity: 0.8;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .download-link {
+            background-color: #333;
+            color: var(--accent-color);
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            border: 1px solid var(--accent-color);
+            transition: background 0.3s;
+        }
+
+        .download-link:hover {
+            background-color: #444;
+        }
+
+        #channel-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 20px;
+            padding: 10px;
+        }
+
+        .channel-card {
+            background-color: var(--card-bg);
+            border-radius: 10px;
+            overflow: hidden;
+            text-align: center;
+            padding: 15px;
+            transition: transform 0.2s, background-color 0.2s;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 140px;
+            position: relative;
+        }
+
+        .channel-card:hover {
+            transform: translateY(-5px);
+            background-color: var(--card-hover);
+        }
+
+        .channel-logo {
+            max-width: 80px;
+            max-height: 80px;
+            object-fit: contain;
+            margin-bottom: 10px;
+        }
+
+        .channel-logo.missing {
+            display: none;
+        }
+
+        .channel-placeholder {
+            font-size: 2rem;
+            color: #555;
+            margin-bottom: 10px;
+        }
+
+        .channel-name {
+            font-size: 0.9rem;
+            font-weight: 500;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+
+        .channel-group {
+            font-size: 0.7rem;
+            color: #888;
+            margin-top: 5px;
+        }
+
+        .loading {
+            text-align: center;
+            font-size: 1.2rem;
+            margin-top: 50px;
+        }
+
+        .no-results {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 40px;
+            color: #777;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            color: #666;
+            border-top: 1px solid #333;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h1>AceHLS</h1>
+
+        <div class="controls">
+            <div class="filter-container">
+                <input type="text" id="searchInput" placeholder="Buscar canal..." oninput="filterChannels()">
+                <select id="categorySelect" onchange="filterChannels()">
+                    <option value="all">Todas las categorías</option>
+                </select>
+            </div>
+
+            <div class="filter-container" style="margin-top: 10px;">
+                <input type="text" id="manualAceId" placeholder="Pegar AceStream ID manual..." style="flex-grow: 2;">
+                <button onclick="playManual()">Reproducir ID</button>
+            </div>
+
+            <div class="action-buttons">
+                <button onclick="loadChannels()">Refrescar Lista</button>
+                <a href="/playlist.m3u" target="_blank" class="download-link">Descargar M3U</a>
+            </div>
+        </div>
+    </header>
+
+    <div id="channel-grid">
+        <div class="loading">Cargando canales...</div>
+    </div>
+
+    <div id="player-modal" onclick="if(event.target === this) closePlayer()">
+        <div id="player-container">
+            <div class="modal-header">
+                <span class="modal-title" id="player-title">Título del Canal</span>
+                <button class="close-btn" onclick="closePlayer()">&times;</button>
+            </div>
+            <video id="video" controls autoplay></video>
+        </div>
+    </div>
+
+    <footer>
+        <small>AceHLS Viewer <span id="version-display"></span></small>
+    </footer>
+
+    <script>
+        let allChannels = [];
+        let categories = new Set();
+        let hlsElement = null;
+
+        async function loadVersion() {
+            try {
+                const response = await fetch('/api/version');
+                const data = await response.json();
+                document.getElementById('version-display').textContent = data.version;
+            } catch (e) {
+                console.log("No version found");
+            }
+        }
+
+        async function loadChannels() {
+            loadVersion();
+            const grid = document.getElementById('channel-grid');
+            grid.innerHTML = '<div class="loading">Actualizando canales... Esto puede tardar unos segundos.</div>';
+
+            try {
+                const response = await fetch('/api/channels');
+                if (!response.ok) throw new Error('Error en la red');
+                allChannels = await response.json();
+
+                // Extract categories
+                categories.clear();
+                allChannels.forEach(ch => {
+                    if (ch.group) categories.add(ch.group);
+                });
+                populateCategoryDropdown();
+
+                // Initial render (shows all)
+                filterChannels();
+
+            } catch (error) {
+                grid.innerHTML = `<div class="loading" style="color:red">Error al cargar canales: ${error.message}</div>`;
+            }
+        }
+
+        function populateCategoryDropdown() {
+            const select = document.getElementById('categorySelect');
+            // Save current selection if any
+            const currentSelection = select.value;
+
+            select.innerHTML = '<option value="all">Todas las categorías</option>';
+
+            Array.from(categories).sort().forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                option.textContent = cat;
+                select.appendChild(option);
+            });
+
+            // Restore selection if it still exists
+            if (categories.has(currentSelection)) {
+                select.value = currentSelection;
+            }
+        }
+
+        function filterChannels() {
+            const searchText = document.getElementById('searchInput').value.toLowerCase();
+            const selectedCategory = document.getElementById('categorySelect').value;
+
+            const filtered = allChannels.filter(ch => {
+                const matchesSearch = ch.name.toLowerCase().includes(searchText);
+                const matchesCategory = selectedCategory === 'all' || ch.group === selectedCategory;
+                return matchesSearch && matchesCategory;
+            });
+
+            renderGrid(filtered);
+        }
+
+        function renderGrid(channels) {
+            const grid = document.getElementById('channel-grid');
+            grid.innerHTML = '';
+
+            if (channels.length === 0) {
+                grid.innerHTML = '<div class="no-results">No se encontraron canales que coincidan con la búsqueda.</div>';
+                return;
+            }
+
+            channels.forEach(channel => {
+                const card = document.createElement('div');
+                card.className = 'channel-card';
+                card.onclick = () => playChannel(channel);
+
+                let imgHtml = '';
+                if (channel.logo) {
+                    imgHtml = `<img src="${channel.logo}" alt="${channel.name}" class="channel-logo" onerror="this.onerror=null;this.classList.add('missing');this.nextElementSibling.style.display='block';">`;
+                    // Fallback hidden by default, shown if error
+                    imgHtml += `<div class="channel-placeholder" style="display:none">📺</div>`;
+                } else {
+                    imgHtml = `<div class="channel-placeholder">📺</div>`;
+                }
+
+                card.innerHTML = `
+                    ${imgHtml}
+                    <div class="channel-name">${channel.name}</div>
+                    <div class="channel-group">${channel.group || ''}</div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        async function playChannel(channel) {
+            const modal = document.getElementById('player-modal');
+            const video = document.getElementById('video');
+            const title = document.getElementById('player-title');
+
+            title.textContent = channel.name;
+            modal.style.display = 'flex';
+
+            console.log("Requesting HLS start for:", channel.id);
+
+            // Show loading placeholder if needed
+            // For now, video poster or spinner could be added
+
+            try {
+                // Call backend to start ffmpeg remux
+                const response = await fetch(`/api/hls/start/${channel.id}`);
+                const data = await response.json();
+
+                if (data.status === 'ok') {
+                    const streamUrl = data.url;
+                    console.log("Playing local HLS:", streamUrl);
+
+                    if (Hls.isSupported()) {
+                        if (hlsElement) {
+                            hlsElement.destroy();
+                        }
+                        hlsElement = new Hls();
+                        hlsElement.loadSource(streamUrl);
+                        hlsElement.attachMedia(video);
+                        hlsElement.on(Hls.Events.MANIFEST_PARSED, function () {
+                            video.play().catch(e => console.log("Auto-play prevented"));
+                        });
+                        hlsElement.on(Hls.Events.ERROR, function (event, data) {
+                            if (data.fatal) {
+                                switch (data.type) {
+                                    case Hls.ErrorTypes.NETWORK_ERROR:
+                                        console.log("fatal network error encountered, trying to recover");
+                                        hlsElement.startLoad();
+                                        break;
+                                    case Hls.ErrorTypes.MEDIA_ERROR:
+                                        console.log("fatal media error encountered, trying to recover");
+                                        hlsElement.recoverMediaError();
+                                        break;
+                                    default:
+                                        hlsElement.destroy();
+                                        break;
+                                }
+                            }
+                        });
+                    }
+                    else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                        // Native HLS support (Safari)
+                        video.src = streamUrl;
+                        video.addEventListener('loadedmetadata', function () {
+                            video.play().catch(e => console.log("Auto-play prevented"));
+                        });
+                    }
+                } else {
+                    alert("Error starting stream: " + data.status);
+                    closePlayer();
+                }
+            } catch (e) {
+                console.error("Backend error:", e);
+                alert("Failed to start stream backend.");
+                closePlayer();
+            }
+        }
+
+        async function closePlayer() {
+            const modal = document.getElementById('player-modal');
+            const video = document.getElementById('video');
+
+            video.pause();
+            video.removeAttribute('src'); // Stop downloading segments
+            if (hlsElement) {
+                hlsElement.destroy();
+                hlsElement = null;
+            }
+
+            modal.style.display = 'none';
+
+            // Optional: Tell backend to stop ffmpeg to save resources
+            // We need the channel_id, but playChannel scope is gone.
+            // We could store currentPlayingId globally.
+        }
+
+        function playManual() {
+            const idInput = document.getElementById('manualAceId');
+            let aceId = idInput.value.trim();
+
+            // Remove 'acestream://' prefix if present
+            if (aceId.startsWith('acestream://')) {
+                aceId = aceId.replace('acestream://', '');
+            }
+
+            if (aceId) {
+                playChannel({
+                    id: aceId,
+                    name: 'Manual Stream: ' + aceId
+                });
+            } else {
+                alert("Por favor introduce un AceStream ID.");
+            }
+        }
+
+        // Initial load
+        document.addEventListener('DOMContentLoaded', loadChannels);
+    </script>
+</body>
+
+</html>
