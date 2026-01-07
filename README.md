@@ -20,8 +20,14 @@ Este stack incluye todo lo necesario:
 2. `acexy`: El proxy que gestiona la concurrencia.
 3. `acestream`: El motor P2P.
 
-### 2. Arrancar
+### 1. Configuración
+Copia el archivo de ejemplo y configura tus variables:
+```bash
+cp .env.example .env
+```
+Edita `.env` si es necesario (por defecto funciona para uso local).
 
+### 2. Arrancar
 ```bash
 docker-compose up -d
 ```
@@ -31,13 +37,13 @@ docker-compose up -d
 ## 📱 Cómo Usar
 
 ### En el Navegador (PC / Móvil / iPhone)
-Accede a `http://TU_IP:8089`.
+Accede a `http://TU_IP:8088`.
 - **Click en un canal**: Se abrirá el reproductor integrado. Usará el motor HLS interno para máxima compatibilidad.
 
 ### En SmartTV / VLC / TiviMate
 Usa la lista M3U generada dinámicamente:
-- **URL**: `http://TU_IP:8089/playlist.m3u`
-- Esta lista usa enlaces directos HTTP (`http://TU_IP:Puerto_Acexy/ace/getstream...`) para que la carga sea instantánea y eficiente (sin transcodificación).
+- **URL**: `http://TU_IP:8088/playlist.m3u`
+- Esta lista usa enlaces directos HTTP (`http://TU_IP:ACEXY_PORT/ace/getstream...`) para que la carga sea instantánea y eficiente (sin transcodificación).
 
 ---
 
