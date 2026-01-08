@@ -17,6 +17,7 @@
             --card-bg: #1e1e1e;
             --text-color: #e0e0e0;
             --accent-color: #bb86fc;
+            --ios-color: #007aff;
             --card-hover: #2c2c2c;
             --input-bg: #2d2d2d;
         }
@@ -186,6 +187,47 @@
             cursor: pointer;
         }
 
+        /* Utility Links */
+        .utility-box {
+            text-align: center;
+            margin-top: 15px;
+            color: #ccc;
+            font-size: 0.9rem;
+            background: #333333;
+            padding: 15px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .utility-btn {
+            font-weight: bold;
+            text-decoration: none;
+            border-radius: 4px;
+            padding: 8px 15px;
+            display: inline-block;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .utility-btn:hover {
+            opacity: 0.8;
+        }
+
+        .btn-vlc {
+            color: var(--accent-color);
+            border: 1px solid var(--accent-color);
+            background: transparent;
+        }
+
+        .btn-ios {
+            color: white;
+            background: var(--ios-color);
+            border: none;
+        }
+
         footer {
             text-align: center;
             margin-top: 40px;
@@ -228,22 +270,23 @@
             <button class="close-btn" onclick="closePlayer()">&times;</button>
             <h2 id="player-title" style="color:white; margin:0 0 10px 0; text-align: center;"></h2>
 
-            <media-player id="player" title="AceHLS Stream" aspect-ratio="16/9" loop autoplay muted>
+            <media-player id="player" title="AceHLS Stream" aspect-ratio="16/9" loop>
                 <media-provider></media-provider>
                 <media-video-layout></media-video-layout>
             </media-player>
 
-            <div
-                style="text-align:center; margin-top:15px; color: #ccc; font-size: 0.9rem; background: #333333; padding: 10px; border-radius: 5px;">
-                <div style="margin-bottom: 5px;">Si tienes problemas de reproducción (pantalla negra):</div>
-                <div>1. Prueba con <strong>Firefox</strong> o <strong>Safari</strong>.</div>
-                <div>2. Usa este enlace directo en VLC:</div>
-                <div style="word-break: break-all;">
-                    <a id="vlc-link" href="#" onclick="copyToClipboard(event, this)"
-                        style="color: var(--accent-color); font-weight: bold; text-decoration: none; border: 1px solid var(--accent-color); padding: 5px 10px; border-radius: 4px; display: inline-block; margin-top: 5px;">
-                        🔗 Copiar Enlace VLC
-                    </a>
-                </div>
+            <div class="utility-box">
+                <div><strong>Opciones de Reproducción:</strong></div>
+
+                <!-- iOS Native Button -->
+                <button id="ios-btn" class="utility-btn btn-ios" onclick="playNativeIOS()" style="display:none;">
+                    Usar Reproductor Nativo
+                </button>
+
+                <!-- VLC Copy Button -->
+                <a id="vlc-link" href="#" onclick="copyToClipboard(event, this)" class="utility-btn btn-vlc">
+                    🔗 Copiar Enlace VLC (Directo)
+                </a>
             </div>
         </div>
     </div>
@@ -255,6 +298,7 @@
     <script>
         let allChannels = [];
         let categories = new Set();
+        let currentStreamUrl = "";
         const player = document.querySelector('media-player');
 
         async function loadChannels() {
@@ -310,22 +354,37 @@
                 card.className = 'channel-card';
                 card.onclick = () => playChannel(ch);
 
-                const logo = ch.logo ? `<img src="${ch.logo}" class="channel-logo" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iIzU1NSIgZD0iTTIxIDNIM2MtMS4xIDAtMiAuOS0yIDJ2MTJjMCAxLjEuOSAyIDIgMmg1bDIgM2g0bDItM2g1YzEuMSAwIDItLjkgMi0yVjVjMC0xLjEtLjktMi0yLTJ6bTAgMTRIM1Y1aDE4djEyem0tNS02bC03IDRWM2zNyA0eiIvPjwvc3ZnPg=='">` : '<div style="font-size:2rem;">📺</div>';
+                const logo = ch.logo ? `<img src="${ch.logo}" class="channel-logo" loading="lazy" decoding="async" onerror="this.onerror=null; this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iIzU1NSIgZD0iTTIxIDNIM2MtMS4xIDAtMiAuOS0yIDJ2MTJjMCAxLjEuOSAyIDIgMmg1bDIgM2g0bDItM2g1YzEuMSAwIDItLjkgMi0yVjVjMC0xLjEtLjktMi0yLTJ6bTAgMTRIM1Y1aDE4djEyem0tNS02bC03IDRWM2zNyA0eiIvPjwvc3ZnPg=='">` : '<div style="font-size:2rem;">📺</div>';
 
                 card.innerHTML = `${logo}<div class="channel-name">${ch.name}</div>`;
                 grid.appendChild(card);
             });
         }
 
+        function isIOS() {
+            return [
+                'iPad Simulator', 'iPhone Simulator', 'iPod Simulator', 'iPad', 'iPhone', 'iPod'
+            ].includes(navigator.platform) || (navigator.userAgent.includes("Mac") && "ontouchend" in document);
+        }
+
         async function playChannel(channel) {
             const modal = document.getElementById('player-modal');
             document.getElementById('player-title').textContent = channel.name;
 
-            // Update VLC Link
+            // Setup VLC Link
             const vlcLink = document.getElementById('vlc-link');
             if (vlcLink) {
-                vlcLink.href = channel.url || '#';
-                vlcLink.textContent = "🔗 Copiar Enlace VLC";
+                // If channel.url is missing (manual entries), try to guess or use ID
+                let vlcUrl = channel.url;
+                vlcLink.setAttribute('data-url', vlcUrl); // Store for copy
+                vlcLink.href = vlcUrl || '#';
+                vlcLink.textContent = "🔗 Copiar Enlace VLC (Directo)";
+            }
+
+            // Setup iOS Button
+            const iosBtn = document.getElementById('ios-btn');
+            if (isIOS() || true) { // Always show for now to debug/fallback
+                iosBtn.style.display = 'inline-block';
             }
 
             modal.style.display = 'flex';
@@ -336,10 +395,11 @@
                 const data = await res.json();
 
                 if (data.status === 'ok') {
-                    // Load into Vidstack
-                    // Assuming data.url is relative like /hls/ID/index.m3u8
                     console.log("Loading stream:", data.url);
+                    currentStreamUrl = data.url; // Save for native player
                     player.src = { src: data.url, type: 'application/x-mpegurl' };
+                    player.muted = true;
+                    player.autoplay = true;
                     player.play();
                 } else {
                     alert("Error servidor: " + data.status);
@@ -352,9 +412,17 @@
             }
         }
 
+        function playNativeIOS() {
+            if (!currentStreamUrl) return alert("Espera a que cargue el stream...");
+            // Force full URL location
+            const fullUrl = window.location.origin + currentStreamUrl;
+            window.location.href = fullUrl;
+        }
+
         function closePlayer() {
             player.pause();
             player.src = ''; // Unload
+            currentStreamUrl = "";
             document.getElementById('player-modal').style.display = 'none';
         }
 
@@ -370,16 +438,39 @@
 
         function copyToClipboard(e, el) {
             e.preventDefault();
-            const url = el.href;
-            if (!url || url === '#' || url.endsWith('#')) return;
+            const url = el.getAttribute('data-url') || el.href;
 
-            navigator.clipboard.writeText(url).then(() => {
+            // Robust Copy
+            const copyText = (text) => {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    return navigator.clipboard.writeText(text);
+                } else {
+                    const textArea = document.createElement("textarea");
+                    textArea.value = text;
+                    textArea.style.position = "fixed"; // Avoid scrolling
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    return new Promise((resolve, reject) => {
+                        try {
+                            const successful = document.execCommand('copy');
+                            document.body.removeChild(textArea);
+                            successful ? resolve() : reject();
+                        } catch (err) {
+                            document.body.removeChild(textArea);
+                            reject(err);
+                        }
+                    });
+                }
+            };
+
+            copyText(url).then(() => {
                 const originalText = el.textContent;
                 el.textContent = "✅ ¡Copiado!";
                 setTimeout(() => el.textContent = originalText, 2000);
             }).catch(err => {
-                console.error('Error al copiar: ', err);
-                alert('No se pudo copiar el enlace (permiso denegado o no seguro).');
+                console.error('Failed to copy', err);
+                prompt("Copia este enlace manualmente:", url);
             });
         }
 
