@@ -233,8 +233,17 @@
                 <media-video-layout></media-video-layout>
             </media-player>
 
-            <div style="text-align:center; margin-top:10px; color: #777; font-size: 0.8rem;">
-                Si tarda, espera unos segundos. Compatible con Safari/Firefox/Chrome.
+            <div
+                style="text-align:center; margin-top:15px; color: #ccc; font-size: 0.9rem; background: #333333; padding: 10px; border-radius: 5px;">
+                <div style="margin-bottom: 5px;">Si tienes problemas de reproducción (pantalla negra):</div>
+                <div>1. Prueba con <strong>Firefox</strong> o <strong>Safari</strong>.</div>
+                <div>2. Usa este enlace directo en VLC:</div>
+                <div style="word-break: break-all;">
+                    <a id="vlc-link" href="#" onclick="copyToClipboard(event, this)"
+                        style="color: var(--accent-color); font-weight: bold; text-decoration: none; border: 1px solid var(--accent-color); padding: 5px 10px; border-radius: 4px; display: inline-block; margin-top: 5px;">
+                        🔗 Copiar Enlace VLC
+                    </a>
+                </div>
             </div>
         </div>
     </div>
@@ -311,6 +320,14 @@
         async function playChannel(channel) {
             const modal = document.getElementById('player-modal');
             document.getElementById('player-title').textContent = channel.name;
+
+            // Update VLC Link
+            const vlcLink = document.getElementById('vlc-link');
+            if (vlcLink) {
+                vlcLink.href = channel.url || '#';
+                vlcLink.textContent = "🔗 Copiar Enlace VLC";
+            }
+
             modal.style.display = 'flex';
 
             try {
@@ -339,7 +356,6 @@
             player.pause();
             player.src = ''; // Unload
             document.getElementById('player-modal').style.display = 'none';
-            // Optional: Call /api/hls/stop/ID
         }
 
         function playManual() {
@@ -351,6 +367,21 @@
         document.getElementById('player-modal').addEventListener('click', (e) => {
             if (e.target.id === 'player-modal') closePlayer();
         });
+
+        function copyToClipboard(e, el) {
+            e.preventDefault();
+            const url = el.href;
+            if (!url || url === '#' || url.endsWith('#')) return;
+
+            navigator.clipboard.writeText(url).then(() => {
+                const originalText = el.textContent;
+                el.textContent = "✅ ¡Copiado!";
+                setTimeout(() => el.textContent = originalText, 2000);
+            }).catch(err => {
+                console.error('Error al copiar: ', err);
+                alert('No se pudo copiar el enlace (permiso denegado o no seguro).');
+            });
+        }
 
         document.addEventListener('DOMContentLoaded', loadChannels);
     </script>
