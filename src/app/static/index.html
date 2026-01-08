@@ -6,6 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AceHLS Viewer</title>
 
+    <!-- PWA Support -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#121212">
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
+
     <!-- Vidstack Styles & Script -->
     <link rel="stylesheet" href="https://cdn.vidstack.io/player/theme.css" />
     <link rel="stylesheet" href="https://cdn.vidstack.io/player/video.css" />
@@ -13,6 +18,7 @@
 
     <style>
         :root {
+            /* Dark Mode (Default) */
             --bg-color: #121212;
             --card-bg: #1e1e1e;
             --text-color: #e0e0e0;
@@ -20,6 +26,19 @@
             --ios-color: #007aff;
             --card-hover: #2c2c2c;
             --input-bg: #2d2d2d;
+            --star-color: #ffd700;
+            --border-color: #333;
+        }
+
+        :root.light-mode {
+            /* Light Mode */
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+            --accent-color: #6200ee;
+            --card-hover: #e4e6eb;
+            --input-bg: #ffffff;
+            --border-color: #ccc;
         }
 
         body {
@@ -28,6 +47,7 @@
             color: var(--text-color);
             margin: 0;
             padding: 20px;
+            transition: background-color 0.3s, color 0.3s;
         }
 
         /* Vidstack Player Customization */
@@ -74,9 +94,9 @@
         select {
             padding: 10px;
             border-radius: 5px;
-            border: 1px solid #444;
+            border: 1px solid var(--border-color);
             background: var(--input-bg);
-            color: white;
+            color: var(--text-color);
         }
 
         input {
@@ -86,7 +106,7 @@
 
         button {
             background: var(--accent-color);
-            color: #000;
+            color: #fff;
             border: none;
             padding: 10px 20px;
             cursor: pointer;
@@ -101,15 +121,31 @@
         .action-buttons {
             display: flex;
             gap: 10px;
+            align-items: center;
         }
 
         .download-link {
-            background: #333;
+            background: var(--card-bg);
             color: var(--accent-color);
             padding: 10px 20px;
             text-decoration: none;
             border-radius: 5px;
             border: 1px solid var(--accent-color);
+        }
+
+        /* Theme Toggle */
+        .theme-btn {
+            background: transparent;
+            border: 1px solid var(--text-color);
+            color: var(--text-color);
+            border-radius: 50%;
+            width: 38px;
+            height: 38px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
         }
 
         #channel-grid {
@@ -132,6 +168,7 @@
             align-items: center;
             justify-content: center;
             position: relative;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
 
         .channel-card:hover {
@@ -152,7 +189,33 @@
             overflow: hidden;
             display: -webkit-box;
             -webkit-line-clamp: 2;
+            line-clamp: 2;
             -webkit-box-orient: vertical;
+        }
+
+        /* Star Button */
+        .star-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: transparent;
+            /* No background */
+            font-size: 1.5rem;
+            color: #888;
+            border: none;
+            padding: 0;
+            width: auto;
+            cursor: pointer;
+            z-index: 5;
+            transition: transform 0.2s, color 0.2s;
+        }
+
+        .star-btn.active {
+            color: var(--star-color);
+        }
+
+        .star-btn:hover {
+            transform: scale(1.2);
         }
 
         /* Modal */
@@ -233,7 +296,7 @@
             margin-top: 40px;
             padding: 20px;
             color: #666;
-            border-top: 1px solid #333;
+            border-top: 1px solid var(--border-color);
         }
     </style>
 </head>
@@ -247,6 +310,7 @@
                 <input type="text" id="searchInput" placeholder="Buscar canal..." oninput="filterChannels()">
                 <select id="categorySelect" onchange="filterChannels()">
                     <option value="all">Todas las categorías</option>
+                    <option value="favorites">⭐ Favoritos</option>
                 </select>
             </div>
             <div class="filter-container">
@@ -254,6 +318,7 @@
                 <button onclick="playManual()">Reproducir ID</button>
             </div>
             <div class="action-buttons">
+                <button onclick="toggleTheme()" class="theme-btn" title="Cambiar Tema" id="theme-icon">🌓</button>
                 <button onclick="loadChannels()">Refrescar</button>
                 <a href="/playlist.m3u" target="_blank" class="download-link">M3U</a>
             </div>
@@ -309,6 +374,45 @@
         let currentStreamUrl = "";
         const player = document.querySelector('media-player');
 
+        // Favorites & Theme Logic
+        let favorites = new Set(JSON.parse(localStorage.getItem('ace_favorites') || '[]'));
+
+        // Load Theme
+        const savedTheme = localStorage.getItem('ace_theme');
+        if (savedTheme === 'light') {
+            document.documentElement.classList.add('light-mode');
+            document.getElementById('theme-icon').textContent = '☀️';
+        } else {
+            document.getElementById('theme-icon').textContent = '🌙';
+        }
+
+        function toggleTheme() {
+            document.documentElement.classList.toggle('light-mode');
+            const isLight = document.documentElement.classList.contains('light-mode');
+            localStorage.setItem('ace_theme', isLight ? 'light' : 'dark');
+            document.getElementById('theme-icon').textContent = isLight ? '☀️' : '🌙';
+        }
+
+        function toggleFavorite(e, id) {
+            e.stopPropagation();
+            if (favorites.has(id)) {
+                favorites.delete(id);
+            } else {
+                favorites.add(id);
+            }
+            localStorage.setItem('ace_favorites', JSON.stringify([...favorites]));
+
+            // UI Update
+            const btn = e.target;
+            btn.classList.toggle('active');
+            btn.textContent = favorites.has(id) ? '★' : '☆';
+
+            // Refresh if currently filtering favorites
+            if (document.getElementById('categorySelect').value === 'favorites') {
+                filterChannels();
+            }
+        }
+
         async function loadChannels() {
             try {
                 // Version
@@ -334,21 +438,37 @@
         function populateCategoryDropdown() {
             const select = document.getElementById('categorySelect');
             const current = select.value;
-            select.innerHTML = '<option value="all">Todas las categorías</option>';
+            // Keep favorites as fixed option 2
+            select.innerHTML = '<option value="all">Todas las categorías</option><option value="favorites">⭐ Favoritos</option>';
             Array.from(categories).sort().forEach(cat => {
                 const opt = document.createElement('option');
                 opt.value = cat; opt.textContent = cat;
                 select.appendChild(opt);
             });
-            if (categories.has(current)) select.value = current;
+            if (categories.has(current) || current === 'favorites') select.value = current;
         }
 
         function filterChannels() {
             const search = document.getElementById('searchInput').value.toLowerCase();
             const cat = document.getElementById('categorySelect').value;
-            const filtered = allChannels.filter(ch =>
-                ch.name.toLowerCase().includes(search) && (cat === 'all' || ch.group === cat)
-            );
+
+            const filtered = allChannels.filter(ch => {
+                const matchesSearch = ch.name.toLowerCase().includes(search);
+                if (!matchesSearch) return false;
+
+                if (cat === 'all') return true;
+                if (cat === 'favorites') return favorites.has(ch.id);
+                return ch.group === cat;
+            });
+
+            // Sort: Favorites first, then alphabetical
+            filtered.sort((a, b) => {
+                const favA = favorites.has(a.id);
+                const favB = favorites.has(b.id);
+                if (favA && !favB) return -1;
+                if (!favA && favB) return 1;
+                return a.name.localeCompare(b.name);
+            });
 
             const grid = document.getElementById('channel-grid');
             grid.innerHTML = '';
@@ -362,9 +482,12 @@
                 card.className = 'channel-card';
                 card.onclick = () => playChannel(ch);
 
+                const isFav = favorites.has(ch.id);
+                const starBtn = `<button class="star-btn ${isFav ? 'active' : ''}" onclick="toggleFavorite(event, '${ch.id}')">${isFav ? '★' : '☆'}</button>`;
+
                 const logo = ch.logo ? `<img src="${ch.logo}" class="channel-logo" loading="lazy" decoding="async" onerror="this.onerror=null; this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iIzU1NSIgZD0iTTIxIDNIM2MtMS4xIDAtMiAuOS0yIDJ2MTJjMCAxLjEuOSAyIDIgMmg1bDIgM2g0bDItM2g1YzEuMSAwIDItLjkgMi0yVjVjMC0xLjEtLjktMi0yLTJ6bTAgMTRIM1Y1aDE4djEyem0tNS02bC03IDRWM2zNyA0eiIvPjwvc3ZnPg=='">` : '<div style="font-size:2rem;">📺</div>';
 
-                card.innerHTML = `${logo}<div class="channel-name">${ch.name}</div>`;
+                card.innerHTML = `${starBtn}${logo}<div class="channel-name">${ch.name}</div>`;
                 grid.appendChild(card);
             });
         }
@@ -396,7 +519,7 @@
 
             // Setup iOS Button
             const iosBtn = document.getElementById('ios-btn');
-            if (isIOS() || true) { // Always show for now to debug/fallback
+            if (isIOS() || true) {
                 iosBtn.style.display = 'inline-block';
             }
 
@@ -415,7 +538,7 @@
                     player.autoplay = true;
                     player.play();
 
-                    // Start Timeout Timer (20 seconds) to show error if no playback
+                    // Start Timeout Timer (20 seconds)
                     if (loadTimeout) clearTimeout(loadTimeout);
                     loadTimeout = setTimeout(() => {
                         // Check if playing (currentTime is still near zero)
@@ -503,6 +626,17 @@
             }).catch(err => {
                 console.error('Failed to copy', err);
                 prompt("Copia este enlace manualmente:", url);
+            });
+        }
+
+        // Register Service Worker for PWA
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').then(registration => {
+                    console.log('SW Registered:', registration);
+                }).catch(error => {
+                    console.log('SW Registration failed:', error);
+                });
             });
         }
 

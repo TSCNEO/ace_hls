@@ -12,6 +12,16 @@ main_bp = Blueprint('main', __name__)
 def index():
     return current_app.send_static_file('index.html')
 
+@main_bp.route('/manifest.json')
+def manifest():
+    return current_app.send_static_file('manifest.json')
+
+@main_bp.route('/sw.js')
+def service_worker():
+    response = current_app.send_static_file('sw.js')
+    response.headers['Content-Type'] = 'application/javascript'
+    return response
+
 @main_bp.after_request
 def add_header(response):
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
