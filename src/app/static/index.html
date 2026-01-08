@@ -270,6 +270,14 @@
             <button class="close-btn" onclick="closePlayer()">&times;</button>
             <h2 id="player-title" style="color:white; margin:0 0 10px 0; text-align: center;"></h2>
 
+            <div id="player-error"
+                style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; background:black; color:white; z-index:10; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
+                <div style="font-size:3rem; margin-bottom:10px;">⚠️</div>
+                <div style="font-size:1.2rem; font-weight:bold;">Stream no disponible</div>
+                <div style="color:#aaa; margin-top:5px;">No hay fuentes (seeds) o el canal está off-line.<br>Prueba otro
+                    canal.</div>
+            </div>
+
             <media-player id="player" title="AceHLS Stream" aspect-ratio="16/9" loop>
                 <media-provider></media-provider>
                 <media-video-layout></media-video-layout>
@@ -367,8 +375,13 @@
             ].includes(navigator.platform) || (navigator.userAgent.includes("Mac") && "ontouchend" in document);
         }
 
+        let loadTimeout;
+
         async function playChannel(channel) {
             const modal = document.getElementById('player-modal');
+            const errorDiv = document.getElementById('player-error');
+            errorDiv.style.display = 'none'; // Reset error
+
             document.getElementById('player-title').textContent = channel.name;
 
             // Setup VLC Link
@@ -401,6 +414,24 @@
                     player.muted = true;
                     player.autoplay = true;
                     player.play();
+
+                    // Start Timeout Timer (20 seconds) to show error if no playback
+                    if (loadTimeout) clearTimeout(loadTimeout);
+                    loadTimeout = setTimeout(() => {
+                        // Check if playing (currentTime is still near zero)
+                        if (player.currentTime < 1) {
+                            console.warn("Stream timeout - No sources.");
+                            errorDiv.style.display = 'flex';
+                            player.pause();
+                        }
+                    }, 20000);
+
+                    // Clear timeout if it starts playing
+                    player.addEventListener('playing', () => {
+                        if (loadTimeout) clearTimeout(loadTimeout);
+                        errorDiv.style.display = 'none';
+                    }, { once: true });
+
                 } else {
                     alert("Error servidor: " + data.status);
                     closePlayer();
@@ -424,6 +455,7 @@
             player.src = ''; // Unload
             currentStreamUrl = "";
             document.getElementById('player-modal').style.display = 'none';
+            if (loadTimeout) clearTimeout(loadTimeout);
         }
 
         function playManual() {

@@ -13,6 +13,12 @@ class HLSManager:
         self.processes = {} # {ace_id: subprocess.Popen}
         self.activity = {}  # {ace_id: timestamp}
         self.lock = threading.Lock()
+        
+        # Cleanup on startup
+        if os.path.exists(Config.HLS_DIR):
+            logger.info(f"Cleaning HLS directory: {Config.HLS_DIR}")
+            shutil.rmtree(Config.HLS_DIR)
+            
         if not os.path.exists(Config.HLS_DIR):
             os.makedirs(Config.HLS_DIR)
         
