@@ -12,6 +12,13 @@ main_bp = Blueprint('main', __name__)
 def index():
     return current_app.send_static_file('index.html')
 
+@main_bp.after_request
+def add_header(response):
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
 @main_bp.route('/api/channels')
 def get_channels():
     # If cache is very old or missing, force update? 

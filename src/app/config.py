@@ -4,7 +4,8 @@ class Config:
     # AceHLS Settings
     ACE_HLS_PORT = int(os.environ.get("ACE_HLS_PORT", 8088))
     CACHE_DURATION = int(os.environ.get("CACHE_DURATION", 300))
-    DATA_DIR = os.environ.get("DATA_DIR", "./data")
+    # Use absolute path to avoid confusion with send_from_directory
+    DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
     
     # External Resources
     URL_ORIGEN = os.environ.get("URL_ORIGEN", "https://ipfs.io/ipns/k2k4r8oqlcjxsritt5mczkcn4mmvcmymbqw7113fz2flkrerfwfps004/data/listas/lista_iptv.m3u")

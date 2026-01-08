@@ -5,7 +5,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AceHLS Viewer</title>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
+    <!-- Vidstack Styles & Script -->
+    <link rel="stylesheet" href="https://cdn.vidstack.io/player/theme.css" />
+    <link rel="stylesheet" href="https://cdn.vidstack.io/player/video.css" />
+    <script src="https://cdn.vidstack.io/player" type="module"></script>
+
     <style>
         :root {
             --bg-color: #121212;
@@ -16,66 +21,6 @@
             --input-bg: #2d2d2d;
         }
 
-        /* Modal Styles */
-        #player-modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.9);
-            z-index: 1000;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-        }
-
-        #player-container {
-            width: 90%;
-            max-width: 1000px;
-            background: #000;
-            position: relative;
-            border-radius: 8px;
-            box-shadow: 0 0 20px rgba(187, 134, 252, 0.2);
-        }
-
-        video {
-            width: 100%;
-            height: auto;
-            max-height: 80vh;
-            display: block;
-            border-radius: 0 0 8px 8px;
-        }
-
-        .modal-header {
-            padding: 15px;
-            background: #1f1f1f;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-radius: 8px 8px 0 0;
-        }
-
-        .modal-title {
-            font-weight: bold;
-            font-size: 1.1rem;
-        }
-
-        .close-btn {
-            background: transparent;
-            border: none;
-            color: #fff;
-            font-size: 1.5rem;
-            cursor: pointer;
-            padding: 0;
-            line-height: 1;
-        }
-
-        .close-btn:hover {
-            color: var(--accent-color);
-        }
-
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: var(--bg-color);
@@ -84,6 +29,17 @@
             padding: 20px;
         }
 
+        /* Vidstack Player Customization */
+        media-player {
+            width: 100%;
+            aspect-ratio: 16/9;
+            background-color: black;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Layout & Grid */
         header {
             text-align: center;
             margin-bottom: 30px;
@@ -113,34 +69,28 @@
             max-width: 800px;
         }
 
-        input[type="text"],
+        input,
         select {
             padding: 10px;
             border-radius: 5px;
             border: 1px solid #444;
-            background-color: var(--input-bg);
+            background: var(--input-bg);
             color: white;
-            font-size: 1rem;
         }
 
-        input[type="text"] {
+        input {
             flex-grow: 1;
             min-width: 200px;
         }
 
-        select {
-            min-width: 150px;
-        }
-
         button {
-            background-color: var(--accent-color);
+            background: var(--accent-color);
             color: #000;
             border: none;
             padding: 10px 20px;
             cursor: pointer;
             font-weight: bold;
             border-radius: 5px;
-            transition: opacity 0.3s;
         }
 
         button:hover {
@@ -153,46 +103,39 @@
         }
 
         .download-link {
-            background-color: #333;
+            background: #333;
             color: var(--accent-color);
             padding: 10px 20px;
             text-decoration: none;
             border-radius: 5px;
-            font-weight: bold;
             border: 1px solid var(--accent-color);
-            transition: background 0.3s;
-        }
-
-        .download-link:hover {
-            background-color: #444;
         }
 
         #channel-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
             gap: 20px;
             padding: 10px;
         }
 
         .channel-card {
-            background-color: var(--card-bg);
+            background: var(--card-bg);
             border-radius: 10px;
-            overflow: hidden;
-            text-align: center;
             padding: 15px;
-            transition: transform 0.2s, background-color 0.2s;
+            text-align: center;
             cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+            height: 160px;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 140px;
             position: relative;
         }
 
         .channel-card:hover {
             transform: translateY(-5px);
-            background-color: var(--card-hover);
+            background: var(--card-hover);
         }
 
         .channel-logo {
@@ -202,43 +145,45 @@
             margin-bottom: 10px;
         }
 
-        .channel-logo.missing {
-            display: none;
-        }
-
-        .channel-placeholder {
-            font-size: 2rem;
-            color: #555;
-            margin-bottom: 10px;
-        }
-
         .channel-name {
             font-size: 0.9rem;
             font-weight: 500;
             overflow: hidden;
-            text-overflow: ellipsis;
             display: -webkit-box;
             -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
         }
 
-        .channel-group {
-            font-size: 0.7rem;
-            color: #888;
-            margin-top: 5px;
+        /* Modal */
+        #player-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
         }
 
-        .loading {
-            text-align: center;
-            font-size: 1.2rem;
-            margin-top: 50px;
+        #player-container {
+            width: 90%;
+            max-width: 1100px;
+            position: relative;
         }
 
-        .no-results {
-            grid-column: 1 / -1;
-            text-align: center;
-            padding: 40px;
-            color: #777;
+        .close-btn {
+            position: absolute;
+            top: -40px;
+            right: 0;
+            background: none;
+            color: white;
+            font-size: 2rem;
+            padding: 0;
+            cursor: pointer;
         }
 
         footer {
@@ -255,7 +200,6 @@
 
     <header>
         <h1>AceHLS</h1>
-
         <div class="controls">
             <div class="filter-container">
                 <input type="text" id="searchInput" placeholder="Buscar canal..." oninput="filterChannels()">
@@ -263,30 +207,35 @@
                     <option value="all">Todas las categorías</option>
                 </select>
             </div>
-
-            <div class="filter-container" style="margin-top: 10px;">
+            <div class="filter-container">
                 <input type="text" id="manualAceId" placeholder="Pegar AceStream ID manual..." style="flex-grow: 2;">
                 <button onclick="playManual()">Reproducir ID</button>
             </div>
-
             <div class="action-buttons">
-                <button onclick="loadChannels()">Refrescar Lista</button>
-                <a href="/playlist.m3u" target="_blank" class="download-link">Descargar M3U</a>
+                <button onclick="loadChannels()">Refrescar</button>
+                <a href="/playlist.m3u" target="_blank" class="download-link">M3U</a>
             </div>
         </div>
     </header>
 
     <div id="channel-grid">
-        <div class="loading">Cargando canales...</div>
+        <div class="loading" style="text-align:center;">Cargando canales...</div>
     </div>
 
-    <div id="player-modal" onclick="if(event.target === this) closePlayer()">
+    <!-- Modal with Vidstack -->
+    <div id="player-modal">
         <div id="player-container">
-            <div class="modal-header">
-                <span class="modal-title" id="player-title">Título del Canal</span>
-                <button class="close-btn" onclick="closePlayer()">&times;</button>
+            <button class="close-btn" onclick="closePlayer()">&times;</button>
+            <h2 id="player-title" style="color:white; margin:0 0 10px 0; text-align: center;"></h2>
+
+            <media-player id="player" title="AceHLS Stream" aspect-ratio="16/9" loop autoplay muted>
+                <media-provider></media-provider>
+                <media-video-layout></media-video-layout>
+            </media-player>
+
+            <div style="text-align:center; margin-top:10px; color: #777; font-size: 0.8rem;">
+                Si tarda, espera unos segundos. Compatible con Safari/Firefox/Chrome.
             </div>
-            <video id="video" controls autoplay></video>
         </div>
     </div>
 
@@ -297,214 +246,112 @@
     <script>
         let allChannels = [];
         let categories = new Set();
-        let hlsElement = null;
-
-        async function loadVersion() {
-            try {
-                const response = await fetch('/api/version');
-                const data = await response.json();
-                document.getElementById('version-display').textContent = data.version;
-            } catch (e) {
-                console.log("No version found");
-            }
-        }
+        const player = document.querySelector('media-player');
 
         async function loadChannels() {
-            loadVersion();
-            const grid = document.getElementById('channel-grid');
-            grid.innerHTML = '<div class="loading">Actualizando canales... Esto puede tardar unos segundos.</div>';
-
             try {
+                // Version
+                fetch('/api/version').then(r => r.json()).then(d => document.getElementById('version-display').textContent = d.version).catch(e => { });
+
+                const grid = document.getElementById('channel-grid');
+                grid.innerHTML = '<div style="text-align:center;">Actualizando canales...</div>';
+
                 const response = await fetch('/api/channels');
-                if (!response.ok) throw new Error('Error en la red');
+                if (!response.ok) throw new Error('Error de red');
                 allChannels = await response.json();
 
-                // Extract categories
                 categories.clear();
-                allChannels.forEach(ch => {
-                    if (ch.group) categories.add(ch.group);
-                });
+                allChannels.forEach(ch => { if (ch.group) categories.add(ch.group); });
                 populateCategoryDropdown();
-
-                // Initial render (shows all)
                 filterChannels();
 
-            } catch (error) {
-                grid.innerHTML = `<div class="loading" style="color:red">Error al cargar canales: ${error.message}</div>`;
+            } catch (e) {
+                document.getElementById('channel-grid').innerHTML = `<div style="text-align:center;color:red;">Error: ${e.message}</div>`;
             }
         }
 
         function populateCategoryDropdown() {
             const select = document.getElementById('categorySelect');
-            // Save current selection if any
-            const currentSelection = select.value;
-
+            const current = select.value;
             select.innerHTML = '<option value="all">Todas las categorías</option>';
-
             Array.from(categories).sort().forEach(cat => {
-                const option = document.createElement('option');
-                option.value = cat;
-                option.textContent = cat;
-                select.appendChild(option);
+                const opt = document.createElement('option');
+                opt.value = cat; opt.textContent = cat;
+                select.appendChild(opt);
             });
-
-            // Restore selection if it still exists
-            if (categories.has(currentSelection)) {
-                select.value = currentSelection;
-            }
+            if (categories.has(current)) select.value = current;
         }
 
         function filterChannels() {
-            const searchText = document.getElementById('searchInput').value.toLowerCase();
-            const selectedCategory = document.getElementById('categorySelect').value;
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const cat = document.getElementById('categorySelect').value;
+            const filtered = allChannels.filter(ch =>
+                ch.name.toLowerCase().includes(search) && (cat === 'all' || ch.group === cat)
+            );
 
-            const filtered = allChannels.filter(ch => {
-                const matchesSearch = ch.name.toLowerCase().includes(searchText);
-                const matchesCategory = selectedCategory === 'all' || ch.group === selectedCategory;
-                return matchesSearch && matchesCategory;
-            });
-
-            renderGrid(filtered);
-        }
-
-        function renderGrid(channels) {
             const grid = document.getElementById('channel-grid');
             grid.innerHTML = '';
-
-            if (channels.length === 0) {
-                grid.innerHTML = '<div class="no-results">No se encontraron canales que coincidan con la búsqueda.</div>';
+            if (filtered.length === 0) {
+                grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;">No hay resultados</div>';
                 return;
             }
 
-            channels.forEach(channel => {
+            filtered.forEach(ch => {
                 const card = document.createElement('div');
                 card.className = 'channel-card';
-                card.onclick = () => playChannel(channel);
+                card.onclick = () => playChannel(ch);
 
-                let imgHtml = '';
-                if (channel.logo) {
-                    imgHtml = `<img src="${channel.logo}" alt="${channel.name}" class="channel-logo" onerror="this.onerror=null;this.classList.add('missing');this.nextElementSibling.style.display='block';">`;
-                    // Fallback hidden by default, shown if error
-                    imgHtml += `<div class="channel-placeholder" style="display:none">📺</div>`;
-                } else {
-                    imgHtml = `<div class="channel-placeholder">📺</div>`;
-                }
+                const logo = ch.logo ? `<img src="${ch.logo}" class="channel-logo" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iIzU1NSIgZD0iTTIxIDNIM2MtMS4xIDAtMiAuOS0yIDJ2MTJjMCAxLjEuOSAyIDIgMmg1bDIgM2g0bDItM2g1YzEuMSAwIDItLjkgMi0yVjVjMC0xLjEtLjktMi0yLTJ6bTAgMTRIM1Y1aDE4djEyem0tNS02bC03IDRWM2zNyA0eiIvPjwvc3ZnPg=='">` : '<div style="font-size:2rem;">📺</div>';
 
-                card.innerHTML = `
-                    ${imgHtml}
-                    <div class="channel-name">${channel.name}</div>
-                    <div class="channel-group">${channel.group || ''}</div>
-                `;
+                card.innerHTML = `${logo}<div class="channel-name">${ch.name}</div>`;
                 grid.appendChild(card);
             });
         }
 
         async function playChannel(channel) {
             const modal = document.getElementById('player-modal');
-            const video = document.getElementById('video');
-            const title = document.getElementById('player-title');
-
-            title.textContent = channel.name;
+            document.getElementById('player-title').textContent = channel.name;
             modal.style.display = 'flex';
 
-            console.log("Requesting HLS start for:", channel.id);
-
-            // Show loading placeholder if needed
-            // For now, video poster or spinner could be added
-
             try {
-                // Call backend to start ffmpeg remux
-                const response = await fetch(`/api/hls/start/${channel.id}`);
-                const data = await response.json();
+                // Request stream start
+                const res = await fetch(`/api/hls/start/${channel.id}`);
+                const data = await res.json();
 
                 if (data.status === 'ok') {
-                    const streamUrl = data.url;
-                    console.log("Playing local HLS:", streamUrl);
-
-                    if (Hls.isSupported()) {
-                        if (hlsElement) {
-                            hlsElement.destroy();
-                        }
-                        hlsElement = new Hls();
-                        hlsElement.loadSource(streamUrl);
-                        hlsElement.attachMedia(video);
-                        hlsElement.on(Hls.Events.MANIFEST_PARSED, function () {
-                            video.play().catch(e => console.log("Auto-play prevented"));
-                        });
-                        hlsElement.on(Hls.Events.ERROR, function (event, data) {
-                            if (data.fatal) {
-                                switch (data.type) {
-                                    case Hls.ErrorTypes.NETWORK_ERROR:
-                                        console.log("fatal network error encountered, trying to recover");
-                                        hlsElement.startLoad();
-                                        break;
-                                    case Hls.ErrorTypes.MEDIA_ERROR:
-                                        console.log("fatal media error encountered, trying to recover");
-                                        hlsElement.recoverMediaError();
-                                        break;
-                                    default:
-                                        hlsElement.destroy();
-                                        break;
-                                }
-                            }
-                        });
-                    }
-                    else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                        // Native HLS support (Safari)
-                        video.src = streamUrl;
-                        video.addEventListener('loadedmetadata', function () {
-                            video.play().catch(e => console.log("Auto-play prevented"));
-                        });
-                    }
+                    // Load into Vidstack
+                    // Assuming data.url is relative like /hls/ID/index.m3u8
+                    console.log("Loading stream:", data.url);
+                    player.src = { src: data.url, type: 'application/x-mpegurl' };
+                    player.play();
                 } else {
-                    alert("Error starting stream: " + data.status);
+                    alert("Error servidor: " + data.status);
                     closePlayer();
                 }
             } catch (e) {
-                console.error("Backend error:", e);
-                alert("Failed to start stream backend.");
+                console.error(e);
+                alert("Error de conexión con el backend");
                 closePlayer();
             }
         }
 
-        async function closePlayer() {
-            const modal = document.getElementById('player-modal');
-            const video = document.getElementById('video');
-
-            video.pause();
-            video.removeAttribute('src'); // Stop downloading segments
-            if (hlsElement) {
-                hlsElement.destroy();
-                hlsElement = null;
-            }
-
-            modal.style.display = 'none';
-
-            // Optional: Tell backend to stop ffmpeg to save resources
-            // We need the channel_id, but playChannel scope is gone.
-            // We could store currentPlayingId globally.
+        function closePlayer() {
+            player.pause();
+            player.src = ''; // Unload
+            document.getElementById('player-modal').style.display = 'none';
+            // Optional: Call /api/hls/stop/ID
         }
 
         function playManual() {
-            const idInput = document.getElementById('manualAceId');
-            let aceId = idInput.value.trim();
-
-            // Remove 'acestream://' prefix if present
-            if (aceId.startsWith('acestream://')) {
-                aceId = aceId.replace('acestream://', '');
-            }
-
-            if (aceId) {
-                playChannel({
-                    id: aceId,
-                    name: 'Manual Stream: ' + aceId
-                });
-            } else {
-                alert("Por favor introduce un AceStream ID.");
-            }
+            let id = document.getElementById('manualAceId').value.trim().replace('acestream://', '');
+            if (id) playChannel({ id: id, name: 'ID: ' + id });
         }
 
-        // Initial load
+        // Close modal on click outside
+        document.getElementById('player-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'player-modal') closePlayer();
+        });
+
         document.addEventListener('DOMContentLoaded', loadChannels);
     </script>
 </body>
