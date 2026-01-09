@@ -10,6 +10,7 @@ Una interfaz web moderna y autogestionada para visualizar y reproducir canales d
 *   **🧠 IP Dinámica Inteligente**: La aplicación detecta automáticamente la IP de acceso (Local, LAN o WAN) y genera los enlaces M3U correctos. ¡Adiós a configurar IPs manualmente!
 *   **🧟 Monitor de Inactividad**: Sistema "Watchdog" que mata automáticamente los procesos de video si cierras la pestaña o dejas de ver un canal, ahorrando ancho de banda y CPU.
 *   **📋 Lista M3U Universal**: Genera una lista compatible con VLC, TiviMate, IPTV Smarters, etc.
+*   **🏥 Health Check Integrado**: Sistema de autodiagnóstico que vigila el espacio en disco y la conexión con AceStream, permitiendo a Docker reiniciar el servicio si algo falla.
 
 ---
 
@@ -49,3 +50,13 @@ Usa la lista M3U generada dinámicamente:
 
 ## 🗑️ Limpieza Automática
 No te preocupes por dejar streams abiertos. El sistema detecta si dejas de descargar datos durante **60 segundos** y cierra la conexión AceStream automáticamente.
+
+---
+
+## 🩺 Health Check & API
+El sistema expone un endpoint de estado en `/health` que devuelve JSON con:
+*   Estado del disco (Alerta si <100MB).
+*   Test de conectividad con AceXY.
+*   Número de procesos FFMPEG activos.
+
+Docker Compose utiliza este endpoint para comprobar la salud del contenedor cada 30 segundos (`HEALTHCHECK`) y reiniciarlo automágicamente si se bloquea.

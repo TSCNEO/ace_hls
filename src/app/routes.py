@@ -1,6 +1,8 @@
 import os
 import time
 import json
+import shutil
+import requests
 from flask import Blueprint, jsonify, send_from_directory, Response, request, current_app
 from app.config import Config
 from app.services.hls_manager import hls_manager
@@ -11,6 +13,49 @@ main_bp = Blueprint('main', __name__)
 @main_bp.route('/')
 def index():
     return current_app.send_static_file('index.html')
+
+@main_bp.route('/health')
+def health_check():
+    health = {
+        "status": "ok",
+        "timestamp": time.time(),
+        "components": {}
+    }
+    
+    # 1. Disk Space
+    try:
+        total, used, free = shutil.disk_usage(Config.HLS_DIR)
+        health["components"]["disk"] = {
+            "status": "ok" if free > 1024 * 1024 * 100 else "warning", # 100MB warning
+            "free_mb": free // (1024 * 1024),
+            "total_mb": total // (1024 * 1024)
+        }
+    except Exception as e:
+         health["components"]["disk"] = {"status": "error", "error": str(e)}
+
+    # 2. AceXY Connection (Internal)
+    try:
+        acexy_host = Config.ACEXY_IP
+        if acexy_host in ['127.0.0.1', 'localhost', '0.0.0.0']:
+            acexy_host = 'acexy' # Use docker service name if local
+            
+        acexy_url = f"http://{acexy_host}:{Config.ACEXY_PORT}/"
+        # We accept any response, even 404, as proof of life
+        resp = requests.get(acexy_url, timeout=2)
+        health["components"]["acexy"] = {"status": "ok", "code": resp.status_code}
+    except Exception as e:
+        health["components"]["acexy"] = {"status": "error", "error": str(e)}
+        # We don't mark global status as error because maybe acexy is just starting up? 
+        # But failing to connect is bad.
+        health["status"] = "degraded"
+
+    # 3. FFMPEG Processes
+    health["components"]["ffmpeg"] = {
+        "active_streams": len(hls_manager.processes)
+    }
+
+    status_code = 200 if health["status"] == "ok" else 500
+    return jsonify(health), status_code
 
 @main_bp.route('/manifest.json')
 def manifest():

@@ -12,6 +12,11 @@ services:
       - ACEXY_PORT=${ACEXY_PORT}
       - CACHE_DURATION=${CACHE_DURATION}
       - URL_ORIGEN=${URL_ORIGEN}
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:5000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - ace_hls_stream
 
