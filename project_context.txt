@@ -19,7 +19,7 @@ El proyecto se ejecuta sobre Docker y consta de tres servicios principales defin
 2.  **acexy (`acexy`)**:
     *   **Función**: Un proxy intermedio que facilita la comunicación con el motor AceStream. Expone una API HTTP para solicitar streams por ID.
     *   **Imagen**: `ghcr.io/javinator9889/acexy:0.2.0`.
-    *   **Puerto**: 8090.
+    *   **Puerto**: 8090 (mapeado por defecto al puerto configurado en `ACEXY_PORT`).
 
 3.  **acestream (`acestream`)**:
     *   **Función**: El motor AceStream real + Proxy HTTP. Se encarga de conectarse a la red P2P de AceStream y descargar el contenido.

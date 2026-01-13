@@ -32,9 +32,9 @@ services:
     container_name: acexy
     restart: unless-stopped
     ports:
-      - "${ACEXY_PORT_HOST}:8090"
+      - "${ACEXY_PORT}:${ACEXY_PORT}"
     environment:
-      ACEXY_LISTEN_ADDR: "${ACEXY_LISTEN_ADDR}"
+      ACEXY_LISTEN_ADDR: ":${ACEXY_PORT}"
       ACEXY_SCHEME: "${ACEXY_SCHEME}"
       ACEXY_HOST: "${ACEXY_HOST}"
       ACEXY_PORT: "${ACESTREAM_PORT}"
