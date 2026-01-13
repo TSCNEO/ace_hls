@@ -81,7 +81,14 @@ def get_channels():
     # If cache is very old or missing, force update? 
     # With APScheduler, this should presumably be up to date.
     # But if it's the very first run, we might want to check.
-    if not os.path.exists(Config.JSON_FILE):
+    # Check if cache exists and is valid
+    should_update = True
+    if os.path.exists(Config.JSON_FILE):
+        mtime = os.path.getmtime(Config.JSON_FILE)
+        if (time.time() - mtime) < Config.CACHE_DURATION:
+            should_update = False
+
+    if should_update:
          channel_manager.update_channels()
 
     if os.path.exists(Config.JSON_FILE):

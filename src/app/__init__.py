@@ -13,7 +13,7 @@ def create_app():
 
     # Scheduler removed as per user request (Lazy loading preferred)
     
-    # Initial update on startup (optional, can be removed if we want pure lazy loading)
+    # Initial update
     # But useful to have *some* data.
     try:
         if not path_exists_check(Config.JSON_FILE):
