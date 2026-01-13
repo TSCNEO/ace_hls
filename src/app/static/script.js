@@ -213,6 +213,24 @@ async function playChannel(channel) {
     if (likeBtn) likeBtn.classList.remove('active-like');
     if (dislikeBtn) dislikeBtn.classList.remove('active-dislike');
 
+    // Populate Tech Info in Player
+    const techDiv = document.getElementById('player-tech-info');
+    techDiv.innerHTML = '';
+    if (channel.stats && channel.stats.tech_info) {
+        const t = channel.stats.tech_info;
+        let res = '';
+        if (t.height) res = t.height >= 720 ? `${t.height}p` : 'SD';
+        if (t.fps && t.fps > 30) res += `${t.fps}`;
+
+        let codec = t.acodec ? t.acodec.toUpperCase() : '';
+        if (codec === 'AC3' || codec === 'EAC3') codec = '🔊 ' + codec;
+        else codec = '';
+
+        if (res || codec) {
+            techDiv.innerHTML = `<span class="tech-badge" style="font-size:0.9rem; padding:4px 8px;">${res} ${codec}</span>`;
+        }
+    }
+
     modal.style.display = 'flex';
 
     try {
@@ -450,11 +468,7 @@ async function refreshChannelsFromServer() {
     }
 }
 
-    } finally {
-    btn.textContent = originalText;
-    btn.disabled = false;
-}
-}
+
 
 async function sendFeedback(vote) {
     if (!currentAceId) return;
