@@ -123,7 +123,13 @@ def add_source():
         return jsonify({"error": "Missing URL"}), 400
     
     if source_manager.add_source(url):
-        return jsonify({"status": "added", "url": url})
+        # Auto-refresh channels on change
+        try:
+            channel_manager.update_channels()
+            return jsonify({"status": "added", "url": url, "message": "Source added and channels updated"})
+        except Exception as e:
+            return jsonify({"status": "added_but_failed_refresh", "url": url, "error": str(e)}), 200
+            
     return jsonify({"error": "Duplicate source"}), 409
 
 @main_bp.route('/api/sources', methods=['DELETE'])
@@ -134,7 +140,13 @@ def delete_source():
         return jsonify({"error": "Missing URL"}), 400
     
     if source_manager.delete_source(url):
-        return jsonify({"status": "deleted", "url": url})
+        # Auto-refresh channels on change
+        try:
+            channel_manager.update_channels()
+            return jsonify({"status": "deleted", "url": url, "message": "Source deleted and channels updated"})
+        except Exception as e:
+            return jsonify({"status": "deleted_but_failed_refresh", "url": url, "error": str(e)}), 200
+
     return jsonify({"error": "Source not found"}), 404
 
 @main_bp.route('/api/sources/refresh', methods=['POST'])
