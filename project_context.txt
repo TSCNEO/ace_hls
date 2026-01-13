@@ -90,10 +90,21 @@ El proyecto se ejecuta sobre Docker y consta de tres servicios principales defin
     *   Usa `subprocess.Popen` con `stdout=DEVNULL` para evitar llenar logs, pero escribe logs de FFmpeg en `data/hls/<id>/ffmpeg.log` via variable de entorno `FFREPORT`.
     *   Argumentos FFmpeg clave: `-fflags +genpts+igndts` (para corregir timestamps erróneos de AceStream), `-hls_time 4`, `-hls_list_size 6` (ventanas HLS estándar).
 
-*   **`src/app/services/channel_manager.py`**:
     *   Procesa M3U línea por línea.
     *   Extrae metadatos como `tvg-logo` y `group-title`.
     *   Guarda caché en `data/channels.json` para evitar descargas masivas a la fuente original.
+
+*   **`src/app/services/stats_manager.py`**:
+    *   Mantiene la persistencia de datos en `data/stats.json`.
+    *   Calcula el conteo de éxitos (`success_count`) y la última vez que se vió activo (`last_ok`).
+    *   Gestiona el feedback de usuarios (Like/Dislike), calculando `diff_votes` (votos netos) para mostrar indicadores de calidad en el frontend.
+    *   Extrae metadatos técnicos (Resolución, CODEC, FPS) usando `ffprobe` asíncrono y los anexa a la información del canal.
+
+*   **Frontend (`src/app/static/`)**:
+    *   **Votos**: Permite calificar streams. Si `diff_votes < 0`, muestra un punto rojo 🔴 indicando problemas.
+    *   **Feedback Instantáneo**: Optimistic UI actualiza el estado visual antes de la confirmación del servidor.
+    *   **Polling**: El reproductor consulta periódicamente actualizaciones de metadatos técnicos.
+    *   **Optimización de Imágenes**: Detecta errores 404 en logos y los reemplaza en memoria por un SVG genérico para evitar bucles de red.
 
 ## Tecnologías y Librerías
 
