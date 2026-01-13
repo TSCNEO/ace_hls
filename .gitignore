@@ -1,4 +1,2 @@
-/release
 .env
 *.sh
-.gitignore

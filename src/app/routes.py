@@ -74,6 +74,8 @@ def add_header(response):
     response.headers["Expires"] = "0"
     return response
 
+from app.utils import get_acexy_url_for_client
+
 @main_bp.route('/api/channels')
 def get_channels():
     # If cache is very old or missing, force update? 
@@ -86,18 +88,16 @@ def get_channels():
         with open(Config.JSON_FILE, 'r') as f:
             data = json.load(f)
             
-        # Dynamic URL replacement logic
-        host_ip = request.host.split(':')[0]
+        request_host = request.host
         
-        target_ip = Config.ACEXY_IP
-        if Config.ACEXY_IP in ['127.0.0.1', 'localhost', '0.0.0.0', 'acexy', 'acestream']:
-            target_ip = host_ip
-
         for ch in data:
             if "url" in ch and Config.ACEXY_IP in ch["url"]:
-                 ch["url"] = ch["url"].replace(Config.ACEXY_IP, target_ip)
+                 # Just refresh the IP part if it's already a full URL matching our config
+                 target_url = get_acexy_url_for_client(request_host)
+                 ch["url"] = ch["url"].replace(f"http://{Config.ACEXY_IP}:{Config.ACEXY_PORT}/ace/getstream", target_url)
             elif "url" in ch:
-                ch["url"] = f"http://{target_ip}:{Config.ACEXY_PORT}/ace/getstream?id={ch['id']}"
+                 # Re-generate it safely
+                ch["url"] = get_acexy_url_for_client(request_host, ch['id'])
 
         return jsonify(data)
     return jsonify([]), 500
@@ -108,12 +108,12 @@ def get_version():
         version_path = os.path.join(current_app.root_path, 'version.txt')
         with open(version_path, 'r') as f:
             return jsonify({"version": f.read().strip()})
-    except:
+    except Exception:
         # Fallback to check if it's in the parent directory (in case of different cwd)
         try:
              with open('version.txt', 'r') as f:
                 return jsonify({"version": f.read().strip()})
-        except:
+        except Exception:
              return jsonify({"version": "dev"})
 
 @main_bp.route('/playlist.m3u')
@@ -126,12 +126,6 @@ def get_playlist():
             with open(Config.JSON_FILE, 'r') as f:
                 channels = json.load(f)
             
-            host_ip = request.host.split(':')[0]
-            
-            target_ip = Config.ACEXY_IP
-            if Config.ACEXY_IP in ['127.0.0.1', 'localhost', '0.0.0.0', 'acexy', 'acestream']:
-                target_ip = host_ip
-                
             m3u_lines = ["#EXTM3U"]
             
             for ch in channels:
@@ -140,8 +134,7 @@ def get_playlist():
                 
                 info_line = f'#EXTINF:-1{logo_attr}{group_attr},{ch["name"]}'
                 
-                ace_id = ch["id"]
-                stream_url = f"http://{target_ip}:{Config.ACEXY_PORT}/ace/getstream?id={ace_id}"
+                stream_url = get_acexy_url_for_client(request.host, ch["id"])
                 
                 m3u_lines.append(info_line)
                 m3u_lines.append(stream_url)

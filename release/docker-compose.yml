@@ -1,0 +1,52 @@
+services:
+  ace-hls:
+    image: tscneo/ace-hls-viewer:latest
+    container_name: ace_hls_viewer
+    restart: unless-stopped
+    ports:
+      - "8089:5000"
+    volumes:
+      - ace_hls_data:/app/data
+    environment:
+      - ACEXY_IP=${ACEXY_IP:-127.0.0.1} # IP of AceXY (or 'acexy' if in same network)
+      - ACEXY_PORT=${ACEXY_PORT:-8090} # Port of AceXY
+      - CACHE_DURATION=300
+      - URL_ORIGEN=https://ipfs.io/ipns/k2k4r8oqlcjxsritt5mczkcn4mmvcmymbqw7113fz2flkrerfwfps004/data/listas/lista_iptv.m3u
+    networks:
+      - ace_hls_stream
+  #Recomendado aparte, en PC con VPN
+  acestream:
+    image: martinbjeldbak/acestream-http-proxy:latest
+    container_name: acestream
+    restart: unless-stopped
+    networks:
+      - ace_hls_stream
+
+  acexy:
+    image: ghcr.io/javinator9889/acexy:0.2.0
+    container_name: acexy
+    restart: unless-stopped
+    ports:
+      - "8090:8090" # Host 8090 -> Container 8090 Para que funcione el m3u. Debe ser igual a ACEXY_LISTEN_ADDR:
+    environment:
+      ACEXY_LISTEN_ADDR: ":8090" # Listen on internal port 8090
+      ACEXY_SCHEME: "http"
+      ACEXY_HOST: "acestream"
+      ACEXY_PORT: "6878"
+      ACEXY_M3U8_STREAM_TIMEOUT: "60s"
+      ACEXY_M3U8: "false"
+      ACEXY_EMPTY_TIMEOUT: "60s"
+      ACEXY_BUFFER_SIZE: "4MB"
+      ACEXY_NO_RESPONSE_TIMEOUT: "10s"
+    depends_on:
+      - acestream
+    networks:
+      - ace_hls_stream
+
+volumes:
+  ace_hls_data:
+
+
+networks:
+  ace_hls_stream:
+    name: ace_hls_stream

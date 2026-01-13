@@ -4,6 +4,7 @@ import subprocess
 import threading
 import time
 import logging
+from app.utils import get_acexy_host_for_server
 from app.config import Config
 
 logger = logging.getLogger(__name__)
@@ -80,9 +81,7 @@ class HLSManager:
             os.makedirs(stream_dir)
 
             # --- UNIFIED CONNECTION LOGIC ---
-            internal_host = Config.ACEXY_IP
-            if internal_host in ['127.0.0.1', 'localhost', '0.0.0.0']:
-                internal_host = 'acexy'
+            internal_host = get_acexy_host_for_server()
             
             start_url = f"http://{internal_host}:{Config.ACEXY_PORT}/ace/getstream?id={ace_id}"
             logger.info(f"Connecting to AceXY (Internal): {internal_host}:{Config.ACEXY_PORT}")

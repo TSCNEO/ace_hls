@@ -19,8 +19,8 @@ def create_app():
         if not path_exists_check(Config.JSON_FILE):
              app.logger.info("Performing initial channel update...")
              channel_manager.update_channels()
-    except:
-        pass
+    except Exception as e:
+         app.logger.error(f"Failed initial channel update: {e}")
 
     from app.routes import main_bp
     app.register_blueprint(main_bp)
