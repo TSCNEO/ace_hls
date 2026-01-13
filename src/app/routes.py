@@ -7,6 +7,7 @@ from flask import Blueprint, jsonify, send_from_directory, Response, request, cu
 from app.config import Config
 from app.services.hls_manager import hls_manager
 from app.services.channel_manager import channel_manager
+from app.services.stats_manager import stats_manager
 
 main_bp = Blueprint('main', __name__)
 
@@ -97,7 +98,14 @@ def get_channels():
             
         request_host = request.host
         
+        # Load stats once
+        stats = stats_manager.get_stats()
+        
         for ch in data:
+            # Inject stats if avail
+            if ch["id"] in stats:
+                ch["stats"] = stats[ch["id"]]
+
             if "url" in ch and Config.ACEXY_IP in ch["url"]:
                  # Just refresh the IP part if it's already a full URL matching our config
                  target_url = get_acexy_url_for_client(request_host)
@@ -156,6 +164,18 @@ def refresh_sources():
         return jsonify({"status": "ok", "message": "Channels refreshed"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@main_bp.route('/api/stats/feedback', methods=['POST'])
+def submit_feedback():
+    data = request.get_json()
+    ace_id = data.get('id')
+    vote = data.get('vote') # 'like' or 'dislike'
+    
+    if not ace_id or vote not in ['like', 'dislike']:
+        return jsonify({"error": "Invalid data"}), 400
+        
+    stats_manager.update_user_feedback(ace_id, vote)
+    return jsonify({"status": "ok", "vote": vote})
 
 
 @main_bp.route('/api/version')

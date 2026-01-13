@@ -91,6 +91,14 @@
             </media-player>
 
             <div class="utility-box">
+                <div class="feedback-controls"
+                    style="display:flex; gap:10px; margin-bottom:10px; justify-content:center;">
+                    <button id="btn-like" class="feedback-btn" onclick="sendFeedback('like')"
+                        title="Funciona bien">👍</button>
+                    <button id="btn-dislike" class="feedback-btn" onclick="sendFeedback('dislike')"
+                        title="Mala calidad / No funciona">👎</button>
+                </div>
+
                 <div><strong>Opciones de Reproducción:</strong></div>
 
                 <!-- iOS Native Button -->

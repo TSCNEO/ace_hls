@@ -14,6 +14,8 @@ El proyecto se ejecuta sobre Docker y consta de tres servicios principales defin
     *   **Función**: La aplicación principal (backend + frontend). Gestiona la lista de canales, la API, y orquesta los procesos de transcodificación/remuxing (FFmpeg).
     *   **Tecnología**: Python 3.11 (Flask), Gunicorn.
     *   **Puerto**: 8088 (Externo) -> 5000 (Interno).
+    *   **Reglas de Desarrollo**: 
+        *   **Siempre actualizar `src/app/version.txt` al hacer un commit**.
     *   **Dependencias**: `requirements.txt` (Flask, requests, gunicorn), FFmpeg (instalado via Dockerfile).
 
 2.  **acexy (`acexy`)**:
@@ -41,6 +43,7 @@ El proyecto se ejecuta sobre Docker y consta de tres servicios principales defin
 │   │   ├── services/
 │   │   │   ├── channel_manager.py # Descarga y parseo de lista M3U
 │   │   │   ├── source_manager.py  # Gestión persistente de fuentes M3U
+│   │   │   ├── stats_manager.py   # Persistencia de salud y metadatos de streams
 │   │   │   └── hls_manager.py     # Gestión de procesos FFmpeg
 │   │   └── static/     # Frontend (HTML, CSS, JS, Iconos)
 │   ├── requirements.txt

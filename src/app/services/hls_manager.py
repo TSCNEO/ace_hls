@@ -9,10 +9,15 @@ from app.config import Config
 
 logger = logging.getLogger(__name__)
 
+# Lazy import to avoid potential circular issues, though StatsManager seems safe.
+from app.services.stats_manager import stats_manager
+
 class HLSManager:
     def __init__(self):
         self.processes = {} # {ace_id: subprocess.Popen}
-        self.activity = {}  # {ace_id: timestamp}
+        self.activity = {}  # {ace_id: timestamp_of_last_request}
+        self.start_times = {} # {ace_id: timestamp_of_start} for validation
+        self.validated_sessions = set() # {ace_id} to ensure we count success only once per run
         self.lock = threading.Lock()
         
         # Cleanup on startup
@@ -39,6 +44,19 @@ class HLSManager:
             with self.lock:
                 for ace_id, last_active in self.activity.items():
                     idle_time = now - last_active
+                    
+                    # --- PASSIVE VALIDATION ---
+                    # If stream has been running > 30s and active, mark as success
+                    if ace_id in self.start_times:
+                        run_duration = now - self.start_times[ace_id]
+                        if run_duration > 30 and ace_id not in self.validated_sessions:
+                            # Verify process is actually alive
+                            proc = self.processes.get(ace_id)
+                            if proc and proc.poll() is None:
+                                logger.info(f"[Monitor] Validating {ace_id} (Running {run_duration:.0f}s)")
+                                stats_manager.update_channel_success(ace_id)
+                                self.validated_sessions.add(ace_id)
+
                     # logger.info(f"[Monitor] {ace_id} idle for {idle_time:.1f}s") # Verbose debug
                     if idle_time > 60: # 60 seconds timeout
                         to_remove.append(ace_id)
@@ -119,6 +137,12 @@ class HLSManager:
             
             self.processes[ace_id] = proc
             self.activity[ace_id] = time.time()
+            self.start_times[ace_id] = time.time()
+            if ace_id in self.validated_sessions:
+                self.validated_sessions.remove(ace_id)
+
+            # Start Metadata Analysis (Async)
+            threading.Thread(target=self._analyze_stream, args=(ace_id, start_url), daemon=True).start()
 
             # Check if it died immediately
             time.sleep(1)
@@ -141,11 +165,71 @@ class HLSManager:
                 except subprocess.TimeoutExpired:
                     proc.kill()
                 del self.processes[ace_id]
+                if ace_id in self.start_times: del self.start_times[ace_id]
+                if ace_id in self.validated_sessions: self.validated_sessions.remove(ace_id)
                 
                 stream_dir = os.path.join(Config.HLS_DIR, ace_id)
                 if os.path.exists(stream_dir):
                     shutil.rmtree(stream_dir)
                     # logger.info(f"Stream stopped. Files kept in {stream_dir} for debugging.")
+
+    def _analyze_stream(self, ace_id, stream_url):
+        """Runs ffprobe to extract resolution, fps, codecs"""
+        time.sleep(15) # Wait for stream to stabilize/buffer
+        
+        with self.lock:
+            # Check if still running
+            if ace_id not in self.processes:
+                return
+
+        logger.info(f"Analyzing stream {ace_id}...")
+        try:
+            cmd = [
+                "ffprobe", 
+                "-v", "quiet", 
+                "-print_format", "json", 
+                "-show_streams", 
+                "-show_format",
+                stream_url
+            ]
+            # Timeout is important to avoid hanging threads
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+            if result.returncode == 0:
+                import json
+                data = json.loads(result.stdout)
+                
+                tech_info = {}
+                for stream in data.get('streams', []):
+                    if stream['codec_type'] == 'video':
+                        tech_info['width'] = stream.get('width')
+                        tech_info['height'] = stream.get('height')
+                        tech_info['vcodec'] = stream.get('codec_name')
+                        # FPS calculation can be tricky ("50/1" or "50")
+                        fps_str = stream.get('r_frame_rate')
+                        if fps_str:
+                            try:
+                                num, den = map(int, fps_str.split('/'))
+                                if den > 0:
+                                    tech_info['fps'] = round(num / den)
+                            except:
+                                pass
+                                
+                    elif stream['codec_type'] == 'audio':
+                        tech_info['acodec'] = stream.get('codec_name')
+                
+                if tech_info:
+                    logger.info(f"Analysis for {ace_id}: {tech_info}")
+                    # Update stats with technical info
+                    stats_manager.update_channel_success(ace_id, tech_info)
+                    
+                    # Also mark as validated since it responded to ffprobe
+                    with self.lock:
+                         self.validated_sessions.add(ace_id)
+            else:
+                logger.warning(f"ffprobe failed for {ace_id}")
+
+        except Exception as e:
+            logger.error(f"Analysis error for {ace_id}: {e}")
 
 # Global Instance
 hls_manager = HLSManager()

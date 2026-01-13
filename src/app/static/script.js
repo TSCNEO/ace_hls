@@ -1,6 +1,7 @@
 let allChannels = [];
 let categories = new Set();
 let currentStreamUrl = "";
+let currentAceId = null;
 const player = document.querySelector('media-player');
 
 // Favorites & Theme Logic
@@ -116,7 +117,58 @@ function filterChannels() {
 
         const logo = ch.logo ? `<img src="${ch.logo}" class="channel-logo" loading="lazy" decoding="async" onerror="this.onerror=null; this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iIzU1NSIgZD0iTTIxIDNIM2MtMS4xIDAtMiAuOS0yIDJ2MTJjMCAxLjEuOSAyIDIgMmg1bDIgM2g0bDItM2g1YzEuMSAwIDItLjkgMi0yVjVjMC0xLjEtLjktMi0yLTJ6bTAgMTRIM1Y1aDE4djEyem0tNS02bC03IDRWM2zNyA0eiIvPjwvc3ZnPg=='">` : '<div style="font-size:2rem;">📺</div>';
 
-        card.innerHTML = `${starBtn}${logo}<div class="channel-name">${ch.name}</div>`;
+        // Stats Logic
+        let statusDot = '<span class="status-dot dot-grey" title="Nunca visto"></span>';
+        let techBadge = '';
+        let lastSeenText = '';
+
+        if (ch.stats) {
+            const now = Math.floor(Date.now() / 1000);
+            const diff = now - ch.stats.last_ok;
+
+            // Status Dot Color
+            if (diff < 86400) { // < 24h
+                statusDot = '<span class="status-dot dot-green" title="Visto recientemente"></span>';
+            } else if (diff < 604800) { // < 7 days
+                statusDot = '<span class="status-dot dot-yellow" title="Visto esta semana"></span>';
+            }
+
+            // Relative Time
+            if (diff < 60) lastSeenText = 'Hace instantes';
+            else if (diff < 3600) lastSeenText = `Hace ${Math.floor(diff / 60)}m`;
+            else if (diff < 86400) lastSeenText = `Hace ${Math.floor(diff / 3600)}h`;
+            else lastSeenText = `Hace ${Math.floor(diff / 86400)}d`;
+
+            // Tech Badge
+            if (ch.stats.tech_info) {
+                const t = ch.stats.tech_info;
+                let res = '';
+                if (t.height) res = t.height >= 720 ? `${t.height}p` : 'SD';
+                if (t.fps && t.fps > 30) res += `${t.fps}`;
+
+                let codec = t.acodec ? t.acodec.toUpperCase() : '';
+                if (codec === 'AC3' || codec === 'EAC3') codec = '🔊 ' + codec;
+                else codec = '';
+
+                if (res || codec) {
+                    techBadge = `<div class="tech-badge">${res} ${codec}</div>`;
+                }
+            }
+
+            // Bad Quality Badge
+            if (ch.stats.diff_votes && ch.stats.diff_votes < 0) {
+                techBadge += `<div class="bad-quality-badge" title="Reportado como mala calidad">👎 Mala Calidad</div>`;
+            }
+        }
+
+        card.innerHTML = `
+            ${starBtn}
+            ${statusDot}
+            ${logo}
+            <div class="channel-name">${ch.name}</div>
+            ${techBadge}
+            ${lastSeenText ? `<div class="last-seen">${lastSeenText}</div>` : ''}
+        `;
         grid.appendChild(card);
     });
 }
@@ -151,6 +203,15 @@ async function playChannel(channel) {
     if (isIOS() || true) {
         iosBtn.style.display = 'inline-block';
     }
+
+    // Capture ID for feedback
+    currentAceId = channel.id;
+
+    // Reset Feedback Buttons
+    const likeBtn = document.getElementById('btn-like');
+    const dislikeBtn = document.getElementById('btn-dislike');
+    if (likeBtn) likeBtn.classList.remove('active-like');
+    if (dislikeBtn) dislikeBtn.classList.remove('active-dislike');
 
     modal.style.display = 'flex';
 
@@ -386,6 +447,38 @@ async function refreshChannelsFromServer() {
     } finally {
         btn.textContent = originalText;
         btn.disabled = false;
+    }
+}
+
+    } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
+}
+}
+
+async function sendFeedback(vote) {
+    if (!currentAceId) return;
+
+    // UI Feedback immediately
+    const likeBtn = document.getElementById('btn-like');
+    const dislikeBtn = document.getElementById('btn-dislike');
+
+    likeBtn.classList.remove('active-like');
+    dislikeBtn.classList.remove('active-dislike');
+
+    if (vote === 'like') likeBtn.classList.add('active-like');
+    if (vote === 'dislike') dislikeBtn.classList.add('active-dislike');
+
+    try {
+        await fetch('/api/stats/feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: currentAceId, vote: vote })
+        });
+        // Silent success, maybe reload channels in background to update grid?
+        loadChannels();
+    } catch (e) {
+        console.error("Feedback error", e);
     }
 }
 

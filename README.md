@@ -11,6 +11,7 @@ Una interfaz web moderna y autogestionada para visualizar y reproducir canales d
 *   **🧟 Monitor de Inactividad**: Sistema "Watchdog" que mata automáticamente los procesos de video si cierras la pestaña o dejas de ver un canal, ahorrando ancho de banda y CPU.
 *   **📋 Lista M3U Universal**: Genera una lista compatible con VLC, TiviMate, IPTV Smarters, etc.
 *   **⚙️ Gestión de Fuentes Multiples**: Permite añadir múltiples listas M3U desde la interfaz web, con deduplicación automática y persistencia.
+*   **🤖 Monitor de Salud "Social"**: Validación pasiva de canales. El sistema recuerda cuándo funcionó un canal por última vez y muestra sus datos técnicos (Resolución, FPS, Codecs) extraídos automáticamente.
 *   **🏥 Health Check Integrado**: Sistema de autodiagnóstico que vigila el espacio en disco y la conexión con AceStream, permitiendo a Docker reiniciar el servicio si algo falla.
 
 ---
