@@ -127,7 +127,9 @@ function filterChannels() {
             const diff = now - ch.stats.last_ok;
 
             // Status Dot Color
-            if (diff < 86400) { // < 24h
+            if (ch.stats.diff_votes && ch.stats.diff_votes < 0) {
+                statusDot = '<span class="status-dot dot-red" title="Reportado: Mala Calidad"></span>';
+            } else if (diff < 86400) { // < 24h
                 statusDot = '<span class="status-dot dot-green" title="Visto recientemente"></span>';
             } else if (diff < 604800) { // < 7 days
                 statusDot = '<span class="status-dot dot-yellow" title="Visto esta semana"></span>';
@@ -155,10 +157,7 @@ function filterChannels() {
                 }
             }
 
-            // Bad Quality Badge
-            if (ch.stats.diff_votes && ch.stats.diff_votes < 0) {
-                techBadge += `<div class="bad-quality-badge" title="Reportado como mala calidad">👎 Mala Calidad</div>`;
-            }
+
         }
 
         card.innerHTML = `
@@ -180,6 +179,7 @@ function isIOS() {
 }
 
 let loadTimeout;
+let statsInterval;
 
 async function playChannel(channel) {
     const modal = document.getElementById('player-modal');
@@ -187,6 +187,9 @@ async function playChannel(channel) {
     errorDiv.style.display = 'none'; // Reset error
 
     document.getElementById('player-title').textContent = channel.name;
+
+    // Reset Tech Info
+    document.getElementById('player-tech-info').innerHTML = '';
 
     // Setup VLC Link
     const vlcLink = document.getElementById('vlc-link');
@@ -232,6 +235,10 @@ async function playChannel(channel) {
     }
 
     modal.style.display = 'flex';
+
+    // Start Polling for Stats (Tech Info)
+    if (statsInterval) clearInterval(statsInterval);
+    statsInterval = setInterval(() => pollStats(channel.id), 5000);
 
     try {
         // Request stream start
@@ -296,6 +303,7 @@ function closePlayer() {
     currentStreamUrl = "";
     document.getElementById('player-modal').style.display = 'none';
     if (loadTimeout) clearTimeout(loadTimeout);
+    if (statsInterval) clearInterval(statsInterval);
 }
 
 function playManual() {
@@ -471,7 +479,11 @@ async function refreshChannelsFromServer() {
 
 
 async function sendFeedback(vote) {
-    if (!currentAceId) return;
+    console.log("Feedback clicked:", vote, "for ID:", currentAceId);
+    if (!currentAceId) {
+        console.error("No active AceID for feedback");
+        return;
+    }
 
     // UI Feedback immediately
     const likeBtn = document.getElementById('btn-like');
@@ -489,11 +501,59 @@ async function sendFeedback(vote) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: currentAceId, vote: vote })
         });
-        // Silent success, maybe reload channels in background to update grid?
-        loadChannels();
+
+        // Optimistic UI Update
+        const ch = allChannels.find(c => c.id === currentAceId);
+        if (ch) {
+            if (!ch.stats) ch.stats = { success_count: 0, last_ok: Math.floor(Date.now() / 1000) };
+            if (!ch.stats.diff_votes) ch.stats.diff_votes = 0;
+
+            if (vote === 'like') ch.stats.diff_votes++;
+            else ch.stats.diff_votes--;
+
+            filterChannels(); // Re-render grid immediately
+        }
+
     } catch (e) {
         console.error("Feedback error", e);
     }
+}
+
+function updatePlayerTechBadge(t) {
+    const techDiv = document.getElementById('player-tech-info');
+    let res = '';
+    if (t.height) res = t.height >= 720 ? `${t.height}p` : 'SD';
+    if (t.fps && t.fps > 30) res += `${t.fps}`;
+
+    let codec = t.acodec ? t.acodec.toUpperCase() : '';
+    if (codec === 'AC3' || codec === 'EAC3') codec = '🔊 ' + codec;
+    else codec = '';
+
+    if (res || codec) {
+        techDiv.innerHTML = `<span class="tech-badge" style="font-size:0.9rem; padding:4px 8px;">${res} ${codec}</span>`;
+    }
+}
+
+async function pollStats(aceId) {
+    try {
+        const res = await fetch('/api/channels');
+        if (res.ok) {
+            const freshChannels = await res.json();
+            const freshCh = freshChannels.find(c => c.id === aceId);
+
+            if (freshCh && freshCh.stats && freshCh.stats.tech_info) {
+                updatePlayerTechBadge(freshCh.stats.tech_info);
+
+                // Also update main list object for grid
+                const localCh = allChannels.find(c => c.id === aceId);
+                if (localCh) {
+                    localCh.stats = freshCh.stats;
+                    // Re-render grid to show badge there too
+                    filterChannels();
+                }
+            }
+        }
+    } catch (e) { console.error("Poll stats error", e); }
 }
 
 document.addEventListener('DOMContentLoaded', loadChannels);
