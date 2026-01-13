@@ -335,7 +335,8 @@ async function addSource() {
         const data = await res.json();
         if (res.ok) {
             input.value = ''; // Clear
-            loadSources(); // Refresh list
+            loadSources(); // Refresh list inside modal
+            loadChannels(); // Refresh main grid background
         } else {
             alert("Error: " + (data.error || 'Desconocido'));
         }
@@ -355,7 +356,8 @@ async function deleteSource(url) {
         });
 
         if (res.ok) {
-            loadSources();
+            loadSources(); // Refresh list inside modal
+            loadChannels(); // Refresh main grid background
         } else {
             alert("Error al eliminar");
         }

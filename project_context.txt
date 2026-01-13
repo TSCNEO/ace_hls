@@ -40,6 +40,7 @@ El proyecto se ejecuta sobre Docker y consta de tres servicios principales defin
 │   │   ├── utils.py    # Utilidades (resolución de URLs AceXY)
 │   │   ├── services/
 │   │   │   ├── channel_manager.py # Descarga y parseo de lista M3U
+│   │   │   ├── source_manager.py  # Gestión persistente de fuentes M3U
 │   │   │   └── hls_manager.py     # Gestión de procesos FFmpeg
 │   │   └── static/     # Frontend (HTML, CSS, JS, Iconos)
 │   ├── requirements.txt

@@ -10,6 +10,7 @@ Una interfaz web moderna y autogestionada para visualizar y reproducir canales d
 *   **🧠 IP Dinámica Inteligente**: La aplicación detecta automáticamente la IP de acceso (Local, LAN o WAN) y genera los enlaces M3U correctos. ¡Adiós a configurar IPs manualmente!
 *   **🧟 Monitor de Inactividad**: Sistema "Watchdog" que mata automáticamente los procesos de video si cierras la pestaña o dejas de ver un canal, ahorrando ancho de banda y CPU.
 *   **📋 Lista M3U Universal**: Genera una lista compatible con VLC, TiviMate, IPTV Smarters, etc.
+*   **⚙️ Gestión de Fuentes Multiples**: Permite añadir múltiples listas M3U desde la interfaz web, con deduplicación automática y persistencia.
 *   **🏥 Health Check Integrado**: Sistema de autodiagnóstico que vigila el espacio en disco y la conexión con AceStream, permitiendo a Docker reiniciar el servicio si algo falla.
 
 ---
@@ -23,6 +24,11 @@ Este stack incluye todo lo necesario:
 
 ### 1. Configuración
 Copia el archivo de ejemplo y configura tus variables:
+```bash
+cp .env.example .env
+```
+Edita `.env` si es necesario.
+> **Nota**: La variable `URL_ORIGEN` es opcional. Puedes dejarla vacía y añadir tus listas M3U cómodamente desde la interfaz web (botón ⚙️).
 ```bash
 cp .env.example .env
 ```
