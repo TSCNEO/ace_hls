@@ -15,33 +15,58 @@ class ChannelManager:
             os.makedirs(Config.DATA_DIR)
 
     def update_channels(self):
-        """Downloads and processes the M3U list with cache check."""
-        current_time = time.time()
-        if os.path.exists(Config.JSON_FILE) and (current_time - self.last_update < Config.CACHE_DURATION):
-             # Also check file modification time in case we restarted? 
-             # Or just trust in-memory last_update + file existence.
-             # If file exists but we just restarted, last_update is 0, so we update. That's good.
-             return
+        """Downloads and processes the M3U list from ALL sources with deduplication."""
+        from app.services.source_manager import source_manager
+        
+        # We don't check for cache duration strictly here anymore because
+        # we might have added a new source and want immediate update.
+        # But to respect cache, we could check if any source changed?
+        # For simplicity in this "v2", let's trust the caller (scheduler or manual)
+        # or just enforce a small cooldown if needed. 
+        # For now, we proceed to update.
 
-        logger.info("Updating channels list...")
-        try:
-            requests.packages.urllib3.disable_warnings()
-            response = requests.get(Config.URL_ORIGEN, timeout=30, verify=False)
-            response.raise_for_status()
-            content = response.text
-        except Exception as e:
-            logger.error(f"Failed to download list: {e}")
-            return
-
-        lines = content.splitlines()
-        channels = []
+        logger.info("Updating channels list from all sources...")
+        
+        sources = source_manager.get_sources()
+        all_channels = []
+        seen_ids = set()
         new_m3u_content = ["#EXTM3U"]
         
-        info_line = ""
+        requests.packages.urllib3.disable_warnings()
 
-        # Using class-level or config access for IP not needed here as we use dynamic replacement 
-        # But we still generate a base URL for 'url' field.
-        # We will use the configured ACEXY_IP for the base JSON (server-side view)
+        for src in sources:
+            url = src['url']
+            try:
+                logger.info(f"Fetching source: {url}")
+                response = requests.get(url, timeout=30, verify=False)
+                response.raise_for_status()
+                content = response.text
+                
+                self._parse_m3u_content(content, url, all_channels, seen_ids, new_m3u_content)
+                
+            except Exception as e:
+                logger.error(f"Failed to download list from {url}: {e}")
+                # Continue to next source
+
+        # Save results safely
+        try:
+            with open(Config.JSON_FILE, 'w') as f:
+                json.dump(all_channels, f, indent=2)
+            
+            with open(Config.M3U_FILE, 'w') as f:
+                f.write("\n".join(new_m3u_content))
+            
+            self.last_update = time.time()
+            logger.info(f"Update complete. Total: {len(all_channels)} channels from {len(sources)} sources.")
+        except Exception as e:
+            logger.error(f"Error saving output files: {e}")
+
+    def _parse_m3u_content(self, content, source_url, channels_list, seen_ids, m3u_lines):
+        lines = content.splitlines()
+        info_line = ""
+        
+        # Stats for this source
+        stats = {"added": 0, "duplicates": 0, "total_found": 0}
         
         for line in lines:
             line = line.strip()
@@ -64,6 +89,17 @@ class ChannelManager:
                     ace_id = match_http.group(1)
 
                 if ace_id:
+                    stats["total_found"] += 1
+                    # Deduplication check
+                    if ace_id in seen_ids:
+                        # Skip duplicate
+                        stats["duplicates"] += 1
+                        info_line = ""
+                        continue
+                        
+                    seen_ids.add(ace_id)
+                    stats["added"] += 1
+
                     # Parse Meta (Name, Logo)
                     name = info_line.split(',')[-1].strip().replace(" [ACESTREAM]", "")
                     logo_match = re.search(r'tvg-logo="([^"]+)"', info_line)
@@ -75,33 +111,22 @@ class ChannelManager:
                     stream_url = f"http://{Config.ACEXY_IP}:{Config.ACEXY_PORT}/ace/getstream?id={ace_id}"
                     
                     # Add to JSON list
-                    channels.append({
+                    channels_list.append({
                         "id": ace_id,
                         "name": name,
                         "logo": logo,
                         "group": group,
-                        "url": stream_url
+                        "url": stream_url,
+                        "source": source_url # Track origin for debugging
                     })
 
                     # Add to M3U
-                    new_m3u_content.append(info_line.replace(" [ACESTREAM]", ""))
-                    new_m3u_content.append(stream_url)
+                    m3u_lines.append(info_line.replace(" [ACESTREAM]", ""))
+                    m3u_lines.append(stream_url)
 
                 info_line = "" # Reset for next
-
-        # Save results safely
-        try:
-            # Atomic write pattern could be better but simple write is okay for now
-            with open(Config.JSON_FILE, 'w') as f:
-                json.dump(channels, f, indent=2)
-            
-            with open(Config.M3U_FILE, 'w') as f:
-                f.write("\n".join(new_m3u_content))
-            
-            self.last_update = time.time()
-            logger.info(f"Update complete. {len(channels)} channels processed.")
-        except Exception as e:
-            logger.error(f"Error saving output files: {e}")
+        
+        logger.info(f"Source Processed: {source_url} | Found: {stats['total_found']} | Added: {stats['added']} | Duplicates: {stats['duplicates']}")
 
 # Global Instance
 channel_manager = ChannelManager()

@@ -1,0 +1,110 @@
+# Documentación del Proyecto AceHLS
+
+Este documento proporciona una visión general completa del proyecto AceHLS, su arquitectura, tecnologías y funcionamiento interno. Está diseñado para servir como contexto para futuras modificaciones y mantenimiento.
+
+## Visión General
+
+**AceHLS** es una aplicación diseñada para actuar como un proxy/puente entre transmisiones AceStream y clientes web modernos que soportan HLS (HTTP Live Streaming). Su objetivo principal es permitir la reproducción de canales de AceStream en cualquier navegador o reproductor compatible con HLS sin necesidad de software adicional en el cliente.
+
+## Arquitectura del Sistema
+
+El proyecto se ejecuta sobre Docker y consta de tres servicios principales definidos en `docker-compose.yml`:
+
+1.  **ace-hls (`ace_hls_viewer`)**:
+    *   **Función**: La aplicación principal (backend + frontend). Gestiona la lista de canales, la API, y orquesta los procesos de transcodificación/remuxing (FFmpeg).
+    *   **Tecnología**: Python 3.11 (Flask), Gunicorn.
+    *   **Puerto**: 8088 (Externo) -> 5000 (Interno).
+    *   **Dependencias**: `requirements.txt` (Flask, requests, gunicorn), FFmpeg (instalado via Dockerfile).
+
+2.  **acexy (`acexy`)**:
+    *   **Función**: Un proxy intermedio que facilita la comunicación con el motor AceStream. Expone una API HTTP para solicitar streams por ID.
+    *   **Imagen**: `ghcr.io/javinator9889/acexy:0.2.0`.
+    *   **Puerto**: 8090.
+
+3.  **acestream (`acestream`)**:
+    *   **Función**: El motor AceStream real + Proxy HTTP. Se encarga de conectarse a la red P2P de AceStream y descargar el contenido.
+    *   **Imagen**: `martinbjeldbak/acestream-http-proxy:latest`.
+
+## Estructura de Directorios
+
+```
+/root/OnGoing/ace_hls/
+├── .env                # Variables de entorno (puertos, IPs, configuración)
+├── docker-compose.yml  # Orquestación de servicios
+├── Dockerfile          # Definición de la imagen de ace-hls
+├── src/
+│   ├── app/
+│   │   ├── __init__.py # Inicialización de Flask
+│   │   ├── config.py   # Carga configuración desde .env
+│   │   ├── routes.py   # Controladores (Endpoints API y Vistas)
+│   │   ├── utils.py    # Utilidades (resolución de URLs AceXY)
+│   │   ├── services/
+│   │   │   ├── channel_manager.py # Descarga y parseo de lista M3U
+│   │   │   └── hls_manager.py     # Gestión de procesos FFmpeg
+│   │   └── static/     # Frontend (HTML, CSS, JS, Iconos)
+│   ├── requirements.txt
+│   └── wsgi.py         # Punto de entrada para Gunicorn
+└── data/               # Volumen persistente (listas, caché, segmentos HLS)
+```
+
+## Flujo de Funcionamiento
+
+1.  **Inicio**:
+    *   La app arranca y lee la configuración (`Config` en `src/app/config.py`).
+    *   Se limpia el directorio de HLS (`data/hls`).
+    *   Se inicia un hilo monitor en segundo plano (`HLSManager`) para limpiar streams inactivos.
+
+2.  **Obtención de Canales (`ChannelManager`)**:
+    *   Al solicitar la lista o playlist, si la caché ha expirado, se descarga el archivo M3U desde `URL_ORIGEN`.
+    *   Se parsa el archivo buscando enlaces `acestream://` o `http` con IDs.
+    *   Se genera `channels.json` y una playlist M3U local (`ace_hls.m3u`).
+    *   Las URLs en la playlist apuntan a la API de AceHLS o directamente a AceXY según corresponda.
+
+3.  **Reproducción (`HLSManager`)**:
+    *   El usuario solicita un stream via `/api/hls/start/<ace_id>`.
+    *   `HLSManager` verifica si ya existe un proceso para ese ID.
+    *   Si no existe, construye el comando **FFmpeg**:
+        *   **Entrada**: URL HTTP de AceXY (`http://acexy:8080/ace/getstream?id=...`).
+        *   **Procesamiento**: Copia los streams (`-c copy`) y empaqueta en segmentos HLS (`.ts`).
+        *   **Salida**: Archivo `index.m3u8` en `data/hls/<ace_id>/`.
+    *   Se devuelve la URL del manifesto HLS al cliente.
+
+4.  **Mantenimiento**:
+    *   El usuario reproduce el HLS. `routes.py` sirve los archivos `.m3u8` y `.ts`.
+    *   Cada petición a un archivo HLS actualiza la marca de tiempo de "actividad".
+    *   Si un stream no tiene actividad por 60 segundos, el monitor lo detiene y elimina los archivos temporales.
+
+## Puntos Clave del Código
+
+*   **`src/app/routes.py`**:
+    *   `/health`: Endpoint crítico para monitoreo. Verifica disco, conexión a AceXY y procesos FFmpeg.
+    *   `/api/channels`: Devuelve JSON con canales. Adapta las URLs dependiendo si el cliente es local o remoto (`utils.get_acexy_url_for_client`).
+    *   `/api/hls/start/<id>`: Inicia la transcodificación. Espera (con reintentos) a que el archivo `.m3u8` exista antes de responder.
+
+*   **`src/app/services/hls_manager.py`**:
+    *   Gestiona el ciclo de vida de subprocessos FFmpeg.
+    *   Usa `subprocess.Popen` con `stdout=DEVNULL` para evitar llenar logs, pero escribe logs de FFmpeg en `data/hls/<id>/ffmpeg.log` via variable de entorno `FFREPORT`.
+    *   Argumentos FFmpeg clave: `-fflags +genpts+igndts` (para corregir timestamps erróneos de AceStream), `-hls_time 4`, `-hls_list_size 6` (ventanas HLS estándar).
+
+*   **`src/app/services/channel_manager.py`**:
+    *   Procesa M3U línea por línea.
+    *   Extrae metadatos como `tvg-logo` y `group-title`.
+    *   Guarda caché en `data/channels.json` para evitar descargas masivas a la fuente original.
+
+## Tecnologías y Librerías
+
+*   **Python (3.11)**: Lenguaje base.
+*   **Flask**: Framework web ligero.
+*   **Gunicorn**: Servidor WSGI de producción.
+*   **FFmpeg**: Navaja suiza para manipulación de video. Usado en modo "copy" para bajo uso de CPU (remuxing, no transcoding).
+*   **Docker**: Contenerización.
+*   **AceStream & AceXY**: Protocolos y servicios subyacentes.
+
+> **Nota**: Para todas las tecnologías mencionadas, se deben seguir siempre las **best practices** recomendadas para asegurar la calidad, seguridad y mantenibilidad del código.
+
+## Comandos Útiles
+
+*   **Ver logs**: `docker compose logs -f ace-hls`
+*   **Ver estado de contenedores**: `docker compose ps`
+*   **Reconstruir imagen**: `docker compose build --no-cache ace-hls`
+*   **Reiniciar servicio**: `docker compose restart ace-hls`

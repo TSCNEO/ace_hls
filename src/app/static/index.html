@@ -39,6 +39,7 @@
                 <button onclick="playManual()">Reproducir ID</button>
             </div>
             <div class="action-buttons">
+                <button onclick="openSettings()" class="theme-btn" title="Configuración">⚙️</button>
                 <button onclick="toggleTheme()" class="theme-btn" title="Cambiar Tema" id="theme-icon">🌓</button>
                 <button onclick="loadChannels()">Refrescar</button>
                 <a href="/playlist.m3u" target="_blank" class="download-link">M3U</a>
@@ -48,6 +49,26 @@
 
     <div id="channel-grid">
         <div class="loading" style="text-align:center;">Cargando canales...</div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeSettings()">&times;</span>
+            <h2>Gestión de Fuentes</h2>
+            <div class="source-input-group">
+                <input type="text" id="newSourceUrl" placeholder="URL lista M3U (ej: https://...)"
+                    style="flex-grow:1; padding:8px;">
+                <button onclick="addSource()">Añadir</button>
+            </div>
+            <ul id="sources-list" class="source-list">
+                <!-- Sources wil be here -->
+            </ul>
+            <div class="modal-actions" style="margin-top: 20px; text-align: right;">
+                <button onclick="refreshChannelsFromServer()" style="background: var(--primary-color);">Actualizar
+                    Canales Ahora</button>
+            </div>
+        </div>
     </div>
 
     <!-- Modal with Vidstack -->

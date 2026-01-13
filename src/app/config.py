@@ -16,5 +16,6 @@ class Config:
 
     # Paths
     JSON_FILE = os.path.join(DATA_DIR, "channels.json")
+    SOURCES_FILE = os.path.join(DATA_DIR, "sources.json")
     M3U_FILE = os.path.join(DATA_DIR, "ace_hls.m3u")
     HLS_DIR = os.path.join(DATA_DIR, "hls")

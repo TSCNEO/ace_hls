@@ -278,4 +278,113 @@ if ('serviceWorker' in navigator) {
     });
 }
 
+// Settings Logic
+function openSettings() {
+    document.getElementById('settings-modal').style.display = 'flex';
+    loadSources();
+}
+
+function closeSettings() {
+    document.getElementById('settings-modal').style.display = 'none';
+}
+
+// Close settings on click outside
+document.getElementById('settings-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'settings-modal') closeSettings();
+});
+
+async function loadSources() {
+    const list = document.getElementById('sources-list');
+    list.innerHTML = '<li>Cargando...</li>';
+    try {
+        const res = await fetch('/api/sources');
+        const sources = await res.json();
+
+        list.innerHTML = '';
+        if (sources.length === 0) {
+            list.innerHTML = '<li style="justify-content:center;">No hay fuentes configuradas</li>';
+            return;
+        }
+
+        sources.forEach(src => {
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <span class="source-url" title="${src.url}">${src.url}</span>
+                <button class="delete-btn" onclick="deleteSource('${src.url}')">🗑️</button>
+            `;
+            list.appendChild(li);
+        });
+    } catch (e) {
+        list.innerHTML = '<li>Error cargando fuentes</li>';
+        console.error(e);
+    }
+}
+
+async function addSource() {
+    const input = document.getElementById('newSourceUrl');
+    const url = input.value.trim();
+    if (!url) return;
+
+    try {
+        const res = await fetch('/api/sources', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+            input.value = ''; // Clear
+            loadSources(); // Refresh list
+        } else {
+            alert("Error: " + (data.error || 'Desconocido'));
+        }
+    } catch (e) {
+        alert("Error de conexión");
+    }
+}
+
+async function deleteSource(url) {
+    if (!confirm('¿Seguro que quieres eliminar esta fuente?')) return;
+
+    try {
+        const res = await fetch('/api/sources', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url })
+        });
+
+        if (res.ok) {
+            loadSources();
+        } else {
+            alert("Error al eliminar");
+        }
+    } catch (e) {
+        alert("Error de conexión");
+    }
+}
+
+async function refreshChannelsFromServer() {
+    const btn = document.querySelector('#settings-modal .modal-actions button');
+    const originalText = btn.textContent;
+    btn.textContent = "Actualizando...";
+    btn.disabled = true;
+
+    try {
+        const res = await fetch('/api/sources/refresh', { method: 'POST' });
+        if (res.ok) {
+            alert("Canales actualizados correctamente");
+            loadChannels(); // Refresh main grid
+            closeSettings();
+        } else {
+            alert("Error actualizando canales");
+        }
+    } catch (e) {
+        alert("Error de conexión");
+    } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+    }
+}
+
 document.addEventListener('DOMContentLoaded', loadChannels);

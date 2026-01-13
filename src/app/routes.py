@@ -109,6 +109,43 @@ def get_channels():
         return jsonify(data)
     return jsonify([]), 500
 
+from app.services.source_manager import source_manager
+
+@main_bp.route('/api/sources', methods=['GET'])
+def get_sources():
+    return jsonify(source_manager.get_sources())
+
+@main_bp.route('/api/sources', methods=['POST'])
+def add_source():
+    data = request.get_json()
+    url = data.get('url')
+    if not url:
+        return jsonify({"error": "Missing URL"}), 400
+    
+    if source_manager.add_source(url):
+        return jsonify({"status": "added", "url": url})
+    return jsonify({"error": "Duplicate source"}), 409
+
+@main_bp.route('/api/sources', methods=['DELETE'])
+def delete_source():
+    data = request.get_json()
+    url = data.get('url')
+    if not url:
+        return jsonify({"error": "Missing URL"}), 400
+    
+    if source_manager.delete_source(url):
+        return jsonify({"status": "deleted", "url": url})
+    return jsonify({"error": "Source not found"}), 404
+
+@main_bp.route('/api/sources/refresh', methods=['POST'])
+def refresh_sources():
+    try:
+        channel_manager.update_channels()
+        return jsonify({"status": "ok", "message": "Channels refreshed"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @main_bp.route('/api/version')
 def get_version():
     try:
