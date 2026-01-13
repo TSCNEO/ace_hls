@@ -9,6 +9,8 @@
     <!-- PWA Support -->
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#121212">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
 
     <!-- Vidstack Styles & Script -->
@@ -62,7 +64,7 @@
                     canal.</div>
             </div>
 
-            <media-player id="player" title="AceHLS Stream" aspect-ratio="16/9" loop>
+            <media-player id="player" title="AceHLS Stream" aspect-ratio="16/9" loop playsinline>
                 <media-provider></media-provider>
                 <media-video-layout></media-video-layout>
             </media-player>

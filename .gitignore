@@ -1,2 +1,65 @@
 .env
 *.sh
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+
+# Git files
+.git
+.gitignore
+.github
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Documentation
+*.md
+docs/
+
+# Tests
+tests/
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+*.log
+
+# Node.js
+**/node_modules/
+**/yarn.lock
+**/package-lock.json
+
+# React build output (will be generated during Docker build)
+app/static/panel/
+
+# Docker
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db

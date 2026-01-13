@@ -164,8 +164,17 @@ async function playChannel(channel) {
             currentStreamUrl = data.url; // Save for native player
             player.src = { src: data.url, type: 'application/x-mpegurl' };
             player.muted = true;
+            player.playsInline = true;
             player.autoplay = true;
-            player.play();
+
+            const playPromise = player.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.log("Autoplay prevented:", error);
+                    // Show a "Play" overlay or similar if we were fancy, 
+                    // but for now the user can just click the controls.
+                });
+            }
 
             // Start Timeout Timer (20 seconds)
             if (loadTimeout) clearTimeout(loadTimeout);
