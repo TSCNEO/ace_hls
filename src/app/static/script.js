@@ -115,7 +115,7 @@ function filterChannels() {
         const isFav = favorites.has(ch.id);
         const starBtn = `<button class="star-btn ${isFav ? 'active' : ''}" onclick="toggleFavorite(event, '${ch.id}')">${isFav ? '★' : '☆'}</button>`;
 
-        const FALLBACK_LOGO = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iIzU1NSIgZD0iTTIxIDNIM2MtMS4xIDAtMiAuOS0yIDJ2MTJjMCAxLjEuOSAyIDIgMmg1bDIgM2g0bDItM2g1YzEuMSAwIDItLjkgMi0yVjVjMC0xLjEtLjktMi0yLTJ6bTAgMTRIM3YtOWgxOHY5em0tNS02bC03IDRWM2w3IDR6Ii8+PCN2c2c+';
+        const FALLBACK_LOGO = '/placeholder.svg';
 
         const logo = ch.logo ?
             `<img src="${ch.logo}" class="channel-logo" loading="lazy" decoding="async" onerror="handleImageError(this, '${ch.id}')">`
@@ -563,12 +563,12 @@ async function pollStats(aceId) {
 document.addEventListener('DOMContentLoaded', loadChannels);
 
 function handleImageError(img, id) {
-    const FALLBACK_LOGO = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iIzU1NSIgZD0iTTIxIDNIM2MtMS4xIDAtMiAuOS0yIDJ2MTJjMCAxLjEuOSAyIDIgMmg1bDIgM2g0bDItM2g1YzEuMSAwIDItLjkgMi0yVjVjMC0xLjEtLjktMi0yLTJ6bTAgMTRIM1Y1aDE4djEyem0tNS02bC03IDRWM2zNyA0eiIvPjwvc3ZnPg==';
-    
+    const FALLBACK_LOGO = '/placeholder.svg';
+
     // Prevent infinite loop
-    img.onerror = null; 
+    img.onerror = null;
     img.src = FALLBACK_LOGO;
-    
+
     // Update Model to avoid retry on next render
     const ch = allChannels.find(c => c.id === id);
     if (ch) {
