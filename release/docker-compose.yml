@@ -1,20 +1,24 @@
 services:
-  ace-hls:
+  ace_hls:
     image: tscneo/ace-hls-viewer:latest
     container_name: ace_hls_viewer
     restart: unless-stopped
     ports:
-      - "8089:5000"
+      - "${ACE_HLS_PORT}:5000"
     volumes:
       - ace_hls_data:/app/data
-    environment:
-      - ACEXY_IP=${ACEXY_IP:-127.0.0.1} # IP of AceXY (or 'acexy' if in same network)
-      - ACEXY_PORT=${ACEXY_PORT:-8090} # Port of AceXY
-      - CACHE_DURATION=300
-      - URL_ORIGEN=https://ipfs.io/ipns/k2k4r8oqlcjxsritt5mczkcn4mmvcmymbqw7113fz2flkrerfwfps004/data/listas/lista_iptv.m3u
     networks:
       - ace_hls_stream
-  #Recomendado aparte, en PC con VPN
+    #Uncomment if you have a GPU with VAAPI support
+    # devices:
+    #   - /dev/dri:/dev/dri
+    environment:
+      - ACEXY_IP=${ACEXY_IP}
+      - ACEXY_PORT=${ACEXY_PORT}
+      - CACHE_DURATION=${CACHE_DURATION}
+      - URL_ORIGEN=${URL_ORIGEN}
+      - ENABLE_TRANSCODE=${ENABLE_TRANSCODE:-false}
+
   acestream:
     image: martinbjeldbak/acestream-http-proxy:latest
     container_name: acestream
@@ -27,17 +31,17 @@ services:
     container_name: acexy
     restart: unless-stopped
     ports:
-      - "8090:8090" # Host 8090 -> Container 8090 Para que funcione el m3u. Debe ser igual a ACEXY_LISTEN_ADDR:
+      - "${ACEXY_PORT}:${ACEXY_PORT}"
     environment:
-      ACEXY_LISTEN_ADDR: ":8090" # Listen on internal port 8090
-      ACEXY_SCHEME: "http"
-      ACEXY_HOST: "acestream"
-      ACEXY_PORT: "6878"
-      ACEXY_M3U8_STREAM_TIMEOUT: "60s"
-      ACEXY_M3U8: "false"
-      ACEXY_EMPTY_TIMEOUT: "60s"
-      ACEXY_BUFFER_SIZE: "4MB"
-      ACEXY_NO_RESPONSE_TIMEOUT: "10s"
+      ACEXY_LISTEN_ADDR: ":${ACEXY_PORT}"
+      ACEXY_SCHEME: "${ACEXY_SCHEME}"
+      ACEXY_HOST: "${ACEXY_HOST}"
+      ACEXY_PORT: "${ACESTREAM_PORT}"
+      ACEXY_M3U8_STREAM_TIMEOUT: "${ACEXY_M3U8_STREAM_TIMEOUT}"
+      ACEXY_M3U8: "${ACEXY_M3U8}"
+      ACEXY_EMPTY_TIMEOUT: "${ACEXY_EMPTY_TIMEOUT}"
+      ACEXY_BUFFER_SIZE: "${ACEXY_BUFFER_SIZE}"
+      ACEXY_NO_RESPONSE_TIMEOUT: "${ACEXY_NO_RESPONSE_TIMEOUT}"
     depends_on:
       - acestream
     networks:
