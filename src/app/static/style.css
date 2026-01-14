@@ -169,9 +169,12 @@ button:hover {
     font-weight: 500;
     overflow: hidden;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
+    -webkit-line-clamp: 3;
+    /* Allow more lines */
+    line-clamp: 3;
     -webkit-box-orient: vertical;
+    word-break: break-word;
+    /* Ensure long IDs break if needed */
 }
 
 /* Star Button */
@@ -229,6 +232,18 @@ button:hover {
     font-size: 2rem;
     padding: 0;
     cursor: pointer;
+}
+
+#player-title {
+    word-break: break-word;
+    /* Wrap long words/IDs */
+    white-space: normal;
+    /* Ensure wrapping */
+    line-height: 1.3;
+    padding: 0 10px;
+    /* Side padding */
+    font-size: 1.2rem;
+    /* slightly smaller for better fit */
 }
 
 /* Utility Links */

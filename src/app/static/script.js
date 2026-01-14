@@ -178,11 +178,17 @@ function filterChannels() {
             }
         }
 
+        // Dynamic Font Size for long names
+        const nameLen = ch.name.length;
+        let nameStyle = "";
+        if (nameLen > 40) nameStyle = "font-size: 0.75rem;";
+        else if (nameLen > 25) nameStyle = "font-size: 0.8rem;";
+
         card.innerHTML = `
             ${starBtn}
             ${statusDot}
             ${logo}
-            <div class="channel-name">${ch.name} <span style="font-size:0.7em; color:#888;">[${ch.id.slice(-4)}]</span></div>
+            <div class="channel-name" style="${nameStyle}">${ch.name} <span style="font-size:0.8em; color:#888;">[${ch.id.slice(-4)}]</span></div>
             ${techBadge}
             ${lastSeenText ? `<div class="last-seen">${lastSeenText}</div>` : ''}
         `;
