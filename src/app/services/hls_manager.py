@@ -232,12 +232,12 @@ class HLSManager:
                 if ace_id in self.validated_sessions: self.validated_sessions.remove(ace_id)
                 
                 stream_dir = os.path.join(Config.HLS_DIR, ace_id)
-                if os.path.exists(stream_dir):
+        if os.path.exists(stream_dir):
                     shutil.rmtree(stream_dir)
                     # logger.info(f"Stream stopped. Files kept in {stream_dir} for debugging.")
 
     def _analyze_stream(self, ace_id, stream_url):
-        """Runs ffprobe to extract resolution, fps, codecs"""
+        """Runs ffprobe on the INPUT stream to capture original quality."""
         time.sleep(15) # Wait for stream to stabilize/buffer
         
         with self.lock:

@@ -94,13 +94,6 @@
             <div class="player-controls-row"
                 style="display:flex; justify-content:center; gap:15px; margin-bottom:10px;">
                 <div id="player-tech-info" style="min-height:20px;"></div>
-                <select id="quality-selector" onchange="changeQuality(this.value)"
-                    style="display:none; padding:2px; border-radius:4px; background:#333; color:white; border:1px solid #555;">
-                    <option value="original">Original (Passthrough)</option>
-                    <option value="max_compat">Compatibilidad (Max)</option>
-                    <option value="720p">720p (Transcode)</option>
-                    <option value="480p">480p (Transcode)</option>
-                </select>
             </div>
 
             <div id="player-error"
@@ -126,6 +119,17 @@
                 </div>
 
                 <div><strong>Opciones de Reproducción:</strong></div>
+
+                <!-- Quality Selector -->
+                <div style="margin-bottom:10px;">
+                    <select id="quality-selector" onchange="changeQuality(this.value)"
+                        class="utility-btn utility-select">
+                        <option value="original">Original (Passthrough)</option>
+                        <option value="max_compat">Compatibilidad (Recode)</option>
+                        <option value="720p">720p (Transcode)</option>
+                        <option value="480p">480p (Transcode)</option>
+                    </select>
+                </div>
 
                 <!-- iOS Native Button -->
                 <button id="ios-btn" class="utility-btn btn-ios" onclick="playNativeIOS()" style="display:none;">

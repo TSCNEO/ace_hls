@@ -304,13 +304,36 @@ async function startPlayback(aceId, profile) {
 function changeQuality(profile) {
     if (!currentAceId) return;
     console.log("Changing quality to:", profile);
-    startPlayback(currentAceId, profile);
+
+    // Feedback
+    const sel = document.getElementById('quality-selector');
+    const oldText = sel.options[sel.selectedIndex].text;
+    sel.options[sel.selectedIndex].text = "Cambiando... ⏳";
+    sel.disabled = true;
+
+    startPlayback(currentAceId, profile).then(() => {
+        sel.disabled = false;
+        sel.options[sel.selectedIndex].text = oldText; // Restore text? 
+        // Actually better to just reset the text to clean state or it might stick if promise fails
+        // But startPlayback doesn't return much. 
+        // We'll rely on reload. The selector value is already set.
+        // Let's just restore the text immediately after call returns (which is usually fast ack)
+        // Wait, startPlayback awaits fetch.
+    }).finally(() => {
+        sel.disabled = false;
+        // Refresh text just in case (hacky but works)
+        if (profile === 'original') sel.options[0].text = "Original (Passthrough)";
+        if (profile === 'max_compat') sel.options[1].text = "Compatibilidad (Recode)";
+        if (profile === '720p') sel.options[2].text = "720p (Transcode)";
+        if (profile === '480p') sel.options[3].text = "480p (Transcode)";
+    });
 }
 
 function playNativeIOS() {
     if (!currentStreamUrl) return alert("Espera a que cargue el stream...");
     const fullUrl = window.location.origin + currentStreamUrl;
-    window.location.href = fullUrl;
+    // Open in new tab to trigger native player or download without blocking UI
+    window.open(fullUrl, '_blank');
 }
 
 function closePlayer() {
