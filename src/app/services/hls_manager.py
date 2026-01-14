@@ -168,6 +168,10 @@ class HLSManager:
                         cmd.extend(["-vf", "scale_vaapi=w=-2:h=720:format=nv12", "-c:v", "h264_vaapi", "-b:v", "2500k"])
                     elif profile == '480p':
                         cmd.extend(["-vf", "scale_vaapi=w=-2:h=480:format=nv12", "-c:v", "h264_vaapi", "-b:v", "1000k"])
+                    elif profile == 'max_compat':
+                        # Max Compatibility: Same Resolution but Force Re-encode to H.264
+                        # Just format conversion to NV12 for VAAPI is enough to trigger encode
+                        cmd.extend(["-vf", "scale_vaapi=format=nv12", "-c:v", "h264_vaapi", "-b:v", "5000k", "-g", "50"])
                     
                     cmd.extend(["-c:a", "aac", "-b:a", "128k"]) # Encode audio too just in case
                 else:
@@ -177,6 +181,9 @@ class HLSManager:
                         cmd.extend(["-vf", "scale=-2:720", "-c:v", "libx264", "-preset", "veryfast", "-b:v", "2500k"])
                     elif profile == '480p':
                         cmd.extend(["-vf", "scale=-2:480", "-c:v", "libx264", "-preset", "veryfast", "-b:v", "1000k"])
+                    elif profile == 'max_compat':
+                        # CPU: Re-encode with libx264, no scale
+                        cmd.extend(["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-g", "50"])
                     
                     cmd.extend(["-c:a", "aac", "-b:a", "128k"])
 

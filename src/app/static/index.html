@@ -48,6 +48,8 @@
                         <a href="#" onclick="downloadM3U('direct')">Direct AceStream</a>
                         <div class="divider"></div>
                         <a href="#" onclick="downloadM3U('original')">HLS (Original)</a>
+                        <a href="#" onclick="downloadM3U('max_compat')" class="transcode-opt"
+                            title="Re-encode H264 (Compatible)">HLS (Compatibilidad)</a>
                         <a href="#" onclick="downloadM3U('720p')" class="transcode-opt">HLS (720p)</a>
                         <a href="#" onclick="downloadM3U('480p')" class="transcode-opt">HLS (480p)</a>
                     </div>
@@ -95,6 +97,7 @@
                 <select id="quality-selector" onchange="changeQuality(this.value)"
                     style="display:none; padding:2px; border-radius:4px; background:#333; color:white; border:1px solid #555;">
                     <option value="original">Original (Passthrough)</option>
+                    <option value="max_compat">Compatibilidad (Max)</option>
                     <option value="720p">720p (Transcode)</option>
                     <option value="480p">480p (Transcode)</option>
                 </select>

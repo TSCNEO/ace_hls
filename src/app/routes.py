@@ -182,7 +182,7 @@ def submit_feedback():
 @main_bp.route('/api/hls/start/<ace_id>')
 def start_hls(ace_id):
     profile = request.args.get('profile', 'original')
-    if Config.ENABLE_TRANSCODE and profile not in ['original', '720p', '480p']:
+    if Config.ENABLE_TRANSCODE and profile not in ['original', '720p', '480p', 'max_compat']:
         profile = 'original'
     
     # If transcode disabled, force original
@@ -233,7 +233,7 @@ def get_playlist():
     
     # Only reset 720p/480p if transcoding is disabled. 
     # 'direct' (AceStream links) and 'original' (Copy) are always allowed.
-    if not Config.ENABLE_TRANSCODE and profile in ['720p', '480p']:
+    if not Config.ENABLE_TRANSCODE and profile in ['720p', '480p', 'max_compat']:
         profile = None
 
     # Force update if empty
@@ -248,9 +248,7 @@ def get_playlist():
             channels = json.load(f)
             
         for ch in channels:
-            # Append ID suffix for uniqueness and UI matching
-            display_name = f"{ch['name']} [{ch['id'][-4:]}]"
-            m3u_content.append(f'#EXTINF:-1 tvg-id="{ch["id"]}" tvg-logo="{ch.get("logo", "")}" group-title="{ch.get("group", "")}",{display_name}')
+            m3u_content.append(f'#EXTINF:-1 tvg-id="{ch["id"]}" tvg-logo="{ch.get("logo", "")}" group-title="{ch.get("group", "")}",{ch["name"]}')
             
             # Helper to generate link
             def gen_link(p):
@@ -274,7 +272,7 @@ def get_playlist():
 
 @main_bp.route('/api/playlist/all.m3u')
 def get_playlist_all():
-    # Returns playlist with ALL variants (Original, 720p, 480p)
+    # Returns playlist with ALL variants (Original, 720p, 480p, Compat)
     if not Config.ENABLE_TRANSCODE: 
         return get_playlist()
 
@@ -300,6 +298,10 @@ def get_playlist_all():
             # Original
             m3u_content.append(f'#EXTINF:-1 tvg-id="{cid}" tvg-logo="{logo}" group-title="{group}",{display_name}')
             m3u_content.append(f"http://{host}/stream/{cid}.m3u8")
+
+            # Compat (Recode)
+            m3u_content.append(f'#EXTINF:-1 tvg-id="{cid}" tvg-logo="{logo}" group-title="{group}",{display_name} [Compat]')
+            m3u_content.append(f"http://{host}/stream/{cid}.m3u8?profile=max_compat")
             
             # 720p
             m3u_content.append(f'#EXTINF:-1 tvg-id="{cid}" tvg-logo="{logo}" group-title="{group}",{display_name} [720p]')
@@ -321,7 +323,7 @@ def get_playlist_all():
 def auto_start_manifest(ace_id):
     # Wrapper to auto-start stream and redirect to real HLS
     profile = request.args.get('profile', 'original')
-    if Config.ENABLE_TRANSCODE and profile not in ['original', '720p', '480p']: profile = 'original'
+    if Config.ENABLE_TRANSCODE and profile not in ['original', '720p', '480p', 'max_compat']: profile = 'original'
     if not Config.ENABLE_TRANSCODE: profile = 'original'
 
     success, effective_id = hls_manager.start_stream(ace_id, profile)
