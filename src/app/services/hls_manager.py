@@ -238,6 +238,27 @@ class HLSManager:
 
     def _analyze_stream(self, ace_id, stream_url):
         """Runs ffprobe on the INPUT stream to capture original quality."""
+        
+        # Check cache first to avoid redundant probes/timeouts
+        # 1. Check exact ID
+        cached = stats_manager.get_stats(ace_id)
+        if not cached or not cached.get('tech_info'):
+            # 2. Check base ID (if variant)
+            # AceStream IDs are 40 chars hex.
+            if len(ace_id) > 40:
+                base_id = ace_id[:40] 
+                cached = stats_manager.get_stats(base_id)
+        
+        if cached and cached.get('tech_info'):
+            logger.info(f"Skipping probe for {ace_id}, using cached tech info.")
+            # Ensure the current ID has the stats too (if we found it on base_id)
+            if ace_id != cached.get('id', ''): # effectively just update
+                 stats_manager.update_channel_success(ace_id, cached['tech_info'])
+            
+            with self.lock:
+                self.validated_sessions.add(ace_id)
+            return
+
         time.sleep(15) # Wait for stream to stabilize/buffer
         
         with self.lock:

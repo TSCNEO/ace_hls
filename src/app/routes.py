@@ -191,9 +191,9 @@ def start_hls(ace_id):
 
     success, effective_id = hls_manager.start_stream(ace_id, profile)
     if success:
-        # Wait for file creation (max 30s)
+        # Wait for file creation (max 45s)
         manifest = os.path.join(Config.HLS_DIR, effective_id, 'index.m3u8')
-        for _ in range(60):
+        for _ in range(90):
             if os.path.exists(manifest):
                 return jsonify({"status": "ok", "url": f"/hls/{effective_id}/index.m3u8"})
             time.sleep(0.5)
