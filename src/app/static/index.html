@@ -120,8 +120,9 @@
 
                 <div><strong>Opciones de Reproducción:</strong></div>
 
-                <!-- Quality Selector -->
-                <div style="margin-bottom:10px;">
+                <!-- Options Row -->
+                <div class="utility-options-row">
+                    <!-- Quality Selector -->
                     <select id="quality-selector" onchange="changeQuality(this.value)"
                         class="utility-btn utility-select">
                         <option value="original">Original (Passthrough)</option>
@@ -129,17 +130,17 @@
                         <option value="720p">720p (Transcode)</option>
                         <option value="480p">480p (Transcode)</option>
                     </select>
+
+                    <!-- iOS Native Button -->
+                    <button id="ios-btn" class="utility-btn btn-ios" onclick="playNativeIOS()" style="display:none;">
+                        Usar Reproductor Nativo
+                    </button>
+
+                    <!-- VLC Copy Button -->
+                    <a id="vlc-link" href="#" onclick="copyToClipboard(event, this)" class="utility-btn btn-vlc">
+                        🔗 Copiar Enlace VLC (Directo)
+                    </a>
                 </div>
-
-                <!-- iOS Native Button -->
-                <button id="ios-btn" class="utility-btn btn-ios" onclick="playNativeIOS()" style="display:none;">
-                    Usar Reproductor Nativo
-                </button>
-
-                <!-- VLC Copy Button -->
-                <a id="vlc-link" href="#" onclick="copyToClipboard(event, this)" class="utility-btn btn-vlc">
-                    🔗 Copiar Enlace VLC (Directo)
-                </a>
             </div>
         </div>
     </div>

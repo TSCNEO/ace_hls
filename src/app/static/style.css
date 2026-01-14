@@ -291,7 +291,7 @@ button:hover {
     background: #444;
     color: white;
     border: 1px solid #666;
-    width: 100%;
+    /* width: 100%; -- handled by flex */
     text-align-last: center;
     appearance: none;
     /* Make it look more like a button */
@@ -328,6 +328,23 @@ button:hover {
     max-height: 90vh;
     display: flex;
     flex-direction: column;
+}
+
+.utility-options-row {
+    display: flex;
+    flex-wrap: wrap;
+    /* Wrap on small screens */
+    gap: 10px;
+    justify-content: center;
+    margin-top: 10px;
+}
+
+/* Ensure buttons grow to fill space/line */
+.utility-options-row>.utility-btn {
+    flex: 1 1 auto;
+    min-width: 200px;
+    /* Force wrap if less than 200px available */
+    max-width: 100%;
 }
 
 /* Settings UI */
