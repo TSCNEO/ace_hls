@@ -8,6 +8,7 @@ from app.config import Config
 from app.services.hls_manager import hls_manager
 from app.services.channel_manager import channel_manager
 from app.services.stats_manager import stats_manager
+from app import utils
 
 main_bp = Blueprint('main', __name__)
 
@@ -190,9 +191,9 @@ def start_hls(ace_id):
 
     success, effective_id = hls_manager.start_stream(ace_id, profile)
     if success:
-        # Wait for file creation (max 15s)
+        # Wait for file creation (max 30s)
         manifest = os.path.join(Config.HLS_DIR, effective_id, 'index.m3u8')
-        for _ in range(30):
+        for _ in range(60):
             if os.path.exists(manifest):
                 return jsonify({"status": "ok", "url": f"/hls/{effective_id}/index.m3u8"})
             time.sleep(0.5)
@@ -229,7 +230,11 @@ def version():
 @main_bp.route('/playlist.m3u')
 def get_playlist():
     profile = request.args.get('profile', None) # None = Original
-    if not Config.ENABLE_TRANSCODE: profile = None
+    
+    # Only reset 720p/480p if transcoding is disabled. 
+    # 'direct' (AceStream links) and 'original' (Copy) are always allowed.
+    if not Config.ENABLE_TRANSCODE and profile in ['720p', '480p']:
+        profile = None
 
     # Force update if empty
     if not os.path.exists(Config.JSON_FILE):
@@ -248,8 +253,9 @@ def get_playlist():
             # Helper to generate link
             def gen_link(p):
                 if p == 'direct':
-                    # Direct AceStream Link
-                    return f"acestream://{ch['id']}"
+                    # Direct AceStream Link (HTTP to AceXY)
+                    # Use utils to determine correct public IP/Port based on request host
+                    return utils.get_acexy_url_for_client(host, ch['id'])
                     
                 # HLS variants
                 suffix = f"?profile={p}" if p and p != 'original' else ""
@@ -260,7 +266,9 @@ def get_playlist():
     except Exception as e:
         return str(e), 500
 
-    return Response("\n".join(m3u_content), mimetype='audio/x-mpegurl')
+    response = Response("\n".join(m3u_content), mimetype='audio/x-mpegurl')
+    response.headers["Content-Disposition"] = "attachment; filename=playlist.m3u"
+    return response
 
 @main_bp.route('/api/playlist/all.m3u')
 def get_playlist_all():
@@ -299,7 +307,9 @@ def get_playlist_all():
     except Exception as e:
         return str(e), 500
 
-    return Response("\n".join(m3u_content), mimetype='audio/x-mpegurl')
+    response = Response("\n".join(m3u_content), mimetype='audio/x-mpegurl')
+    response.headers["Content-Disposition"] = "attachment; filename=playlist_all.m3u"
+    return response
 
 
 @main_bp.route('/stream/<ace_id>.m3u8')
@@ -311,10 +321,10 @@ def auto_start_manifest(ace_id):
 
     success, effective_id = hls_manager.start_stream(ace_id, profile)
     if success:
-        # Wait up to 10s for manifest
-        manifest_path = os.path.join(Config.HLS_DIR, effective_id, 'index.m3u8')
-        for _ in range(20):
-            if os.path.exists(manifest_path):
+        # Wait for file creation (max 30s - AceStream can be slow)
+        manifest = os.path.join(Config.HLS_DIR, effective_id, 'index.m3u8')
+        for _ in range(60):
+            if os.path.exists(manifest):
                 return current_app.redirect(f"/hls/{effective_id}/index.m3u8")
             time.sleep(0.5)
         return "Stream timeout", 504

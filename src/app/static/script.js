@@ -182,13 +182,14 @@ function filterChannels() {
             ${starBtn}
             ${statusDot}
             ${logo}
-            <div class="channel-name">${ch.name}</div>
+            <div class="channel-name">${ch.name} <span style="font-size:0.7em; color:#888;">[${ch.id.slice(-4)}]</span></div>
             ${techBadge}
             ${lastSeenText ? `<div class="last-seen">${lastSeenText}</div>` : ''}
         `;
         grid.appendChild(card);
     });
 }
+
 
 function isIOS() {
     return [
@@ -380,8 +381,20 @@ function toggleM3UMenu() {
 }
 
 function downloadM3U(profile) {
+    // profile: 'direct', 'original', '720p', '480p'
     const url = `/api/playlist.m3u?profile=${profile}`;
-    window.open(url, '_blank');
+
+    // Create hidden anchor to force separate download
+    // const a = document.createElement('a');
+    // a.href = url;
+    // a.download = '';
+    // document.body.appendChild(a);
+    // a.click();
+    // document.body.removeChild(a);
+
+    // Fallback to simple location rewrite, it's safer for downloads with Content-Disposition
+    window.location.href = url;
+
     toggleM3UMenu(); // close
 }
 
