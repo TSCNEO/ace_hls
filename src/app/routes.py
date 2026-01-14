@@ -248,7 +248,9 @@ def get_playlist():
             channels = json.load(f)
             
         for ch in channels:
-            m3u_content.append(f'#EXTINF:-1 tvg-id="{ch["id"]}" tvg-logo="{ch.get("logo", "")}" group-title="{ch.get("group", "")}",{ch["name"]}')
+            # Append ID suffix for uniqueness and UI matching
+            display_name = f"{ch['name']} [{ch['id'][-4:]}]"
+            m3u_content.append(f'#EXTINF:-1 tvg-id="{ch["id"]}" tvg-logo="{ch.get("logo", "")}" group-title="{ch.get("group", "")}",{display_name}')
             
             # Helper to generate link
             def gen_link(p):
@@ -292,16 +294,19 @@ def get_playlist_all():
             name = ch["name"]
             cid = ch["id"]
             
+            # Append ID suffix for uniqueness
+            display_name = f"{name} [{cid[-4:]}]"
+            
             # Original
-            m3u_content.append(f'#EXTINF:-1 tvg-id="{cid}" tvg-logo="{logo}" group-title="{group}",{name}')
+            m3u_content.append(f'#EXTINF:-1 tvg-id="{cid}" tvg-logo="{logo}" group-title="{group}",{display_name}')
             m3u_content.append(f"http://{host}/stream/{cid}.m3u8")
             
             # 720p
-            m3u_content.append(f'#EXTINF:-1 tvg-id="{cid}" tvg-logo="{logo}" group-title="{group}",{name} [720p]')
+            m3u_content.append(f'#EXTINF:-1 tvg-id="{cid}" tvg-logo="{logo}" group-title="{group}",{display_name} [720p]')
             m3u_content.append(f"http://{host}/stream/{cid}.m3u8?profile=720p")
 
             # 480p
-            m3u_content.append(f'#EXTINF:-1 tvg-id="{cid}" tvg-logo="{logo}" group-title="{group}",{name} [480p]')
+            m3u_content.append(f'#EXTINF:-1 tvg-id="{cid}" tvg-logo="{logo}" group-title="{group}",{display_name} [480p]')
             m3u_content.append(f"http://{host}/stream/{cid}.m3u8?profile=480p")
 
     except Exception as e:
