@@ -248,7 +248,9 @@ def get_playlist():
             channels = json.load(f)
             
         for ch in channels:
-            m3u_content.append(f'#EXTINF:-1 tvg-id="{ch["id"]}" tvg-logo="{ch.get("logo", "")}" group-title="{ch.get("group", "")}",{ch["name"]}')
+            # Append ID suffix for uniqueness and UI matching
+            display_name = f"{ch['name']} [{ch['id'][-4:]}]"
+            m3u_content.append(f'#EXTINF:-1 tvg-id="{ch["id"]}" tvg-logo="{ch.get("logo", "")}" group-title="{ch.get("group", "")}",{display_name}')
             
             # Helper to generate link
             def gen_link(p):

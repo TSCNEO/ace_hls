@@ -211,7 +211,10 @@ async function playChannel(channel) {
     const errorDiv = document.getElementById('player-error');
     errorDiv.style.display = 'none'; // Reset error
 
-    document.getElementById('player-title').textContent = channel.name;
+    // Append ID to title for visibility
+    const displayTitle = `${channel.name} <span style="font-size:0.8em; color:#ddd;">[${channel.id.slice(-4)}]</span>`;
+    document.getElementById('player-title').innerHTML = displayTitle;
+
     document.getElementById('player-tech-info').innerHTML = '';
 
     // Reset Quality Selector to Original
