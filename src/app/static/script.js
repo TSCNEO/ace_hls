@@ -4,6 +4,9 @@ let currentStreamUrl = "";
 let currentAceId = null;
 const player = document.querySelector('media-player');
 
+// Transcoding Global State
+let isTranscodingEnabled = false;
+
 // Favorites & Theme Logic
 let favorites = new Set(JSON.parse(localStorage.getItem('ace_favorites') || '[]'));
 
@@ -45,8 +48,21 @@ function toggleFavorite(e, id) {
 
 async function loadChannels() {
     try {
-        // Version
-        fetch('/api/version').then(r => r.json()).then(d => document.getElementById('version-display').textContent = d.version).catch(e => { });
+        // Version & Config Check
+        fetch('/api/version').then(r => r.json()).then(d => {
+            document.getElementById('version-display').textContent = d.version;
+            isTranscodingEnabled = d.transcoding;
+
+            // Show/Hide Elements based on feature flag
+            const transcodeOpts = document.querySelectorAll('.transcode-opt');
+            transcodeOpts.forEach(el => el.style.display = isTranscodingEnabled ? 'block' : 'none');
+
+            const qualitySel = document.getElementById('quality-selector');
+            if (qualitySel) {
+                qualitySel.style.display = isTranscodingEnabled ? 'block' : 'none';
+            }
+
+        }).catch(e => { });
 
         const grid = document.getElementById('channel-grid');
         grid.innerHTML = '<div style="text-align:center;">Actualizando canales...</div>';
@@ -160,8 +176,6 @@ function filterChannels() {
                     techBadge = `<div class="tech-badge">${res} ${codec}</div>`;
                 }
             }
-
-
         }
 
         card.innerHTML = `
@@ -191,14 +205,15 @@ async function playChannel(channel) {
     errorDiv.style.display = 'none'; // Reset error
 
     document.getElementById('player-title').textContent = channel.name;
-
-    // Reset Tech Info
     document.getElementById('player-tech-info').innerHTML = '';
+
+    // Reset Quality Selector to Original
+    const qualitySel = document.getElementById('quality-selector');
+    if (qualitySel) qualitySel.value = 'original';
 
     // Setup VLC Link
     const vlcLink = document.getElementById('vlc-link');
     if (vlcLink) {
-        // If channel.url is missing (manual entries), try to guess or use ID
         let vlcUrl = channel.url;
         vlcLink.setAttribute('data-url', vlcUrl); // Store for copy
         vlcLink.href = vlcUrl || '#';
@@ -208,7 +223,7 @@ async function playChannel(channel) {
     // Setup iOS Button
     const iosBtn = document.getElementById('ios-btn');
     if (isIOS() || true) {
-        iosBtn.style.display = 'inline-block';
+        if (iosBtn) iosBtn.style.display = 'inline-block';
     }
 
     // Capture ID for feedback
@@ -220,38 +235,31 @@ async function playChannel(channel) {
     if (likeBtn) likeBtn.classList.remove('active-like');
     if (dislikeBtn) dislikeBtn.classList.remove('active-dislike');
 
-    // Populate Tech Info in Player
-    const techDiv = document.getElementById('player-tech-info');
-    techDiv.innerHTML = '';
-    if (channel.stats && channel.stats.tech_info) {
-        const t = channel.stats.tech_info;
-        let res = '';
-        if (t.height) res = t.height >= 720 ? `${t.height}p` : 'SD';
-        if (t.fps && t.fps > 30) res += `${t.fps}`;
-
-        let codec = t.acodec ? t.acodec.toUpperCase() : '';
-        if (codec === 'AC3' || codec === 'EAC3') codec = '🔊 ' + codec;
-        else codec = '';
-
-        if (res || codec) {
-            techDiv.innerHTML = `<span class="tech-badge" style="font-size:0.9rem; padding:4px 8px;">${res} ${codec}</span>`;
-        }
-    }
-
     modal.style.display = 'flex';
 
     // Start Polling for Stats (Tech Info)
     if (statsInterval) clearInterval(statsInterval);
     statsInterval = setInterval(() => pollStats(channel.id), 5000);
 
+    // Initial Play
+    startPlayback(channel.id, 'original');
+}
+
+async function startPlayback(aceId, profile) {
+    const player = document.querySelector('media-player');
+    const errorDiv = document.getElementById('player-error');
+    if (errorDiv) errorDiv.style.display = 'none';
+
     try {
-        // Request stream start
-        const res = await fetch(`/api/hls/start/${channel.id}`);
+        const url = `/api/hls/start/${aceId}?profile=${profile}`;
+        console.log("Requesting stream:", url);
+
+        const res = await fetch(url);
         const data = await res.json();
 
         if (data.status === 'ok') {
-            console.log("Loading stream:", data.url);
-            currentStreamUrl = data.url; // Save for native player
+            console.log("Stream ready:", data.url);
+            currentStreamUrl = data.url;
             player.src = { src: data.url, type: 'application/x-mpegurl' };
             player.muted = true;
             player.playsInline = true;
@@ -259,44 +267,41 @@ async function playChannel(channel) {
 
             const playPromise = player.play();
             if (playPromise !== undefined) {
-                playPromise.catch(error => {
-                    console.log("Autoplay prevented:", error);
-                    // Show a "Play" overlay or similar if we were fancy, 
-                    // but for now the user can just click the controls.
-                });
+                playPromise.catch(e => console.log("Autoplay prevented"));
             }
 
-            // Start Timeout Timer (20 seconds)
+            // Timeout Logic (20 seconds)
             if (loadTimeout) clearTimeout(loadTimeout);
             loadTimeout = setTimeout(() => {
-                // Check if playing (currentTime is still near zero)
                 if (player.currentTime < 1) {
-                    console.warn("Stream timeout - No sources.");
-                    errorDiv.style.display = 'flex';
+                    console.warn("Stream timeout");
+                    if (errorDiv) errorDiv.style.display = 'flex';
                     player.pause();
                 }
             }, 20000);
 
-            // Clear timeout if it starts playing
             player.addEventListener('playing', () => {
                 if (loadTimeout) clearTimeout(loadTimeout);
-                errorDiv.style.display = 'none';
+                if (errorDiv) errorDiv.style.display = 'none';
             }, { once: true });
 
         } else {
             alert("Error servidor: " + data.status);
-            closePlayer();
         }
     } catch (e) {
         console.error(e);
-        alert("Error de conexión con el backend");
-        closePlayer();
+        alert("Error de conexión");
     }
+}
+
+function changeQuality(profile) {
+    if (!currentAceId) return;
+    console.log("Changing quality to:", profile);
+    startPlayback(currentAceId, profile);
 }
 
 function playNativeIOS() {
     if (!currentStreamUrl) return alert("Espera a que cargue el stream...");
-    // Force full URL location
     const fullUrl = window.location.origin + currentStreamUrl;
     window.location.href = fullUrl;
 }
@@ -324,14 +329,13 @@ function copyToClipboard(e, el) {
     e.preventDefault();
     const url = el.getAttribute('data-url') || el.href;
 
-    // Robust Copy
     const copyText = (text) => {
         if (navigator.clipboard && navigator.clipboard.writeText) {
             return navigator.clipboard.writeText(text);
         } else {
             const textArea = document.createElement("textarea");
             textArea.value = text;
-            textArea.style.position = "fixed"; // Avoid scrolling
+            textArea.style.position = "fixed";
             document.body.appendChild(textArea);
             textArea.focus();
             textArea.select();
@@ -358,7 +362,7 @@ function copyToClipboard(e, el) {
     });
 }
 
-// Register Service Worker for PWA
+// Register Service Worker
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js').then(registration => {
@@ -367,6 +371,31 @@ if ('serviceWorker' in navigator) {
             console.log('SW Registration failed:', error);
         });
     });
+}
+
+// M3U Dropdown
+function toggleM3UMenu() {
+    const menu = document.getElementById("m3u-menu");
+    if (menu) menu.classList.toggle("show");
+}
+
+function downloadM3U(profile) {
+    const url = `/api/playlist.m3u?profile=${profile}`;
+    window.open(url, '_blank');
+    toggleM3UMenu(); // close
+}
+
+// Close Dropdown on click outside
+window.onclick = function (event) {
+    if (!event.target.matches('.icon-btn') && !event.target.matches('.m3u-dropdown *')) {
+        var dropdowns = document.getElementsByClassName("dropdown-content");
+        for (var i = 0; i < dropdowns.length; i++) {
+            var openDropdown = dropdowns[i];
+            if (openDropdown.classList.contains('show')) {
+                openDropdown.classList.remove('show');
+            }
+        }
+    }
 }
 
 // Settings Logic
@@ -379,7 +408,6 @@ function closeSettings() {
     document.getElementById('settings-modal').style.display = 'none';
 }
 
-// Close settings on click outside
 document.getElementById('settings-modal').addEventListener('click', (e) => {
     if (e.target.id === 'settings-modal') closeSettings();
 });
@@ -480,24 +508,18 @@ async function refreshChannelsFromServer() {
     }
 }
 
-
-
 async function sendFeedback(vote) {
-    console.log("Feedback clicked:", vote, "for ID:", currentAceId);
-    if (!currentAceId) {
-        console.error("No active AceID for feedback");
-        return;
-    }
+    if (!currentAceId) return;
 
     // UI Feedback immediately
     const likeBtn = document.getElementById('btn-like');
     const dislikeBtn = document.getElementById('btn-dislike');
 
-    likeBtn.classList.remove('active-like');
-    dislikeBtn.classList.remove('active-dislike');
+    if (likeBtn) likeBtn.classList.remove('active-like');
+    if (dislikeBtn) dislikeBtn.classList.remove('active-dislike');
 
-    if (vote === 'like') likeBtn.classList.add('active-like');
-    if (vote === 'dislike') dislikeBtn.classList.add('active-dislike');
+    if (vote === 'like' && likeBtn) likeBtn.classList.add('active-like');
+    if (vote === 'dislike' && dislikeBtn) dislikeBtn.classList.add('active-dislike');
 
     try {
         await fetch('/api/stats/feedback', {
@@ -560,18 +582,14 @@ async function pollStats(aceId) {
     } catch (e) { console.error("Poll stats error", e); }
 }
 
-document.addEventListener('DOMContentLoaded', loadChannels);
-
 function handleImageError(img, id) {
     const FALLBACK_LOGO = '/placeholder.svg';
-
-    // Prevent infinite loop
     img.onerror = null;
     img.src = FALLBACK_LOGO;
-
-    // Update Model to avoid retry on next render
     const ch = allChannels.find(c => c.id === id);
     if (ch) {
         ch.logo = FALLBACK_LOGO;
     }
 }
+
+document.addEventListener('DOMContentLoaded', loadChannels);

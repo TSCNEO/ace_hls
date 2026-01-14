@@ -20,6 +20,13 @@ class HLSManager:
         self.validated_sessions = set() # {ace_id} to ensure we count success only once per run
         self.lock = threading.Lock()
         
+        # HW Acceleration Detection
+        self.hw_accel_type = self._detect_hw_accel()
+        if Config.ENABLE_TRANSCODE:
+            logger.info(f"Transcoding Enabled. HW Accel: {self.hw_accel_type if self.hw_accel_type else 'None (CPU)'}")
+        else:
+            logger.info("Transcoding Disabled.")
+        
         # Cleanup on startup
         if os.path.exists(Config.HLS_DIR):
             logger.info(f"Cleaning HLS directory: {Config.HLS_DIR}")
@@ -31,6 +38,15 @@ class HLSManager:
         # Start background monitor
         self.monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
         self.monitor_thread.start()
+
+    def _detect_hw_accel(self):
+        """Detects available HW acceleration (VAAPI/QSV)."""
+        # Simple check for /dev/dri
+        if os.path.exists('/dev/dri/renderD128'):
+            # Ideally we'd probe ffmpeg, but assumption for now:
+            # If device exists, we try VAAPI as it's most generic for Intel/AMD on Linux
+            return 'vaapi'
+        return None
 
     def _monitor_loop(self):
         """Checks for inactive streams every 10 seconds."""
@@ -72,85 +88,119 @@ class HLSManager:
 
     def update_activity(self, ace_id):
         with self.lock:
-            # Only update if we know about this stream (it's running)
+            # Check simple ID or Profile-ID (e.g., id_720p)
             if ace_id in self.processes:
                 self.activity[ace_id] = time.time()
 
-    def start_stream(self, ace_id):
+    def start_stream(self, ace_id, profile=None):
+        """
+        Starts the HLS stream. 
+        profile: None (Original), '720p', '480p'
+        """
+        # Unique ID for process map to allow multiple qualities of same stream?
+        # For simplicity and resource saving: One stream = One Process per ID.
+        # If user switches profile, we stop old one and start new one.
+        # BUT we need to know if current running process matches requested profile.
+        # We'll store profile in a separate map or encode in ID? 
+        # Simpler: If start_stream called with diff profile, force restart.
+        
+        # Note: ace_id coming from frontend might be "abcd" or "abcd_720p" if we do variant playlist logic?
+        # Let's keep ace_id clean and use internal tracking. 
+        # Ideally, output dir should be /data/hls/{ace_id}_{profile}/ to avoid conflict?
+        
+        effective_id = f"{ace_id}_{profile}" if profile else ace_id
+
         with self.lock:
             # Check if active
-            if ace_id in self.processes:
-                proc = self.processes[ace_id]
+            if effective_id in self.processes:
+                proc = self.processes[effective_id]
                 if proc.poll() is None:
-                    self.activity[ace_id] = time.time() # Refresh
-                    return True # Already running
+                    self.activity[effective_id] = time.time()
+                    return True, effective_id # Return effective ID for URL gen
                 else:
-                    del self.processes[ace_id]
-
+                    del self.processes[effective_id]
+            
             # Prepare directory
-            stream_dir = os.path.join(Config.HLS_DIR, ace_id)
+            stream_dir = os.path.join(Config.HLS_DIR, effective_id)
             if os.path.exists(stream_dir):
                 shutil.rmtree(stream_dir)
             
-            # Ensure parent exits
             if not os.path.exists(Config.HLS_DIR):
                 os.makedirs(Config.HLS_DIR)
-                
             os.makedirs(stream_dir)
 
             # --- UNIFIED CONNECTION LOGIC ---
             internal_host = get_acexy_host_for_server()
-            
             start_url = f"http://{internal_host}:{Config.ACEXY_PORT}/ace/getstream?id={ace_id}"
-            logger.info(f"Connecting to AceXY (Internal): {internal_host}:{Config.ACEXY_PORT}")
-
+            
             log_file = os.path.join(stream_dir, "ffmpeg.log")
             env = os.environ.copy()
-            env["FFREPORT"] = f"file={log_file}:level=32" # 32=INFO, 48=DEBUG
-
-            # Define output_file BEFORE using it in cmd
+            env["FFREPORT"] = f"file={log_file}:level=32"
             output_file = os.path.join(stream_dir, "index.m3u8")
 
-            # Added -fflags +genpts+igndts to tolerate bad timestamps
-            # Kept -bsf:v h264_mp4toannexb as it's required for TS
-            cmd = [
-                "ffmpeg",
-                "-fflags", "+genpts+igndts", 
-                "-i", start_url,
-                "-map", "0:v", "-map", "0:a", # Only map video and audio
-                "-sn", "-dn", # Drop subtitles and data
-                "-ignore_unknown",
-                "-c", "copy",
-                "-bsf:v", "h264_mp4toannexb", 
-                "-hls_time", "4", # Slightly smaller segments
+            # --- BUILD COMMAND ---
+            cmd = ["ffmpeg", "-fflags", "+genpts+igndts", "-i", start_url]
+            cmd.extend(["-map", "0:v", "-map", "0:a", "-sn", "-dn", "-ignore_unknown"])
+
+            # Transcoding Logic
+            if not Config.ENABLE_TRANSCODE or not profile or profile == 'original':
+                # Original / Passthrough
+                cmd.extend(["-c", "copy"])
+                cmd.extend(["-bsf:v", "h264_mp4toannexb"]) # Often needed for raw streams
+            else:
+                # Transcoding
+                if self.hw_accel_type == 'vaapi':
+                    # VAAPI Init
+                    cmd.insert(1, "-hwaccel")
+                    cmd.insert(2, "vaapi")
+                    cmd.insert(3, "-hwaccel_device")
+                    cmd.insert(4, "/dev/dri/renderD128")
+                    cmd.insert(5, "-hwaccel_output_format")
+                    cmd.insert(6, "vaapi")
+                    
+                    if profile == '720p':
+                        cmd.extend(["-vf", "scale_vaapi=w=-2:h=720:format=nv12", "-c:v", "h264_vaapi", "-b:v", "2500k"])
+                    elif profile == '480p':
+                        cmd.extend(["-vf", "scale_vaapi=w=-2:h=480:format=nv12", "-c:v", "h264_vaapi", "-b:v", "1000k"])
+                    
+                    cmd.extend(["-c:a", "aac", "-b:a", "128k"]) # Encode audio too just in case
+                else:
+                    # CPU Fallback
+                    logger.warning(f"No HW Accel detected. CPU transcoding for {profile}!")
+                    if profile == '720p':
+                        cmd.extend(["-vf", "scale=-2:720", "-c:v", "libx264", "-preset", "veryfast", "-b:v", "2500k"])
+                    elif profile == '480p':
+                        cmd.extend(["-vf", "scale=-2:480", "-c:v", "libx264", "-preset", "veryfast", "-b:v", "1000k"])
+                    
+                    cmd.extend(["-c:a", "aac", "-b:a", "128k"])
+
+            # Global HLS Flags
+            cmd.extend([
+                "-hls_time", "4",
                 "-hls_list_size", "6",
                 "-hls_flags", "delete_segments",
                 output_file
-            ]
+            ])
             
-            logger.info(f"Starting FFMPEG for {ace_id}: {' '.join(cmd)}")
+            logger.info(f"Starting FFMPEG for {effective_id} [Profile: {profile}]: {' '.join(cmd)}")
             
-            # Use shell=False, but pass env. No stdout redirection needed for log (FFREPORT handles it)
-            # We redirect stdout/stderr to DEVNULL to keep container logs clean, 
-            # unless we want to debug startup issues.
             proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
             
-            self.processes[ace_id] = proc
-            self.activity[ace_id] = time.time()
-            self.start_times[ace_id] = time.time()
-            if ace_id in self.validated_sessions:
-                self.validated_sessions.remove(ace_id)
+            self.processes[effective_id] = proc
+            self.activity[effective_id] = time.time()
+            self.start_times[effective_id] = time.time()
+            if effective_id in self.validated_sessions:
+                self.validated_sessions.remove(effective_id)
 
-            # Start Metadata Analysis (Async)
-            threading.Thread(target=self._analyze_stream, args=(ace_id, start_url), daemon=True).start()
+            threading.Thread(target=self._analyze_stream, args=(effective_id, start_url), daemon=True).start()
 
-            # Check if it died immediately
+            # Check dead-on-arrival
             time.sleep(1)
             if proc.poll() is not None:
-                logger.error(f"FFMPEG failed for {ace_id}. Check {log_file}")
-                return False
+                logger.error(f"FFMPEG failed for {effective_id}. Check {log_file}")
+                return False, effective_id
 
-            return True
+            return True, effective_id
 
     def stop_stream(self, ace_id):
         with self.lock:

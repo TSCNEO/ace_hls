@@ -178,70 +178,149 @@ def submit_feedback():
     return jsonify({"status": "ok", "vote": vote})
 
 
-@main_bp.route('/api/version')
-def get_version():
-    try:
-        version_path = os.path.join(current_app.root_path, 'version.txt')
-        with open(version_path, 'r') as f:
-            return jsonify({"version": f.read().strip()})
-    except Exception:
-        # Fallback to check if it's in the parent directory (in case of different cwd)
-        try:
-             with open('version.txt', 'r') as f:
-                return jsonify({"version": f.read().strip()})
-        except Exception:
-             return jsonify({"version": "dev"})
-
-@main_bp.route('/playlist.m3u')
-def get_playlist():
-    if not os.path.exists(Config.JSON_FILE):
-        channel_manager.update_channels()
-    
-    if os.path.exists(Config.JSON_FILE):
-        try:
-            with open(Config.JSON_FILE, 'r') as f:
-                channels = json.load(f)
-            
-            m3u_lines = ["#EXTM3U"]
-            
-            for ch in channels:
-                logo_attr = f' tvg-logo="{ch.get("logo", "")}"' if ch.get("logo") else ""
-                group_attr = f' group-title="{ch.get("group", "")}"' if ch.get("group") else ""
-                
-                info_line = f'#EXTINF:-1{logo_attr}{group_attr},{ch["name"]}'
-                
-                stream_url = get_acexy_url_for_client(request.host, ch["id"])
-                
-                m3u_lines.append(info_line)
-                m3u_lines.append(stream_url)
-                
-            return Response("\n".join(m3u_lines), mimetype='audio/x-mpegurl')
-        except Exception as e:
-            current_app.logger.error(f"Error generating dynamic playlist: {e}")
-            return "Error generating playlist", 500
-
-    return "No channels available", 404
-
 @main_bp.route('/api/hls/start/<ace_id>')
 def start_hls(ace_id):
-    success = hls_manager.start_stream(ace_id)
+    profile = request.args.get('profile', 'original')
+    if Config.ENABLE_TRANSCODE and profile not in ['original', '720p', '480p']:
+        profile = 'original'
+    
+    # If transcode disabled, force original
+    if not Config.ENABLE_TRANSCODE:
+        profile = 'original'
+
+    success, effective_id = hls_manager.start_stream(ace_id, profile)
     if success:
-        m3u8_path = os.path.join(Config.HLS_DIR, ace_id, "index.m3u8")
-        retries = 10
-        while retries > 0:
-            if os.path.exists(m3u8_path) and os.path.getsize(m3u8_path) > 0:
-                return jsonify({"status": "ok", "url": f"/hls/{ace_id}/index.m3u8"})
-            time.sleep(1)
-            retries -= 1
-        return jsonify({"status": "ok", "url": f"/hls/{ace_id}/index.m3u8", "note": "Stream starting, playlist may not be ready yet"})
+        # Wait for file creation (max 15s)
+        manifest = os.path.join(Config.HLS_DIR, effective_id, 'index.m3u8')
+        for _ in range(30):
+            if os.path.exists(manifest):
+                return jsonify({"status": "ok", "url": f"/hls/{effective_id}/index.m3u8"})
+            time.sleep(0.5)
+        return jsonify({"status": "timeout"}), 504
     return jsonify({"status": "error"}), 500
+
+
+@main_bp.route('/hls/<path:filename>')
+def serve_hls(filename):
+    # filename might be "ace_id/index.m3u8" or "ace_id/segment.ts"
+    # or "ace_id_720p/index.m3u8"
+    
+    parts = filename.split('/')
+    if len(parts) > 0:
+        stream_id = parts[0]
+        hls_manager.update_activity(stream_id)
+        
+    return send_from_directory(Config.HLS_DIR, filename)
+
+@main_bp.route('/api/version')
+def version():
+    try:
+        with open('app/version.txt', 'r') as f:
+            v = f.read().strip()
+    except:
+        v = "unknown"
+    return jsonify({
+        "version": v, 
+        "transcoding": Config.ENABLE_TRANSCODE
+    })
+
+
+@main_bp.route('/api/playlist.m3u')
+@main_bp.route('/playlist.m3u')
+def get_playlist():
+    profile = request.args.get('profile', None) # None = Original
+    if not Config.ENABLE_TRANSCODE: profile = None
+
+    # Force update if empty
+    if not os.path.exists(Config.JSON_FILE):
+        channel_manager.update_channels()
+
+    host = request.headers.get('Host')
+    m3u_content = ["#EXTM3U"]
+    
+    try:
+        with open(Config.JSON_FILE, 'r') as f:
+            channels = json.load(f)
+            
+        for ch in channels:
+            m3u_content.append(f'#EXTINF:-1 tvg-id="{ch["id"]}" tvg-logo="{ch.get("logo", "")}" group-title="{ch.get("group", "")}",{ch["name"]}')
+            
+            # Helper to generate link
+            def gen_link(p):
+                if p == 'direct':
+                    # Direct AceStream Link
+                    return f"acestream://{ch['id']}"
+                    
+                # HLS variants
+                suffix = f"?profile={p}" if p and p != 'original' else ""
+                return f"http://{host}/stream/{ch['id']}.m3u8{suffix}"
+
+            m3u_content.append(gen_link(profile))
+
+    except Exception as e:
+        return str(e), 500
+
+    return Response("\n".join(m3u_content), mimetype='audio/x-mpegurl')
+
+@main_bp.route('/api/playlist/all.m3u')
+def get_playlist_all():
+    # Returns playlist with ALL variants (Original, 720p, 480p)
+    if not Config.ENABLE_TRANSCODE: 
+        return get_playlist()
+
+    if not os.path.exists(Config.JSON_FILE):
+        channel_manager.update_channels()
+
+    host = request.headers.get('Host')
+    m3u_content = ["#EXTM3U"]
+    
+    try:
+        with open(Config.JSON_FILE, 'r') as f:
+            channels = json.load(f)
+            
+        for ch in channels:
+            logo = ch.get("logo", "")
+            group = ch.get("group", "")
+            name = ch["name"]
+            cid = ch["id"]
+            
+            # Original
+            m3u_content.append(f'#EXTINF:-1 tvg-id="{cid}" tvg-logo="{logo}" group-title="{group}",{name}')
+            m3u_content.append(f"http://{host}/stream/{cid}.m3u8")
+            
+            # 720p
+            m3u_content.append(f'#EXTINF:-1 tvg-id="{cid}" tvg-logo="{logo}" group-title="{group}",{name} [720p]')
+            m3u_content.append(f"http://{host}/stream/{cid}.m3u8?profile=720p")
+
+            # 480p
+            m3u_content.append(f'#EXTINF:-1 tvg-id="{cid}" tvg-logo="{logo}" group-title="{group}",{name} [480p]')
+            m3u_content.append(f"http://{host}/stream/{cid}.m3u8?profile=480p")
+
+    except Exception as e:
+        return str(e), 500
+
+    return Response("\n".join(m3u_content), mimetype='audio/x-mpegurl')
+
+
+@main_bp.route('/stream/<ace_id>.m3u8')
+def auto_start_manifest(ace_id):
+    # Wrapper to auto-start stream and redirect to real HLS
+    profile = request.args.get('profile', 'original')
+    if Config.ENABLE_TRANSCODE and profile not in ['original', '720p', '480p']: profile = 'original'
+    if not Config.ENABLE_TRANSCODE: profile = 'original'
+
+    success, effective_id = hls_manager.start_stream(ace_id, profile)
+    if success:
+        # Wait up to 10s for manifest
+        manifest_path = os.path.join(Config.HLS_DIR, effective_id, 'index.m3u8')
+        for _ in range(20):
+            if os.path.exists(manifest_path):
+                return current_app.redirect(f"/hls/{effective_id}/index.m3u8")
+            time.sleep(0.5)
+        return "Stream timeout", 504
+    return "Stream error", 500
 
 @main_bp.route('/api/hls/stop/<ace_id>')
 def stop_hls(ace_id):
     hls_manager.stop_stream(ace_id)
     return jsonify({"status": "stopped"})
-
-@main_bp.route('/hls/<ace_id>/<filename>')
-def serve_hls(ace_id, filename):
-    hls_manager.update_activity(ace_id)
-    return send_from_directory(os.path.join(Config.HLS_DIR, ace_id), filename)

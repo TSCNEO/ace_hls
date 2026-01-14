@@ -14,6 +14,9 @@ class Config:
     ACEXY_IP = os.environ.get("ACEXY_IP", "127.0.0.1")
     ACEXY_PORT = os.environ.get("ACEXY_PORT", "8080")
 
+    # Transcoding
+    ENABLE_TRANSCODE = os.environ.get("ENABLE_TRANSCODE", "false").lower() == "true"
+
     # Paths
     JSON_FILE = os.path.join(DATA_DIR, "channels.json")
     SOURCES_FILE = os.path.join(DATA_DIR, "sources.json")

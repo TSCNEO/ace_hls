@@ -7,18 +7,16 @@ services:
       - "${ACE_HLS_PORT}:5000"
     volumes:
       - ace_hls_data:/app/data
+    networks:
+      - ace_hls_stream
+    # devices:
+    #   - /dev/dri:/dev/dri
     environment:
       - ACEXY_IP=${ACEXY_IP}
       - ACEXY_PORT=${ACEXY_PORT}
       - CACHE_DURATION=${CACHE_DURATION}
       - URL_ORIGEN=${URL_ORIGEN}
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:5000/health" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - ace_hls_stream
+      - ENABLE_TRANSCODE=${ENABLE_TRANSCODE:-false}
 
   acestream:
     image: martinbjeldbak/acestream-http-proxy:latest

@@ -89,6 +89,7 @@ El proyecto se ejecuta sobre Docker y consta de tres servicios principales defin
     *   Gestiona el ciclo de vida de subprocessos FFmpeg.
     *   Usa `subprocess.Popen` con `stdout=DEVNULL` para evitar llenar logs, pero escribe logs de FFmpeg en `data/hls/<id>/ffmpeg.log` via variable de entorno `FFREPORT`.
     *   Argumentos FFmpeg clave: `-fflags +genpts+igndts` (para corregir timestamps erróneos de AceStream), `-hls_time 4`, `-hls_list_size 6` (ventanas HLS estándar).
+    *   **Transcoding**: Soporta perfiles (Original, 720p, 480p) y aceleración por hardware (VAAPI/QSV) si se detecta `/dev/dri`. Gestionado dinámicamente según `ENABLE_TRANSCODE`.
 
     *   Procesa M3U línea por línea.
     *   Extrae metadatos como `tvg-logo` y `group-title`.

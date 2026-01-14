@@ -13,6 +13,7 @@ Una interfaz web moderna y autogestionada para visualizar y reproducir canales d
 *   **⚙️ Gestión de Fuentes Multiples**: Permite añadir múltiples listas M3U desde la interfaz web, con deduplicación automática y persistencia.
 *   **🤖 Monitor de Salud "Social"**: Validación pasiva de canales. El sistema recuerda cuándo funcionó un canal por última vez y muestra sus datos técnicos (Resolución, FPS, Codecs) extraídos automáticamente.
 *   **🏥 Health Check Integrado**: Sistema de autodiagnóstico que vigila el espacio en disco y la conexión con AceStream, permitiendo a Docker reiniciar el servicio si algo falla.
+*   **🏎️ Transcoding HW & Perfiles**: (Experimental) Soporte para **Aceleración por Hardware (VAAPI/QSV)**. Transcodifica al vuelo a **720p/480p** para ahorrar datos o mejorar compatibilidad. Selector de calidad integrado.
 
 ---
 
