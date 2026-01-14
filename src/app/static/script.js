@@ -255,7 +255,16 @@ async function playChannel(channel) {
     statsInterval = setInterval(() => pollStats(channel.id), 5000);
 
     // Initial Play
-    startPlayback(channel.id, 'original');
+    const defaultInfo = localStorage.getItem('ace_default_quality');
+    const startProfile = defaultInfo || 'original';
+
+    // Update selector to match default
+    if (qualitySel) qualitySel.value = startProfile;
+
+    // Push History State (so Back button works)
+    history.pushState({ modalOpen: true }, "", "#player");
+
+    startPlayback(channel.id, startProfile);
 }
 
 async function startPlayback(aceId, profile) {
@@ -263,11 +272,18 @@ async function startPlayback(aceId, profile) {
     const errorDiv = document.getElementById('player-error');
     if (errorDiv) errorDiv.style.display = 'none';
 
+    // Abort previous request if any
+    if (currentAbortController) {
+        currentAbortController.abort();
+    }
+    currentAbortController = new AbortController();
+    const signal = currentAbortController.signal;
+
     try {
         const url = `/api/hls/start/${aceId}?profile=${profile}`;
         console.log("Requesting stream:", url);
 
-        const res = await fetch(url);
+        const res = await fetch(url, { signal });
         const data = await res.json();
 
         if (data.status === 'ok') {
@@ -283,10 +299,11 @@ async function startPlayback(aceId, profile) {
                 playPromise.catch(e => console.log("Autoplay prevented"));
             }
 
-            // Timeout Logic (20 seconds)
+            // Timeout Logic (20 seconds) - Only relevant if player is active
             if (loadTimeout) clearTimeout(loadTimeout);
             loadTimeout = setTimeout(() => {
-                if (player.currentTime < 1) {
+                // Check if still playing THIS stream
+                if (player.currentTime < 1 && currentAceId === aceId) {
                     console.warn("Stream timeout");
                     if (errorDiv) errorDiv.style.display = 'flex';
                     player.pause();
@@ -299,11 +316,16 @@ async function startPlayback(aceId, profile) {
             }, { once: true });
 
         } else {
-            alert("Error servidor: " + data.status);
+            // Only alert if not aborted
+            if (!signal.aborted) alert("Error servidor: " + data.status);
         }
     } catch (e) {
-        console.error(e);
-        alert("Error de conexión");
+        if (e.name === 'AbortError') {
+            console.log("Fetch aborted (user closed player or switched)");
+        } else {
+            console.error(e);
+            alert("Error de conexión");
+        }
     }
 }
 
@@ -318,13 +340,9 @@ function changeQuality(profile) {
     sel.disabled = true;
 
     startPlayback(currentAceId, profile).then(() => {
-        sel.disabled = false;
-        sel.options[sel.selectedIndex].text = oldText; // Restore text? 
-        // Actually better to just reset the text to clean state or it might stick if promise fails
-        // But startPlayback doesn't return much. 
-        // We'll rely on reload. The selector value is already set.
-        // Let's just restore the text immediately after call returns (which is usually fast ack)
-        // Wait, startPlayback awaits fetch.
+        // ... (rest is same, promise usually resolves fast)
+        // Note: startPlayback is async, so we might need to handle this better
+        // but existing logic just unblocks UI which is fine.
     }).finally(() => {
         sel.disabled = false;
         // Refresh text just in case (hacky but works)
@@ -342,7 +360,26 @@ function playNativeIOS() {
     window.open(fullUrl, '_blank');
 }
 
-function closePlayer() {
+function closePlayer(fromHistory = false) {
+    // Abort any pending fetch
+    if (currentAbortController) {
+        currentAbortController.abort();
+        currentAbortController = null;
+    }
+
+    // Manage History
+    if (!fromHistory) {
+        // If closed manually (X button), go back to remove hash
+        if (window.location.hash === '#player') {
+            history.back();
+            // history.back() triggers popstate, which calls closePlayer(true)
+            // so we return here to let that handle the UI closing?
+            // Actually it's cleaner to just let the popstate handler do the UI work.
+            // But if we want instant response...
+        }
+    }
+
+    const player = document.querySelector('media-player');
     player.pause();
     player.src = ''; // Unload
     currentStreamUrl = "";
