@@ -231,9 +231,12 @@ async function playChannel(channel) {
     }
 
     // Setup iOS Button
+    // Setup iOS/Native Button (Hide on Desktop to prevent download confusion)
     const iosBtn = document.getElementById('ios-btn');
-    if (isIOS() || true) {
+    if (isIOS() || /Android/i.test(navigator.userAgent)) {
         if (iosBtn) iosBtn.style.display = 'inline-block';
+    } else {
+        if (iosBtn) iosBtn.style.display = 'none';
     }
 
     // Capture ID for feedback

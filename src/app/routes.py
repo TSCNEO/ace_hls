@@ -211,7 +211,15 @@ def serve_hls(filename):
         stream_id = parts[0]
         hls_manager.update_activity(stream_id)
         
-    return send_from_directory(Config.HLS_DIR, filename)
+    response = send_from_directory(Config.HLS_DIR, filename)
+    
+    # Explicitly set correct MIME types to avoid browser confusion
+    if filename.endswith('.m3u8'):
+        response.mimetype = 'application/vnd.apple.mpegurl'
+    elif filename.endswith('.ts'):
+        response.mimetype = 'video/mp2t'
+        
+    return response
 
 @main_bp.route('/api/version')
 def version():
