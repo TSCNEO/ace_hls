@@ -97,19 +97,7 @@ class HLSManager:
         Starts the HLS stream. 
         profile: None (Original), '720p', '480p'
         """
-        # Unique ID for process map to allow multiple qualities of same stream?
-        # For simplicity and resource saving: One stream = One Process per ID.
-        # If user switches profile, we stop old one and start new one.
-        # BUT we need to know if current running process matches requested profile.
-        # We'll store profile in a separate map or encode in ID? 
-        # Simpler: If start_stream called with diff profile, force restart.
-        
-        # Note: ace_id coming from frontend might be "abcd" or "abcd_720p" if we do variant playlist logic?
-        # Let's keep ace_id clean and use internal tracking. 
-        # Ideally, output dir should be /data/hls/{ace_id}_{profile}/ to avoid conflict?
-        
-        # RESTORED BEHAVIOR: If profile is original (or None), do NOT append suffix.
-        # This matches v1.5.5 structure and prevents regression in paths/caching.
+        # If profile is original (or None), do NOT append suffix.
         effective_id = f"{ace_id}_{profile}" if profile and profile != 'original' else ace_id
 
         with self.lock:
@@ -146,11 +134,7 @@ class HLSManager:
             # Transcoding Logic
             if not Config.ENABLE_TRANSCODE or not profile or profile == 'original':
                 # Original / Passthrough (Simpler is better for stability)
-                # Removed explicit maps and bsf filters that caused "judder"
                 cmd.extend(["-c", "copy"])
-                
-                # Optional: Only map useful streams if needed, but auto-select is often safer for random inputs
-                # cmd.extend(["-map", "0:v?", "-map", "0:a?", "-ignore_unknown"])
             else:
                 # Transcoding: Strict mapping
                 cmd.extend(["-map", "0:v", "-map", "0:a", "-sn", "-dn", "-ignore_unknown"])
@@ -236,7 +220,6 @@ class HLSManager:
                 stream_dir = os.path.join(Config.HLS_DIR, ace_id)
         if os.path.exists(stream_dir):
                     shutil.rmtree(stream_dir)
-                    # logger.info(f"Stream stopped. Files kept in {stream_dir} for debugging.")
 
     def _analyze_stream(self, ace_id, stream_url, force_probe=False):
         """Runs ffprobe on the INPUT stream to capture original quality."""

@@ -18,12 +18,7 @@ class ChannelManager:
         """Downloads and processes the M3U list from ALL sources with deduplication."""
         from app.services.source_manager import source_manager
         
-        # We don't check for cache duration strictly here anymore because
-        # we might have added a new source and want immediate update.
-        # But to respect cache, we could check if any source changed?
-        # For simplicity in this "v2", let's trust the caller (scheduler or manual)
-        # or just enforce a small cooldown if needed. 
-        # For now, we proceed to update.
+        # Default behavior: Update always. Caller controls frequency.
 
         logger.info("Updating channels list from all sources...")
         

@@ -311,13 +311,11 @@ async function startPlayback(aceId, profile) {
 
     try {
         const url = `/api/hls/start/${aceId}?profile=${profile}`;
-        console.log("Requesting stream:", url);
 
         const res = await fetch(url, { signal });
         const data = await res.json();
 
         if (data.status === 'ok') {
-            console.log("Stream ready:", data.url);
             currentStreamUrl = data.url;
             player.src = { src: data.url, type: 'application/x-mpegurl' };
             player.muted = true;
@@ -372,7 +370,6 @@ async function startPlayback(aceId, profile) {
 
 function changeQuality(profile) {
     if (!currentAceId) return;
-    console.log("Changing quality to:", profile);
 
     // Feedback
     const sel = document.getElementById('quality-selector');
