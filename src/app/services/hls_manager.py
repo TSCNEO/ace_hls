@@ -205,7 +205,9 @@ class HLSManager:
             if effective_id in self.validated_sessions:
                 self.validated_sessions.remove(effective_id)
 
-            threading.Thread(target=self._analyze_stream, args=(effective_id, start_url), daemon=True).start()
+            # Force probe if Original profile to ensure fresh data and valid cache for variants
+            force_probe = (profile == 'original')
+            threading.Thread(target=self._analyze_stream, args=(effective_id, start_url, force_probe), daemon=True).start()
 
             # Check dead-on-arrival
             time.sleep(1)
@@ -236,18 +238,20 @@ class HLSManager:
                     shutil.rmtree(stream_dir)
                     # logger.info(f"Stream stopped. Files kept in {stream_dir} for debugging.")
 
-    def _analyze_stream(self, ace_id, stream_url):
+    def _analyze_stream(self, ace_id, stream_url, force_probe=False):
         """Runs ffprobe on the INPUT stream to capture original quality."""
         
         # Check cache first to avoid redundant probes/timeouts
-        # 1. Check exact ID
-        cached = stats_manager.get_stats(ace_id)
-        if not cached or not cached.get('tech_info'):
-            # 2. Check base ID (if variant)
-            # AceStream IDs are 40 chars hex.
-            if len(ace_id) > 40:
-                base_id = ace_id[:40] 
-                cached = stats_manager.get_stats(base_id)
+        # ONLY if force_probe is False (i.e. transcoding variants)
+        cached = None
+        if not force_probe:
+            # 1. Check exact ID
+            cached = stats_manager.get_stats(ace_id)
+            if not cached or not cached.get('tech_info'):
+                # 2. Check base ID (if variant)
+                if len(ace_id) > 40:
+                    base_id = ace_id[:40] 
+                    cached = stats_manager.get_stats(base_id)
         
         if cached and cached.get('tech_info'):
             logger.info(f"Skipping probe for {ace_id}, using cached tech info.")

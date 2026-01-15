@@ -250,12 +250,14 @@ async function playChannel(channel) {
     if (qualitySel) qualitySel.value = 'original';
 
     // Setup VLC Link
+    // Setup VLC Link
     const vlcLink = document.getElementById('vlc-link');
     if (vlcLink) {
-        let vlcUrl = channel.url;
-        vlcLink.setAttribute('data-url', vlcUrl); // Store for copy
-        vlcLink.href = vlcUrl || '#';
-        vlcLink.textContent = "🔗 Copiar Enlace VLC (Directo)";
+        vlcLink.removeAttribute('href');
+        vlcLink.removeAttribute('data-url');
+        vlcLink.textContent = "⏳ Generando Enlace VLC...";
+        vlcLink.style.pointerEvents = "none"; // Disable click
+        vlcLink.style.opacity = "0.6";
     }
 
     // Setup iOS Button
@@ -325,6 +327,17 @@ async function startPlayback(aceId, profile) {
             const playPromise = player.play();
             if (playPromise !== undefined) {
                 playPromise.catch(e => console.log("Autoplay prevented"));
+            }
+
+            // Update VLC Link to active HLS stream (Security/Privacy)
+            const vlcLink = document.getElementById('vlc-link');
+            if (vlcLink) {
+                const fullStreamUrl = window.location.origin + data.url;
+                vlcLink.href = fullStreamUrl;
+                vlcLink.setAttribute('data-url', fullStreamUrl);
+                vlcLink.textContent = "🔗 Copiar Enlace VLC (Perfil Activo)";
+                vlcLink.style.pointerEvents = "auto";
+                vlcLink.style.opacity = "1";
             }
 
             // Timeout Logic (20 seconds) - Only relevant if player is active
