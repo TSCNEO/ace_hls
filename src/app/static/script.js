@@ -3,6 +3,34 @@ let categories = new Set();
 let currentStreamUrl = "";
 let currentAceId = null;
 const player = document.querySelector('media-player');
+let currentAbortController = null; // Phase 2: Stale Alert Fix
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadChannels();
+    loadSettings(); // Phase 2: Persistence
+
+    // Phase 2: History API for Back Button
+    window.addEventListener('popstate', (event) => {
+        const modal = document.getElementById('player-modal');
+        if (modal && modal.style.display === 'flex') {
+            closePlayer(true);
+        }
+    });
+});
+
+// Phase 2: Settings Logic
+function loadSettings() {
+    const defaultQ = localStorage.getItem('ace_default_quality') || 'original';
+    const sel = document.getElementById('default-quality');
+    if (sel) sel.value = defaultQ;
+}
+
+function saveDefaultQuality() {
+    const sel = document.getElementById('default-quality');
+    if (sel) {
+        localStorage.setItem('ace_default_quality', sel.value);
+    }
+}
 
 // Transcoding Global State
 let isTranscodingEnabled = false;

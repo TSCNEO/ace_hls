@@ -73,11 +73,23 @@
             <div class="source-input-group">
                 <input type="text" id="newSourceUrl" placeholder="URL lista M3U (ej: https://...)"
                     style="flex-grow:1; padding:8px;">
-                <button onclick="addSource()">Añadir</button>
+                <button onclick="saveNewSource()">Añadir</button>
             </div>
-            <ul id="sources-list" class="source-list">
-                <!-- Sources wil be here -->
-            </ul>
+
+            <h3 style="margin-top:20px;">Preferencias</h3>
+            <div class="source-input-group" style="align-items:center;">
+                <label for="default-quality" style="color:#ddd; margin-right:10px;">Calidad por Defecto:</label>
+                <select id="default-quality" onchange="saveDefaultQuality()" class="utility-select"
+                    style="flex-grow:1;">
+                    <option value="original">Original (Passthrough)</option>
+                    <option value="max_compat">Compatibilidad (Recode)</option>
+                    <option value="720p">720p (Transcode)</option>
+                    <option value="480p">480p (Transcode)</option>
+                </select>
+            </div>
+
+            <h3>Fuentes Activas</h3>
+            <ul id="source-list"></ul>
             <div class="modal-actions" style="margin-top: 20px; text-align: right;">
                 <button onclick="refreshChannelsFromServer()" style="background: var(--primary-color);">Actualizar
                     Canales Ahora</button>
