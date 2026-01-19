@@ -608,17 +608,64 @@ function copyLinkAction(type) {
     }
 
     if (urlToCopy) {
-        navigator.clipboard.writeText(urlToCopy).then(() => {
-            const originalText = vlcBtn.innerHTML;
-            vlcBtn.innerHTML = "✅ ¡Copiado!";
-            setTimeout(() => vlcBtn.innerHTML = originalText, 2000);
-
-            // Show toast or alert? Alert is annoying, button text change is enough.
-        }).catch(err => {
-            console.error('Error copying:', err);
-        });
+        // Secure Context (HTTPS/Localhost)
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(urlToCopy).then(() => {
+                showCopyFeedback();
+            }).catch(err => {
+                console.error('Clipboard API failed, trying fallback:', err);
+                fallbackCopy(urlToCopy);
+            });
+        } else {
+            // Unsecure Context (HTTP) fallback
+            fallbackCopy(urlToCopy);
+        }
     }
     toggleCopyMenu(); // Close
+}
+
+function showCopyFeedback() {
+    const vlcBtn = document.getElementById('vlc-link');
+    const originalText = vlcBtn.innerText;
+    // ^ Use innerText or preserve icon? The original code preserved it via closure or re-read? 
+    // Original code:
+    // const originalText = vlcBtn.innerHTML;
+    // vlcBtn.innerHTML = "✅ ¡Copiado!";
+    // setTimeout(() => vlcBtn.innerHTML = originalText, 2000); 
+
+    // Let's just hardcode the icon if needed or assume simple text modification is fine. 
+    // But wait, the button has a dropdown now. Changing innerHTML might break the chevron if it's inside?
+    // Looking at index.html (previous steps), the button is just the toggler.
+
+    // To be safe and simple:
+    const originalContent = vlcBtn.innerHTML;
+    vlcBtn.innerHTML = "✅ Copiado";
+    setTimeout(() => vlcBtn.innerHTML = originalContent, 2000);
+}
+
+function fallbackCopy(text) {
+    var textArea = document.createElement("textarea");
+    textArea.value = text;
+
+    // Avoid scrolling to bottom
+    textArea.style.top = "0";
+    textArea.style.left = "0";
+    textArea.style.position = "fixed";
+    textArea.style.opacity = "0";
+
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    try {
+        var successful = document.execCommand('copy');
+        if (successful) showCopyFeedback();
+    } catch (err) {
+        console.error('Fallback copy failed:', err);
+        alert('Error al copiar: ' + text);
+    }
+
+    document.body.removeChild(textArea);
 }
 
 // Global click to close copy dropdown

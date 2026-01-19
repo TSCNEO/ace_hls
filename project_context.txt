@@ -54,7 +54,9 @@ El proyecto se ejecuta sobre Docker y consta de tres servicios principales defin
 AceHLS utiliza un volumen de Docker montado en `/app/data` para persistencia:
 *   `channels.json`: Caché de la lista de canales.
 *   `sources.json`: Lista de URLs M3U añadidas por el usuario.
-*   `settings.json` (v1.8.1): Configuración del servidor (Bitrates, CRF, Endpoint Público). Sustituye a las variables de entorno para cambios en tiempo de ejecución.
+*   `settings.json` (v1.8.3): Configuración global del servidor.
+    *   **Video**: Bitrates, CRF, Codec (h264/hevc), Preset, Deinterlace.
+    *   **Red**: Endpoint Público y Token (opcional).
     *   *Nota*: Las variables de entorno en `.env` ahora actúan solo como **valores por defecto** si este archivo no existe.
 └── data/               # Volumen persistente (listas, caché, segmentos HLS)
 ```
