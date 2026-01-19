@@ -398,6 +398,38 @@ button:hover {
 
 footer {
     text-align: center;
+}
+
+/* Dropdown Menu Row */
+.menu-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-right: 5px;
+}
+.menu-row a {
+    flex-grow: 1;
+    display: block;
+    padding: 10px 14px;
+    text-decoration: none;
+    color: var(--text-color);
+}
+.menu-row a:hover {
+    background-color: var(--hover-color);
+}
+.icon-btn-small {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.1em;
+    padding: 8px;
+    border-radius: 4px;
+    color: var(--text-color);
+    transition: background 0.2s;
+}
+.icon-btn-small:hover {
+    background-color: rgba(255,255,255,0.1);
+}
     margin-top: 40px;
     padding: 20px;
     color: #666;

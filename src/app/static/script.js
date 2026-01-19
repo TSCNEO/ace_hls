@@ -567,23 +567,36 @@ function toggleM3UMenu() {
     if (menu) menu.classList.toggle("show");
 }
 
+function getM3UUrl(profile) {
+    // Construct absolute URL for copy
+    const relative = `/api/playlist.m3u?profile=${profile}`;
+    return window.location.origin + relative;
+}
+
 function downloadM3U(profile) {
     // profile: 'direct', 'original', '720p', '480p'
     const url = `/api/playlist.m3u?profile=${profile}`;
-
-    // Create hidden anchor to force separate download
-    // const a = document.createElement('a');
-    // a.href = url;
-    // a.download = '';
-    // document.body.appendChild(a);
-    // a.click();
-    // document.body.removeChild(a);
-
-    // Fallback to simple location rewrite, it's safer for downloads with Content-Disposition
     window.location.href = url;
-
     toggleM3UMenu(); // close
 }
+
+function copyM3ULink(profile) {
+    const url = getM3UUrl(profile);
+
+    // Reuse existing copy logic or specifically:
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(() => {
+            alert('Enlace copiado al portapapeles: ' + profile);
+        }).catch(err => {
+            console.error('Copy failed, using fallback', err);
+            fallbackCopy(url);
+        });
+    } else {
+        fallbackCopy(url);
+    }
+    toggleM3UMenu();
+}
+
 
 // Close Dropdown on click outside
 // Copy Dropdown Logic
