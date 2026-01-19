@@ -393,36 +393,36 @@ async function startPlayback(aceId, profile) {
                 vlcBtn.onclick = toggleCopyMenu; // Set trigger
                 vlcBtn.removeAttribute('href'); // Ensure it's a button behavior
             }
-        }
 
-        // Timeout Logic (20 seconds) - Only relevant if player is active
-        if (loadTimeout) clearTimeout(loadTimeout);
-        loadTimeout = setTimeout(() => {
-            // Check if still playing THIS stream
-            if (player.currentTime < 1 && currentAceId === aceId) {
-                console.warn("Stream timeout");
-                if (errorDiv) errorDiv.style.display = 'flex';
-                player.pause();
-            }
-        }, 20000);
 
-        player.addEventListener('playing', () => {
+            // Timeout Logic (20 seconds) - Only relevant if player is active
             if (loadTimeout) clearTimeout(loadTimeout);
-            if (errorDiv) errorDiv.style.display = 'none';
-        }, { once: true });
+            loadTimeout = setTimeout(() => {
+                // Check if still playing THIS stream
+                if (player.currentTime < 1 && currentAceId === aceId) {
+                    console.warn("Stream timeout");
+                    if (errorDiv) errorDiv.style.display = 'flex';
+                    player.pause();
+                }
+            }, 20000);
 
-    } else {
-        // Only alert if not aborted
-        if (!signal.aborted) alert("Error servidor: " + data.status);
+            player.addEventListener('playing', () => {
+                if (loadTimeout) clearTimeout(loadTimeout);
+                if (errorDiv) errorDiv.style.display = 'none';
+            }, { once: true });
+
+        } else {
+            // Only alert if not aborted
+            if (!signal.aborted) alert("Error servidor: " + data.status);
+        }
+    } catch (e) {
+        if (e.name === 'AbortError') {
+            console.log("Fetch aborted (user closed player or switched)");
+        } else {
+            console.error(e);
+            alert("Error de conexión");
+        }
     }
-} catch (e) {
-    if (e.name === 'AbortError') {
-        console.log("Fetch aborted (user closed player or switched)");
-    } else {
-        console.error(e);
-        alert("Error de conexión");
-    }
-}
 }
 
 function changeQuality(profile) {
