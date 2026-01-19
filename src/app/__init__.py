@@ -1,4 +1,5 @@
 import logging
+import os
 from flask import Flask
 
 from app.config import Config
@@ -8,7 +9,15 @@ def create_app():
     app = Flask(__name__, static_url_path='')
     
     # Configure logging
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    log_file = os.path.join(Config.DATA_DIR, 'app.log')
+    logging.basicConfig(
+        level=logging.INFO, 
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler(log_file)
+        ]
+    )
     app.logger.setLevel(logging.INFO)
 
     # Scheduler removed as per user request (Lazy loading preferred)

@@ -264,6 +264,25 @@ class HLSManager:
         if os.path.exists(stream_dir):
                     shutil.rmtree(stream_dir)
 
+                    shutil.rmtree(stream_dir)
+
+    def get_active_streams_info(self):
+        """Returns list of active streams with metadata for dashboard."""
+        streams = []
+        with self.lock:
+            for pid, proc in self.processes.items():
+                start_time = self.start_times.get(pid, 0)
+                uptime = int(time.time() - start_time) if start_time else 0
+                
+                # Try to get CPU usage of ffmpeg process? (Maybe too heavy here)
+                # Just basic info
+                streams.append({
+                    "id": pid,
+                    "uptime": uptime,
+                    "profile": pid.split('_')[-1] if '_' in pid else "original"
+                })
+        return streams
+
     def _analyze_stream(self, playback_id, stream_url, force_probe=False):
         """Runs ffprobe on the INPUT stream to capture original quality."""
         

@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AceHLS :: Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --text-color: #c9d1d9;
+            --border-color: #30363d;
+            --accent-color: #58a6ff;
+            --success-color: #2ea043;
+            --danger-color: #da3633;
+            --warning-color: #d29922;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.5em;
+        }
+
+        .back-btn {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 5px 15px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 0.9em;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 15px;
+        }
+
+        .card h3 {
+            margin-top: 0;
+            color: var(--accent-color);
+            font-size: 1.1em;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 5px;
+        }
+
+        /* Bars */
+        .metric-row {
+            margin-bottom: 15px;
+        }
+
+        .metric-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+
+        .progress-bar {
+            height: 10px;
+            background: #21262d;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--success-color);
+            width: 0%;
+            transition: width 0.5s, background-color 0.5s;
+        }
+
+        /* Color classes for JS */
+        .fill-warning {
+            background: var(--warning-color);
+        }
+
+        .fill-danger {
+            background: var(--danger-color);
+        }
+
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            color: #8b949e;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 10px;
+            background: rgba(46, 160, 67, 0.2);
+            color: var(--success-color);
+            font-size: 0.8em;
+        }
+
+        .action-btn {
+            background: #21262d;
+            border: 1px solid var(--border-color);
+            color: var(--danger-color);
+            padding: 2px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+
+        .action-btn:hover {
+            background: #30363d;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #8b949e;
+            padding: 20px;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <h1>🖥️ System Dashboard</h1>
+        <a href="/" class="back-btn">⬅️ Volver al Player</a>
+    </div>
+
+    <div class="grid">
+        <!-- CPU & RAM -->
+        <div class="card">
+            <h3>Recursos del Sistema</h3>
+
+            <div class="metric-row">
+                <div class="metric-label">
+                    <span>CPU Usage</span>
+                    <span id="txt-cpu">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div id="bar-cpu" class="progress-fill"></div>
+                </div>
+            </div>
+
+            <div class="metric-row">
+                <div class="metric-label">
+                    <span>RAM Usage</span>
+                    <span id="txt-ram">0 / 0 MB</span>
+                </div>
+                <div class="progress-bar">
+                    <div id="bar-ram" class="progress-fill"></div>
+                </div>
+            </div>
+
+            <div class="metric-row">
+                <div class="metric-label">
+                    <span>Disk Space (HLS)</span>
+                    <span id="txt-disk">0 GB Free</span>
+                </div>
+                <div class="progress-bar">
+                    <div id="bar-disk" class="progress-fill"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Active Streams -->
+        <div class="card">
+            <h3>Transcodificadores Activos</h3>
+            <table id="streams-table">
+                <thead>
+                    <tr>
+                        <th>ID / Source</th>
+                        <th>Profile</th>
+                        <th>Uptime</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="streams-body">
+                    <!-- JS populated -->
+                </tbody>
+            </table>
+            <div id="streams-empty" class="empty-state">No hay streams activos</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>🔍 Logs Recientes (Últimos Eventos)</h3>
+        <textarea id="log-console" readonly
+            style="width:100%; height:150px; background:black; color:#0f0; border:none; padding:10px; font-family:monospace; font-size:0.8em; resize: none;">
+Cargando logs del sistema...
+(Simulación: Implementación de logs reales pendiente en Backend)
+    </textarea>
+    </div>
+
+    <script>
+        function updateBar(barId, txtId, percent, textOverride) {
+            const bar = document.getElementById(barId);
+            const txt = document.getElementById(txtId);
+
+            bar.style.width = percent + '%';
+            txt.innerText = textOverride || (percent + '%');
+
+            // Color logic
+            bar.className = 'progress-fill';
+            if (percent > 85) bar.classList.add('fill-danger');
+            else if (percent > 60) bar.classList.add('fill-warning');
+        }
+
+        function formatTime(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = seconds % 60;
+            return `${h}h ${m}m ${s}s`;
+        }
+
+        async function fetchStats() {
+            try {
+                const res = await fetch('/api/system/stats');
+                const data = await res.json();
+
+                // Fetch logs separately
+                fetch('/api/system/logs')
+                    .then(r => r.text())
+                    .then(text => {
+                        const consoleDiv = document.getElementById('log-console');
+                        consoleDiv.value = text;
+                        consoleDiv.scrollTop = consoleDiv.scrollHeight;
+                    });
+
+                if (data.status === 'ok') {
+                    const sys = data.system;
+
+                    // CPU
+                    updateBar('bar-cpu', 'txt-cpu', sys.cpu);
+
+                    // RAM
+                    updateBar('bar-ram', 'txt-ram', sys.ram.percent, `${sys.ram.used_mb} / ${sys.ram.total_mb} MB (${sys.ram.percent}%)`);
+
+                    // Disk
+                    const freeGB = Array.isArray(sys.disk.free_gb) ? sys.disk.free_gb[0] : sys.disk.free_gb; // Handle my silly python list error if present
+                    updateBar('bar-disk', 'txt-disk', sys.disk.percent, `${sys.disk.percent}% Used (${freeGB} GB Free)`);
+
+                    // Streams
+                    const tbody = document.getElementById('streams-body');
+                    const empty = document.getElementById('streams-empty');
+
+                    tbody.innerHTML = '';
+                    if (data.streams.length === 0) {
+                        empty.style.display = 'block';
+                    } else {
+                        empty.style.display = 'none';
+                        data.streams.forEach(stream => {
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                            <td title="${stream.id}" style="max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                ${stream.id.substring(0, 10)}...
+                            </td>
+                            <td><span class="status-badge">${stream.profile}</span></td>
+                            <td>${formatTime(stream.uptime)}</td>
+                            <td>
+                                <button class="action-btn" onclick="stopStream('${stream.id.split('_')[0]}')">⏹️ Stop</button>
+                            </td>
+                        `;
+                            tbody.appendChild(tr);
+                        });
+                    }
+                }
+            } catch (e) {
+                console.error("Dashboard fetch error:", e);
+            }
+        }
+
+        async function stopStream(aceId) {
+            if (!confirm('¿Seguro que quieres detener este stream?')) return;
+            try {
+                await fetch(`/api/hls/stop/${aceId}`);
+                fetchStats();
+            } catch (e) {
+                alert('Error stopping stream');
+            }
+        }
+
+        // Loop
+        fetchStats();
+        setInterval(fetchStats, 2000);
+
+    </script>
+</body>
+
+</html>

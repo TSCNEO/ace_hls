@@ -3,6 +3,7 @@ import time
 import json
 import shutil
 import requests
+import psutil
 from flask import Blueprint, jsonify, send_from_directory, Response, request, current_app
 from app.config import Config
 from app.services.hls_manager import hls_manager
@@ -11,6 +12,53 @@ from app.services.stats_manager import stats_manager
 from app import utils
 
 main_bp = Blueprint('main', __name__)
+
+@main_bp.route('/dashboard')
+def dashboard():
+    return current_app.send_static_file('dashboard.html')
+
+@main_bp.route('/api/system/stats')
+def system_stats():
+    # System Metrics
+    cpu_percent = psutil.cpu_percent(interval=None)
+    ram = psutil.virtual_memory()
+    disk = shutil.disk_usage(Config.HLS_DIR)
+    
+    # Active Streams
+    streams = hls_manager.get_active_streams_info()
+    
+    return jsonify({
+        "status": "ok",
+        "system": {
+            "cpu": cpu_percent,
+            "ram": {
+                "percent": ram.percent,
+                "used_mb": round(ram.used / 1024 / 1024),
+                "total_mb": round(ram.total / 1024 / 1024)
+            },
+            "disk": {
+                "percent": round((disk.used / disk.total) * 100, 1),
+                "free_gb": [round(disk.free / 1024 / 1024 / 1024, 2)] # List trick? No just float 
+            }
+        },
+        "streams": streams
+    })
+
+@main_bp.route('/api/system/logs')
+def system_logs():
+    log_file = os.path.join(Config.DATA_DIR, 'app.log')
+    if not os.path.exists(log_file):
+        return "No logs found.", 200
+    
+    try:
+        # Read last 50 lines
+        # Simple implementation for now
+        with open(log_file, 'r') as f:
+            lines = f.readlines()
+            last_lines = lines[-50:]
+            return "".join(last_lines)
+    except Exception as e:
+        return f"Error reading logs: {e}", 500
 
 from app.services.settings_manager import settings_manager
 

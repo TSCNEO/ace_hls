@@ -39,11 +39,23 @@
                 <button onclick="playManual()">Reproducir ID</button>
             </div>
             <div class="action-buttons">
+                <!-- Dashboard -->
+                <a href="/dashboard" style="text-decoration:none;" title="System Dashboard">
+                    <button class="theme-btn" style="font-size: 1.2em;">🖥️</button>
+                </a>
+
+                <!-- Settings -->
                 <button onclick="openSettings()" class="theme-btn" title="Configuración">⚙️</button>
+
+                <!-- Theme -->
                 <button onclick="toggleTheme()" class="theme-btn" title="Cambiar Tema" id="theme-icon">🌓</button>
-                <button onclick="loadChannels()">Refrescar</button>
+
+                <!-- Refresh -->
+                <button onclick="loadChannels()" class="theme-btn" title="Refrescar Canales">🔄</button>
+
+                <!-- M3U Dropdown -->
                 <div class="m3u-dropdown">
-                    <button class="icon-btn" onclick="toggleM3UMenu()" title="Descargar Lista">📋 ⏷</button>
+                    <button class="theme-btn" onclick="toggleM3UMenu()" title="Descargar Lista">📋 &#9662;</button>
                     <div id="m3u-menu" class="dropdown-content">
                         <a href="#" onclick="downloadM3U('direct')">Direct AceStream</a>
                         <div class="divider"></div>
