@@ -14,7 +14,7 @@ Una interfaz web moderna y autogestionada para visualizar y reproducir canales d
 *   **🤖 Monitor de Salud "Social"**: Validación pasiva de canales. El sistema recuerda cuándo funcionó un canal por última vez y muestra sus datos técnicos (Resolución, FPS, Codecs) extraídos automáticamente.
 *   **🏥 Health Check Integrado**: Sistema de autodiagnóstico que vigila el espacio en disco y la conexión con AceStream, permitiendo a Docker reiniciar el servicio si algo falla.
 *   **🏎️ Transcoding HW & Perfiles**: (Experimental) Soporte para **Aceleración por Hardware (VAAPI/QSV)**. Transcodifica al vuelo a **720p/480p** para ahorrar datos o mejorar compatibilidad. Selector de calidad integrado.
-*   **⚙️ Configuración Persistente**: (v1.8.3) Configuración desde la web (Bitrates, Codecs, Deinterlace, Endpoint). Todo se guarda en `settings.json` y sobrevive a reinicios.
+*   **⚙️ Configuración Persistente**: (v1.8.x) Configuración desde la web (Bitrates, Codecs, Deinterlace, Endpoint). Todo se guarda en `settings.json` y sobrevive a reinicios.
 *   **🎬 Transcodificación Avanzada**: Selector de códecs (H264/HEVC), Presets de CPU y Desentrelazado para deportes.
 ---
 
