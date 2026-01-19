@@ -263,7 +263,8 @@ async function playChannel(channel) {
     if (qualitySel) qualitySel.value = 'original';
 
     // Find channel info for Direct Link
-    const channelData = allChannels.find(ch => ch.id === aceId);
+    // Find channel info for Direct Link
+    const channelData = allChannels.find(ch => ch.id === channel.id);
     if (channelData && channelData.url) {
         activeDirectUrl = channelData.url;
     } else {
@@ -281,43 +282,41 @@ async function playChannel(channel) {
         vlcLink.style.opacity = "0.5";
     }
 
-}
+    // Setup iOS Button
+    // Setup iOS/Native Button (Hide on Desktop to prevent download confusion)
+    const iosBtn = document.getElementById('ios-btn');
+    if (isIOS() || /Android/i.test(navigator.userAgent)) {
+        if (iosBtn) iosBtn.style.display = 'inline-block';
+    } else {
+        if (iosBtn) iosBtn.style.display = 'none';
+    }
 
-// Setup iOS Button
-// Setup iOS/Native Button (Hide on Desktop to prevent download confusion)
-const iosBtn = document.getElementById('ios-btn');
-if (isIOS() || /Android/i.test(navigator.userAgent)) {
-    if (iosBtn) iosBtn.style.display = 'inline-block';
-} else {
-    if (iosBtn) iosBtn.style.display = 'none';
-}
+    // Capture ID for feedback
+    currentAceId = channel.id;
 
-// Capture ID for feedback
-currentAceId = channel.id;
+    // Reset Feedback Buttons
+    const likeBtn = document.getElementById('btn-like');
+    const dislikeBtn = document.getElementById('btn-dislike');
+    if (likeBtn) likeBtn.classList.remove('active-like');
+    if (dislikeBtn) dislikeBtn.classList.remove('active-dislike');
 
-// Reset Feedback Buttons
-const likeBtn = document.getElementById('btn-like');
-const dislikeBtn = document.getElementById('btn-dislike');
-if (likeBtn) likeBtn.classList.remove('active-like');
-if (dislikeBtn) dislikeBtn.classList.remove('active-dislike');
+    modal.style.display = 'flex';
 
-modal.style.display = 'flex';
+    // Start Polling for Stats (Tech Info)
+    if (statsInterval) clearInterval(statsInterval);
+    statsInterval = setInterval(() => pollStats(channel.id), 5000);
 
-// Start Polling for Stats (Tech Info)
-if (statsInterval) clearInterval(statsInterval);
-statsInterval = setInterval(() => pollStats(channel.id), 5000);
+    // Initial Play
+    const defaultInfo = localStorage.getItem('ace_default_quality');
+    const startProfile = defaultInfo || 'original';
 
-// Initial Play
-const defaultInfo = localStorage.getItem('ace_default_quality');
-const startProfile = defaultInfo || 'original';
+    // Update selector to match default
+    if (qualitySel) qualitySel.value = startProfile;
 
-// Update selector to match default
-if (qualitySel) qualitySel.value = startProfile;
+    // Push History State (so Back button works)
+    history.pushState({ modalOpen: true }, "", "#player");
 
-// Push History State (so Back button works)
-history.pushState({ modalOpen: true }, "", "#player");
-
-startPlayback(channel.id, startProfile);
+    startPlayback(channel.id, startProfile);
 }
 
 async function startPlayback(aceId, profile) {
