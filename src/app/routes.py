@@ -12,6 +12,25 @@ from app import utils
 
 main_bp = Blueprint('main', __name__)
 
+from app.services.settings_manager import settings_manager
+
+@main_bp.route('/api/settings', methods=['GET'])
+def get_settings():
+    return jsonify(settings_manager.get_all())
+
+@main_bp.route('/api/settings', methods=['POST'])
+def update_settings():
+    new_settings = request.json
+    if not new_settings:
+        return jsonify({"status": "error", "message": "No data provided"}), 400
+    
+    if settings_manager.save(new_settings):
+        # Update Config from persistence? 
+        # Actually Config class is static, but dynamic uses read directly from settings_manager.
+        return jsonify({"status": "ok", "settings": settings_manager.get_all()})
+    else:
+        return jsonify({"status": "error", "message": "Failed to save settings"}), 500
+
 @main_bp.route('/')
 def index():
     return current_app.send_static_file('index.html')
@@ -186,17 +205,12 @@ def start_hls(ace_id):
         profile = 'original'
     
     # If transcode disabled, force original
-    # If transcode disabled, force original
     if not Config.ENABLE_TRANSCODE:
         profile = 'original'
 
-    # Extract Overrides
-    overrides = {}
-    if request.args.get('bitrate_720p'): overrides['bitrate_720p'] = request.args.get('bitrate_720p')
-    if request.args.get('bitrate_480p'): overrides['bitrate_480p'] = request.args.get('bitrate_480p')
-    if request.args.get('crf'): overrides['crf'] = request.args.get('crf')
-
-    success, effective_id = hls_manager.start_stream(ace_id, profile, overrides)
+    # Overrides are now handled globally via SettingsManager in hls_manager
+    # We pass None for overrides to maintain signature or update call
+    success, effective_id = hls_manager.start_stream(ace_id, profile)
     if success:
         # Wait for file creation (max 45s)
         manifest = os.path.join(Config.HLS_DIR, effective_id, 'index.m3u8')

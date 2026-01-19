@@ -107,6 +107,20 @@
                 </div>
             </div>
 
+            <h4 style="margin-top:15px; margin-bottom:5px; color:#aaa;">Endpoint Público (Opcional)</h4>
+            <div style="display:grid; grid-template-columns: 1fr; gap:10px;">
+                <div>
+                    <label style="font-size:0.8em; color:#888;">URL Base (ej. https://mi-dominio.com)</label>
+                    <input type="text" id="cfg-endpoint" placeholder="https://..." onchange="saveTranscodeCfg()"
+                        style="width:100%; box-sizing:border-box; padding:5px; background:#222; border:1px solid #444; color:white;">
+                </div>
+                <div>
+                    <label style="font-size:0.8em; color:#888;">Token (Opcional)</label>
+                    <input type="text" id="cfg-token" placeholder="secret-token" onchange="saveTranscodeCfg()"
+                        style="width:100%; box-sizing:border-box; padding:5px; background:#222; border:1px solid #444; color:white;">
+                </div>
+            </div>
+
             <h3>Fuentes Activas</h3>
             <ul id="sources-list" class="source-list"></ul>
             <div class="modal-actions" style="margin-top: 20px; text-align: right;">

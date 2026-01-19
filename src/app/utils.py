@@ -5,19 +5,23 @@ LOCAL_INDICATORS = ['127.0.0.1', 'localhost', '0.0.0.0', 'acexy', 'acestream']
 def get_acexy_url_for_client(request_host, ace_id=None):
     """
     Determines the URL the browser should use to reach AceXY.
-    If ACEXY_IP is configured as local, we assume AceXY is running 
-    alongside the app and use the request's hostname.
     """
+    from app.services.settings_manager import settings_manager
+    settings = settings_manager.get_all()
+    
+    public_endpoint = settings.get('acexy_public_endpoint')
+    public_token = settings.get('acexy_public_token')
+
     # Priority 1: Public Endpoint (External/Custom Domain)
-    if Config.ACEXY_PUBLIC_ENDPOINT:
-        base_url = f"{Config.ACEXY_PUBLIC_ENDPOINT}/ace/getstream"
+    if public_endpoint:
+        base_url = f"{public_endpoint}/ace/getstream"
         
         # Build Query Params
         params = []
         if ace_id:
             params.append(f"id={ace_id}")
-        if Config.ACEXY_PUBLIC_TOKEN:
-            params.append(f"token={Config.ACEXY_PUBLIC_TOKEN}")
+        if public_token:
+            params.append(f"token={public_token}")
             
         if params:
             return f"{base_url}?" + "&".join(params)

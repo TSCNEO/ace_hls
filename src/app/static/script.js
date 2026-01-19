@@ -33,17 +33,47 @@ function saveDefaultQuality() {
     }
 }
 
-function loadTranscodeCfg() {
-    document.getElementById('cfg-bitrate-720').value = localStorage.getItem('ace_cfg_bitrate_720') || '';
-    document.getElementById('cfg-bitrate-480').value = localStorage.getItem('ace_cfg_bitrate_480') || '';
-    document.getElementById('cfg-crf').value = localStorage.getItem('ace_cfg_crf') || '';
+// Phase 3: Server-Side Persistence
+async function fetchSettings() {
+    try {
+        const res = await fetch('/api/settings');
+        const settings = await res.json();
+
+        // Populate inputs
+        document.getElementById('cfg-bitrate-720').value = settings.transcode_720p_bitrate || '';
+        document.getElementById('cfg-bitrate-480').value = settings.transcode_480p_bitrate || '';
+        document.getElementById('cfg-crf').value = settings.transcode_compat_crf || '';
+        document.getElementById('cfg-endpoint').value = settings.acexy_public_endpoint || '';
+        document.getElementById('cfg-token').value = settings.acexy_public_token || '';
+    } catch (e) {
+        console.error("Failed to fetch settings:", e);
+    }
 }
 
-function saveTranscodeCfg() {
-    localStorage.setItem('ace_cfg_bitrate_720', document.getElementById('cfg-bitrate-720').value);
-    localStorage.setItem('ace_cfg_bitrate_480', document.getElementById('cfg-bitrate-480').value);
-    localStorage.setItem('ace_cfg_crf', document.getElementById('cfg-crf').value);
+async function saveSettings() {
+    const payload = {
+        transcode_720p_bitrate: document.getElementById('cfg-bitrate-720').value,
+        transcode_480p_bitrate: document.getElementById('cfg-bitrate-480').value,
+        transcode_compat_crf: document.getElementById('cfg-crf').value,
+        acexy_public_endpoint: document.getElementById('cfg-endpoint').value,
+        acexy_public_token: document.getElementById('cfg-token').value
+    };
+
+    try {
+        await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        // Optional: Show saved toast?
+    } catch (e) {
+        console.error("Failed to save settings:", e);
+    }
 }
+
+// Map old function names just in case HTML still references them
+const loadTranscodeCfg = fetchSettings;
+const saveTranscodeCfg = saveSettings;
 
 // Transcoding Global State
 let isTranscodingEnabled = false;
@@ -332,16 +362,10 @@ async function startPlayback(aceId, profile) {
     const signal = currentAbortController.signal;
 
     try {
-        // Phase 3: Configurable Quality Overrides
+        // Phase 3: Configurable Quality Overrides (Now handled server-side)
         let url = `/api/hls/start/${aceId}?profile=${profile}`;
 
-        const b720 = localStorage.getItem('ace_cfg_bitrate_720');
-        const b480 = localStorage.getItem('ace_cfg_bitrate_480');
-        const crf = localStorage.getItem('ace_cfg_crf');
-
-        if (b720) url += `&bitrate_720p=${encodeURIComponent(b720)}`;
-        if (b480) url += `&bitrate_480p=${encodeURIComponent(b480)}`;
-        if (crf) url += `&crf=${encodeURIComponent(crf)}`;
+        // No longer appending params here. Server reads settings.json directly.
 
         const res = await fetch(url, { signal });
         const data = await res.json();

@@ -96,18 +96,17 @@ class HLSManager:
         """
         Starts the HLS stream. 
         profile: None (Original), '720p', '480p'
-        overrides: Dict with 'bitrate', 'crf' keys to override config defaults
+        overrides: Dict (Deprecated, backward compat). Now uses SettingsManager.
         """
-        if overrides is None:
-            overrides = {}
+        from app.services.settings_manager import settings_manager
+        settings = settings_manager.get_all()
+
+        # Determine params (Settings > Config Defaults)
+        bitrate_720p = settings.get('transcode_720p_bitrate', Config.TRANSCODE_720P_BITRATE)
+        bitrate_480p = settings.get('transcode_480p_bitrate', Config.TRANSCODE_480P_BITRATE)
+        crf_compat = settings.get('transcode_compat_crf', Config.TRANSCODE_COMPAT_CRF)
 
         # If profile is original (or None), do NOT append suffix.
-        effective_id = f"{ace_id}_{profile}" if profile and profile != 'original' else ace_id
-
-        # Determine params (Override > Config > Default)
-        bitrate_720p = overrides.get('bitrate_720p') or Config.TRANSCODE_720P_BITRATE
-        bitrate_480p = overrides.get('bitrate_480p') or Config.TRANSCODE_480P_BITRATE
-        crf_compat = overrides.get('crf') or Config.TRANSCODE_COMPAT_CRF
 
         with self.lock:
             # Check if active - Simplified: If overrides are present, force restart to apply them?
