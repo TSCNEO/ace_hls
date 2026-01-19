@@ -179,8 +179,10 @@ class HLSManager:
                         filters.append("scale_vaapi=w=-2:h=480:format=nv12")
                         cmd.extend(["-c:v", vcodec, "-b:v", bitrate_480p])
                     elif profile == 'max_compat':
-                        filters.append("scale_vaapi=format=nv12")
-                        cmd.extend(["-c:v", vcodec, "-b:v", "5000k", "-g", "50"])
+                        # Max Compatibility: Same Resolution but Force Re-encode to H.264
+                        # Use ACP/QP instead of fixed bitrate to respect CRF setting.
+                        # VAAPI uses -qp for Constant Quantization Parameter (similar to CRF)
+                        cmd.extend(["-vf", "scale_vaapi=format=nv12", "-c:v", vcodec, "-qp", str(crf_compat), "-g", "50"])
                     
                     if filters:
                         cmd.extend(["-vf", ",".join(filters)])
