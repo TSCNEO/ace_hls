@@ -294,7 +294,7 @@ Cargando logs del sistema...
                             <td><span class="status-badge">${stream.profile}</span></td>
                             <td>${formatTime(stream.uptime)}</td>
                             <td>
-                                <button class="action-btn" onclick="stopStream('${stream.id.split('_')[0]}')">⏹️ Stop</button>
+                                <button class="action-btn" onclick="stopStream('${stream.id}')">⏹️ Stop</button>
                             </td>
                         `;
                             tbody.appendChild(tr);
