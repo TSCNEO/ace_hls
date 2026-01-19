@@ -44,10 +44,18 @@ El proyecto se ejecuta sobre Docker y consta de tres servicios principales defin
 │   │   │   ├── channel_manager.py # Descarga y parseo de lista M3U
 │   │   │   ├── source_manager.py  # Gestión persistente de fuentes M3U
 │   │   │   ├── stats_manager.py   # Persistencia de salud y metadatos de streams
+│   │   │   ├── settings_manager.py # (v1.8.1) Gestión de configuración backend (settings.json)
 │   │   │   └── hls_manager.py     # Gestión de procesos FFmpeg
 │   │   └── static/     # Frontend (HTML, CSS, JS, Iconos)
 │   ├── requirements.txt
 │   └── wsgi.py         # Punto de entrada para Gunicorn
+
+## Almacenamiento Persistente
+AceHLS utiliza un volumen de Docker montado en `/app/data` para persistencia:
+*   `channels.json`: Caché de la lista de canales.
+*   `sources.json`: Lista de URLs M3U añadidas por el usuario.
+*   `settings.json` (v1.8.1): Configuración del servidor (Bitrates, CRF, Endpoint Público). Sustituye a las variables de entorno para cambios en tiempo de ejecución.
+    *   *Nota*: Las variables de entorno en `.env` ahora actúan solo como **valores por defecto** si este archivo no existe.
 └── data/               # Volumen persistente (listas, caché, segmentos HLS)
 ```
 

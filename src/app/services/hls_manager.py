@@ -107,6 +107,7 @@ class HLSManager:
         crf_compat = settings.get('transcode_compat_crf', Config.TRANSCODE_COMPAT_CRF)
 
         # If profile is original (or None), do NOT append suffix.
+        effective_id = f"{ace_id}_{profile}" if profile and profile != 'original' else ace_id
 
         with self.lock:
             # Check if active - Simplified: If overrides are present, force restart to apply them?
