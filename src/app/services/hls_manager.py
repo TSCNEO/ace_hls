@@ -264,39 +264,43 @@ class HLSManager:
         if os.path.exists(stream_dir):
                     shutil.rmtree(stream_dir)
 
-    def _analyze_stream(self, ace_id, stream_url, force_probe=False):
+    def _analyze_stream(self, playback_id, stream_url, force_probe=False):
         """Runs ffprobe on the INPUT stream to capture original quality."""
         
+        # Identify Raw ID (Source) from Playback ID (Process key)
+        # Acestream IDs are 40 chars. playback_id might have suffixes.
+        raw_id = playback_id[:40]
+
         # Check cache first to avoid redundant probes/timeouts
-        # ONLY if force_probe is False (i.e. transcoding variants)
+        # Cache expires after 24h (86400s) to refresh technical info
         cached = None
-        if not force_probe:
-            # 1. Check exact ID
-            cached = stats_manager.get_stats(ace_id)
-            if not cached or not cached.get('tech_info'):
-                # 2. Check base ID (if variant)
-                if len(ace_id) > 40:
-                    base_id = ace_id[:40] 
-                    cached = stats_manager.get_stats(base_id)
+        now = time.time()
         
-        if cached and cached.get('tech_info'):
-            logger.info(f"Skipping probe for {ace_id}, using cached tech info.")
-            # Ensure the current ID has the stats too (if we found it on base_id)
-            if ace_id != cached.get('id', ''): # effectively just update
-                 stats_manager.update_channel_success(ace_id, cached['tech_info'])
+        if not force_probe:
+            # ALWAYS check raw_id stats first (Single Source of Truth)
+            stats = stats_manager.get_stats(raw_id)
+            if stats and stats.get('tech_info'):
+                last_ok = stats.get('last_ok', 0)
+                if (now - last_ok) < 86400: # 24h validity
+                    cached = stats
+        
+        if cached:
+            logger.info(f"Skipping probe for {raw_id} (playing {playback_id}), using cached tech info (Age: {int(now - cached.get('last_ok',0))}s).")
+            # Mark raw_id as active/valid
+            stats_manager.update_channel_success(raw_id, cached['tech_info'])
             
             with self.lock:
-                self.validated_sessions.add(ace_id)
+                self.validated_sessions.add(playback_id)
             return
 
         time.sleep(15) # Wait for stream to stabilize/buffer
         
         with self.lock:
-            # Check if still running
-            if ace_id not in self.processes:
+            # Check if still running (using the effective process key)
+            if playback_id not in self.processes:
                 return
 
-        logger.info(f"Analyzing stream {ace_id}...")
+        logger.info(f"Analyzing source {raw_id} (via {playback_id})...")
         try:
             cmd = [
                 "ffprobe", 
@@ -307,7 +311,7 @@ class HLSManager:
                 stream_url
             ]
             # Timeout is important to avoid hanging threads
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             if result.returncode == 0:
                 import json
                 data = json.loads(result.stdout)
@@ -332,18 +336,17 @@ class HLSManager:
                         tech_info['acodec'] = stream.get('codec_name')
                 
                 if tech_info:
-                    logger.info(f"Analysis for {ace_id}: {tech_info}")
-                    # Update stats with technical info
-                    stats_manager.update_channel_success(ace_id, tech_info)
+                    logger.info(f"Analysis success for {raw_id}: {tech_info}")
+                    # Update stats for the RAW SOURCE ID so all profiles share it
+                    stats_manager.update_channel_success(raw_id, tech_info)
                     
                     # Also mark as validated since it responded to ffprobe
                     with self.lock:
-                         self.validated_sessions.add(ace_id)
+                        self.validated_sessions.add(playback_id)
             else:
-                logger.warning(f"ffprobe failed for {ace_id}")
-
+                 logger.warning(f"ffprobe failed for {raw_id}")
         except Exception as e:
-            logger.error(f"Analysis error for {ace_id}: {e}")
+            logger.error(f"Error analyzing stream {raw_id}: {e}")
 
 # Global Instance
 hls_manager = HLSManager()
