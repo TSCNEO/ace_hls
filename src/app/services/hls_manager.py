@@ -250,6 +250,7 @@ class HLSManager:
                  del self.activity[ace_id]
 
             if ace_id in self.processes:
+                logger.info(f"Stream {ace_id} parado desde dashboard.")
                 proc = self.processes[ace_id]
                 proc.terminate()
                 try:
