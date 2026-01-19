@@ -40,8 +40,9 @@ async function fetchSettings() {
         const settings = await res.json();
 
         // Populate inputs
-        document.getElementById('cfg-bitrate-720').value = settings.transcode_720p_bitrate || '';
-        document.getElementById('cfg-bitrate-480').value = settings.transcode_480p_bitrate || '';
+        // Strip 'k' for numeric inputs
+        document.getElementById('cfg-bitrate-720').value = (settings.transcode_720p_bitrate || '').replace('k', '');
+        document.getElementById('cfg-bitrate-480').value = (settings.transcode_480p_bitrate || '').replace('k', '');
         document.getElementById('cfg-crf').value = settings.transcode_compat_crf || '';
         document.getElementById('cfg-endpoint').value = settings.acexy_public_endpoint || '';
         document.getElementById('cfg-token').value = settings.acexy_public_token || '';
@@ -58,9 +59,16 @@ async function fetchSettings() {
 }
 
 async function saveSettings() {
+    // Append 'k' if number provided
+    let b720 = document.getElementById('cfg-bitrate-720').value;
+    if (b720 && !b720.endsWith('k')) b720 += 'k';
+
+    let b480 = document.getElementById('cfg-bitrate-480').value;
+    if (b480 && !b480.endsWith('k')) b480 += 'k';
+
     const payload = {
-        transcode_720p_bitrate: document.getElementById('cfg-bitrate-720').value,
-        transcode_480p_bitrate: document.getElementById('cfg-bitrate-480').value,
+        transcode_720p_bitrate: b720,
+        transcode_480p_bitrate: b480,
         transcode_compat_crf: document.getElementById('cfg-crf').value,
         acexy_public_endpoint: document.getElementById('cfg-endpoint').value,
         acexy_public_token: document.getElementById('cfg-token').value,
