@@ -88,6 +88,25 @@
                 </select>
             </div>
 
+            <h4 style="margin-top:15px; margin-bottom:5px; color:#aaa;">Transcodificación (Opcional)</h4>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                <div>
+                    <label style="font-size:0.8em; color:#888;">Bitrate 720p</label>
+                    <input type="text" id="cfg-bitrate-720" placeholder="2500k" onchange="saveTranscodeCfg()"
+                        style="width:100%; box-sizing:border-box; padding:5px; background:#222; border:1px solid #444; color:white;">
+                </div>
+                <div>
+                    <label style="font-size:0.8em; color:#888;">Bitrate 480p</label>
+                    <input type="text" id="cfg-bitrate-480" placeholder="1000k" onchange="saveTranscodeCfg()"
+                        style="width:100%; box-sizing:border-box; padding:5px; background:#222; border:1px solid #444; color:white;">
+                </div>
+                <div style="grid-column: span 2;">
+                    <label style="font-size:0.8em; color:#888;">CRF Compatib. (0-51, default 23)</label>
+                    <input type="text" id="cfg-crf" placeholder="23" onchange="saveTranscodeCfg()"
+                        style="width:100%; box-sizing:border-box; padding:5px; background:#222; border:1px solid #444; color:white;">
+                </div>
+            </div>
+
             <h3>Fuentes Activas</h3>
             <ul id="sources-list" class="source-list"></ul>
             <div class="modal-actions" style="margin-top: 20px; text-align: right;">
@@ -148,10 +167,18 @@
                         Usar Reproductor Nativo
                     </button>
 
-                    <!-- VLC Copy Button -->
-                    <a id="vlc-link" href="#" onclick="copyToClipboard(event, this)" class="utility-btn btn-vlc">
-                        🔗 Copiar Enlace VLC (Directo)
-                    </a>
+                    <!-- Copy Dropdown -->
+                    <div style="position:relative; display:inline-block;">
+                        <button id="vlc-link" class="utility-btn btn-vlc" onclick="toggleCopyMenu()" disabled
+                            title="Opciones de Enlace">
+                            🔗 Copiar...
+                        </button>
+                        <div id="copy-dropdown" class="dropdown-content"
+                            style="min-width:200px; right:0; left:auto; bottom:100%; top:auto;">
+                            <a href="#" onclick="copyLinkAction('hls'); return false;">📋 Copiar HLS (Perfil)</a>
+                            <a href="#" onclick="copyLinkAction('direct'); return false;">⚙️ Copiar Motor (Directo)</a>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

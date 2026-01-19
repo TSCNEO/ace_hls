@@ -8,6 +8,7 @@ let currentAbortController = null; // Phase 2: Stale Alert Fix
 document.addEventListener('DOMContentLoaded', () => {
     loadChannels();
     loadSettings(); // Phase 2: Persistence
+    loadTranscodeCfg(); // Phase 3: Transcode Config
 
     // Phase 2: History API for Back Button
     window.addEventListener('popstate', (event) => {
@@ -30,6 +31,18 @@ function saveDefaultQuality() {
     if (sel) {
         localStorage.setItem('ace_default_quality', sel.value);
     }
+}
+
+function loadTranscodeCfg() {
+    document.getElementById('cfg-bitrate-720').value = localStorage.getItem('ace_cfg_bitrate_720') || '';
+    document.getElementById('cfg-bitrate-480').value = localStorage.getItem('ace_cfg_bitrate_480') || '';
+    document.getElementById('cfg-crf').value = localStorage.getItem('ace_cfg_crf') || '';
+}
+
+function saveTranscodeCfg() {
+    localStorage.setItem('ace_cfg_bitrate_720', document.getElementById('cfg-bitrate-720').value);
+    localStorage.setItem('ace_cfg_bitrate_480', document.getElementById('cfg-bitrate-480').value);
+    localStorage.setItem('ace_cfg_crf', document.getElementById('cfg-crf').value);
 }
 
 // Transcoding Global State
@@ -249,52 +262,62 @@ async function playChannel(channel) {
     const qualitySel = document.getElementById('quality-selector');
     if (qualitySel) qualitySel.value = 'original';
 
-    // Setup VLC Link
-    // Setup VLC Link
+    // Find channel info for Direct Link
+    const channelData = allChannels.find(ch => ch.id === aceId);
+    if (channelData && channelData.url) {
+        activeDirectUrl = channelData.url;
+    } else {
+        activeDirectUrl = "";
+    }
+
+    // Reset Copy Button
     const vlcLink = document.getElementById('vlc-link');
     if (vlcLink) {
-        vlcLink.removeAttribute('href');
+        vlcLink.innerHTML = "⏳ Generando...";
+        vlcLink.disabled = true;
         vlcLink.removeAttribute('data-url');
-        vlcLink.textContent = "⏳ Generando Enlace VLC...";
-        vlcLink.style.pointerEvents = "none"; // Disable click
-        vlcLink.style.opacity = "0.6";
+        vlcLink.onclick = null;
+        vlcLink.style.pointerEvents = "none";
+        vlcLink.style.opacity = "0.5";
     }
 
-    // Setup iOS Button
-    // Setup iOS/Native Button (Hide on Desktop to prevent download confusion)
-    const iosBtn = document.getElementById('ios-btn');
-    if (isIOS() || /Android/i.test(navigator.userAgent)) {
-        if (iosBtn) iosBtn.style.display = 'inline-block';
-    } else {
-        if (iosBtn) iosBtn.style.display = 'none';
-    }
+}
 
-    // Capture ID for feedback
-    currentAceId = channel.id;
+// Setup iOS Button
+// Setup iOS/Native Button (Hide on Desktop to prevent download confusion)
+const iosBtn = document.getElementById('ios-btn');
+if (isIOS() || /Android/i.test(navigator.userAgent)) {
+    if (iosBtn) iosBtn.style.display = 'inline-block';
+} else {
+    if (iosBtn) iosBtn.style.display = 'none';
+}
 
-    // Reset Feedback Buttons
-    const likeBtn = document.getElementById('btn-like');
-    const dislikeBtn = document.getElementById('btn-dislike');
-    if (likeBtn) likeBtn.classList.remove('active-like');
-    if (dislikeBtn) dislikeBtn.classList.remove('active-dislike');
+// Capture ID for feedback
+currentAceId = channel.id;
 
-    modal.style.display = 'flex';
+// Reset Feedback Buttons
+const likeBtn = document.getElementById('btn-like');
+const dislikeBtn = document.getElementById('btn-dislike');
+if (likeBtn) likeBtn.classList.remove('active-like');
+if (dislikeBtn) dislikeBtn.classList.remove('active-dislike');
 
-    // Start Polling for Stats (Tech Info)
-    if (statsInterval) clearInterval(statsInterval);
-    statsInterval = setInterval(() => pollStats(channel.id), 5000);
+modal.style.display = 'flex';
 
-    // Initial Play
-    const defaultInfo = localStorage.getItem('ace_default_quality');
-    const startProfile = defaultInfo || 'original';
+// Start Polling for Stats (Tech Info)
+if (statsInterval) clearInterval(statsInterval);
+statsInterval = setInterval(() => pollStats(channel.id), 5000);
 
-    // Update selector to match default
-    if (qualitySel) qualitySel.value = startProfile;
+// Initial Play
+const defaultInfo = localStorage.getItem('ace_default_quality');
+const startProfile = defaultInfo || 'original';
 
-    // Push History State (so Back button works)
-    history.pushState({ modalOpen: true }, "", "#player");
+// Update selector to match default
+if (qualitySel) qualitySel.value = startProfile;
 
-    startPlayback(channel.id, startProfile);
+// Push History State (so Back button works)
+history.pushState({ modalOpen: true }, "", "#player");
+
+startPlayback(channel.id, startProfile);
 }
 
 async function startPlayback(aceId, profile) {
@@ -310,7 +333,16 @@ async function startPlayback(aceId, profile) {
     const signal = currentAbortController.signal;
 
     try {
-        const url = `/api/hls/start/${aceId}?profile=${profile}`;
+        // Phase 3: Configurable Quality Overrides
+        let url = `/api/hls/start/${aceId}?profile=${profile}`;
+
+        const b720 = localStorage.getItem('ace_cfg_bitrate_720');
+        const b480 = localStorage.getItem('ace_cfg_bitrate_480');
+        const crf = localStorage.getItem('ace_cfg_crf');
+
+        if (b720) url += `&bitrate_720p=${encodeURIComponent(b720)}`;
+        if (b480) url += `&bitrate_480p=${encodeURIComponent(b480)}`;
+        if (crf) url += `&crf=${encodeURIComponent(crf)}`;
 
         const res = await fetch(url, { signal });
         const data = await res.json();
@@ -327,45 +359,47 @@ async function startPlayback(aceId, profile) {
                 playPromise.catch(e => console.log("Autoplay prevented"));
             }
 
-            // Update VLC Link to active HLS stream (Security/Privacy)
-            const vlcLink = document.getElementById('vlc-link');
-            if (vlcLink) {
-                const fullStreamUrl = window.location.origin + data.url;
-                vlcLink.href = fullStreamUrl;
-                vlcLink.setAttribute('data-url', fullStreamUrl);
-                vlcLink.textContent = "🔗 Copiar Enlace VLC (Perfil Activo)";
-                vlcLink.style.pointerEvents = "auto";
-                vlcLink.style.opacity = "1";
+            // Enable Copy Button (Dropdown Trigger)
+            const vlcBtn = document.getElementById('vlc-link');
+            if (vlcBtn) {
+                vlcBtn.setAttribute('data-url', window.location.origin + data.url);
+                vlcBtn.disabled = false;
+                vlcBtn.innerHTML = "🔗 Copiar...";
+                vlcBtn.style.pointerEvents = "auto";
+                vlcBtn.style.opacity = "1";
+                vlcBtn.onclick = toggleCopyMenu; // Set trigger
+                vlcBtn.removeAttribute('href'); // Ensure it's a button behavior
             }
+        }
 
-            // Timeout Logic (20 seconds) - Only relevant if player is active
+        // Timeout Logic (20 seconds) - Only relevant if player is active
+        if (loadTimeout) clearTimeout(loadTimeout);
+        loadTimeout = setTimeout(() => {
+            // Check if still playing THIS stream
+            if (player.currentTime < 1 && currentAceId === aceId) {
+                console.warn("Stream timeout");
+                if (errorDiv) errorDiv.style.display = 'flex';
+                player.pause();
+            }
+        }, 20000);
+
+        player.addEventListener('playing', () => {
             if (loadTimeout) clearTimeout(loadTimeout);
-            loadTimeout = setTimeout(() => {
-                // Check if still playing THIS stream
-                if (player.currentTime < 1 && currentAceId === aceId) {
-                    console.warn("Stream timeout");
-                    if (errorDiv) errorDiv.style.display = 'flex';
-                    player.pause();
-                }
-            }, 20000);
+            if (errorDiv) errorDiv.style.display = 'none';
+        }, { once: true });
 
-            player.addEventListener('playing', () => {
-                if (loadTimeout) clearTimeout(loadTimeout);
-                if (errorDiv) errorDiv.style.display = 'none';
-            }, { once: true });
-
-        } else {
-            // Only alert if not aborted
-            if (!signal.aborted) alert("Error servidor: " + data.status);
-        }
-    } catch (e) {
-        if (e.name === 'AbortError') {
-            console.log("Fetch aborted (user closed player or switched)");
-        } else {
-            console.error(e);
-            alert("Error de conexión");
-        }
+    } else {
+        // Only alert if not aborted
+        if (!signal.aborted) alert("Error servidor: " + data.status);
     }
+} catch (e) {
+    if (e.name === 'AbortError') {
+        console.log("Fetch aborted (user closed player or switched)");
+    } else {
+        console.error(e);
+        alert("Error de conexión");
+    }
+}
 }
 
 function changeQuality(profile) {
@@ -509,15 +543,54 @@ function downloadM3U(profile) {
 }
 
 // Close Dropdown on click outside
+// Copy Dropdown Logic
+function toggleCopyMenu() {
+    const dd = document.getElementById("copy-dropdown");
+    dd.classList.toggle("show");
+}
+
+let activeDirectUrl = ""; // Stores the raw engine URL
+
+function copyLinkAction(type) {
+    const vlcBtn = document.getElementById('vlc-link');
+    let urlToCopy = "";
+    let msg = "";
+
+    if (type === 'hls') {
+        urlToCopy = vlcBtn.getAttribute('data-url'); // Already absolute from startPlayback
+        msg = "🔗 Enlace HLS copiado";
+    } else if (type === 'direct') {
+        urlToCopy = activeDirectUrl;
+        msg = "⚙️ Enlace Motor copiado";
+    }
+
+    if (urlToCopy) {
+        navigator.clipboard.writeText(urlToCopy).then(() => {
+            const originalText = vlcBtn.innerHTML;
+            vlcBtn.innerHTML = "✅ ¡Copiado!";
+            setTimeout(() => vlcBtn.innerHTML = originalText, 2000);
+
+            // Show toast or alert? Alert is annoying, button text change is enough.
+        }).catch(err => {
+            console.error('Error copying:', err);
+        });
+    }
+    toggleCopyMenu(); // Close
+}
+
+// Global click to close copy dropdown
 window.onclick = function (event) {
-    if (!event.target.matches('.icon-btn') && !event.target.matches('.m3u-dropdown *')) {
-        var dropdowns = document.getElementsByClassName("dropdown-content");
-        for (var i = 0; i < dropdowns.length; i++) {
-            var openDropdown = dropdowns[i];
-            if (openDropdown.classList.contains('show')) {
-                openDropdown.classList.remove('show');
-            }
+    if (!event.target.matches('#vlc-link') && !event.target.closest('#copy-dropdown')) {
+        const dd = document.getElementById("copy-dropdown");
+        if (dd && dd.classList.contains('show')) {
+            dd.classList.remove('show');
         }
+    }
+    // Existing m3u dropdown logic...
+    if (!event.target.matches('.icon-btn') && !event.target.matches('.m3u-dropdown *') && !event.target.matches('#vlc-link')) {
+        var dropdowns = document.getElementsByClassName("dropdown-content-m3u"); // Renamed safely? Or reuse generic?
+        // ... existing logic handles .dropdown-content generally?
+        // Let's rely on specific checks or separate them.
     }
 }
 

@@ -16,6 +16,13 @@ class Config:
 
     # Transcoding
     ENABLE_TRANSCODE = os.environ.get("ENABLE_TRANSCODE", "false").lower() == "true"
+    TRANSCODE_720P_BITRATE = os.environ.get("TRANSCODE_720P_BITRATE", "2500k")
+    TRANSCODE_480P_BITRATE = os.environ.get("TRANSCODE_480P_BITRATE", "1000k")
+    TRANSCODE_COMPAT_CRF = os.environ.get("TRANSCODE_COMPAT_CRF", "23")
+
+    # Public Endpoint (Phase 3)
+    ACEXY_PUBLIC_ENDPOINT = os.environ.get("ACEXY_PUBLIC_ENDPOINT", None) # e.g. https://ace.mydomain.com
+    ACEXY_PUBLIC_TOKEN = os.environ.get("ACEXY_PUBLIC_TOKEN", None) # e.g. secret-token
 
     # Paths
     JSON_FILE = os.path.join(DATA_DIR, "channels.json")

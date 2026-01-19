@@ -8,9 +8,23 @@ def get_acexy_url_for_client(request_host, ace_id=None):
     If ACEXY_IP is configured as local, we assume AceXY is running 
     alongside the app and use the request's hostname.
     """
+    # Priority 1: Public Endpoint (External/Custom Domain)
+    if Config.ACEXY_PUBLIC_ENDPOINT:
+        base_url = f"{Config.ACEXY_PUBLIC_ENDPOINT}/ace/getstream"
+        
+        # Build Query Params
+        params = []
+        if ace_id:
+            params.append(f"id={ace_id}")
+        if Config.ACEXY_PUBLIC_TOKEN:
+            params.append(f"token={Config.ACEXY_PUBLIC_TOKEN}")
+            
+        if params:
+            return f"{base_url}?" + "&".join(params)
+        return base_url
+
+    # Priority 2: Local Auto-Discovery (Docker network or same host)
     target_ip = Config.ACEXY_IP
-    
-    # If AceXY is local, clients should connect to the same IP they used to access the web interface
     if Config.ACEXY_IP in LOCAL_INDICATORS:
         target_ip = request_host.split(':')[0]
         

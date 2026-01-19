@@ -186,10 +186,17 @@ def start_hls(ace_id):
         profile = 'original'
     
     # If transcode disabled, force original
+    # If transcode disabled, force original
     if not Config.ENABLE_TRANSCODE:
         profile = 'original'
 
-    success, effective_id = hls_manager.start_stream(ace_id, profile)
+    # Extract Overrides
+    overrides = {}
+    if request.args.get('bitrate_720p'): overrides['bitrate_720p'] = request.args.get('bitrate_720p')
+    if request.args.get('bitrate_480p'): overrides['bitrate_480p'] = request.args.get('bitrate_480p')
+    if request.args.get('crf'): overrides['crf'] = request.args.get('crf')
+
+    success, effective_id = hls_manager.start_stream(ace_id, profile, overrides)
     if success:
         # Wait for file creation (max 45s)
         manifest = os.path.join(Config.HLS_DIR, effective_id, 'index.m3u8')

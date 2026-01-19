@@ -92,16 +92,27 @@ class HLSManager:
             if ace_id in self.processes:
                 self.activity[ace_id] = time.time()
 
-    def start_stream(self, ace_id, profile=None):
+    def start_stream(self, ace_id, profile=None, overrides=None):
         """
         Starts the HLS stream. 
         profile: None (Original), '720p', '480p'
+        overrides: Dict with 'bitrate', 'crf' keys to override config defaults
         """
+        if overrides is None:
+            overrides = {}
+
         # If profile is original (or None), do NOT append suffix.
         effective_id = f"{ace_id}_{profile}" if profile and profile != 'original' else ace_id
 
+        # Determine params (Override > Config > Default)
+        bitrate_720p = overrides.get('bitrate_720p') or Config.TRANSCODE_720P_BITRATE
+        bitrate_480p = overrides.get('bitrate_480p') or Config.TRANSCODE_480P_BITRATE
+        crf_compat = overrides.get('crf') or Config.TRANSCODE_COMPAT_CRF
+
         with self.lock:
-            # Check if active
+            # Check if active - Simplified: If overrides are present, force restart to apply them?
+            # Or assume frontend handles stop/start? 
+            # For now, let's assume if it's running we return it. If user wants to apply new settings, they must Stop first.
             if effective_id in self.processes:
                 proc = self.processes[effective_id]
                 if proc.poll() is None:
@@ -149,9 +160,9 @@ class HLSManager:
                     cmd.insert(6, "vaapi")
                     
                     if profile == '720p':
-                        cmd.extend(["-vf", "scale_vaapi=w=-2:h=720:format=nv12", "-c:v", "h264_vaapi", "-b:v", "2500k"])
+                        cmd.extend(["-vf", "scale_vaapi=w=-2:h=720:format=nv12", "-c:v", "h264_vaapi", "-b:v", bitrate_720p])
                     elif profile == '480p':
-                        cmd.extend(["-vf", "scale_vaapi=w=-2:h=480:format=nv12", "-c:v", "h264_vaapi", "-b:v", "1000k"])
+                        cmd.extend(["-vf", "scale_vaapi=w=-2:h=480:format=nv12", "-c:v", "h264_vaapi", "-b:v", bitrate_480p])
                     elif profile == 'max_compat':
                         # Max Compatibility: Same Resolution but Force Re-encode to H.264
                         # Just format conversion to NV12 for VAAPI is enough to trigger encode
@@ -162,12 +173,12 @@ class HLSManager:
                     # CPU Fallback
                     logger.warning(f"No HW Accel detected. CPU transcoding for {profile}!")
                     if profile == '720p':
-                        cmd.extend(["-vf", "scale=-2:720", "-c:v", "libx264", "-preset", "veryfast", "-b:v", "2500k"])
+                        cmd.extend(["-vf", "scale=-2:720", "-c:v", "libx264", "-preset", "veryfast", "-b:v", bitrate_720p])
                     elif profile == '480p':
-                        cmd.extend(["-vf", "scale=-2:480", "-c:v", "libx264", "-preset", "veryfast", "-b:v", "1000k"])
+                        cmd.extend(["-vf", "scale=-2:480", "-c:v", "libx264", "-preset", "veryfast", "-b:v", bitrate_480p])
                     elif profile == 'max_compat':
                         # CPU: Re-encode with libx264, no scale
-                        cmd.extend(["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-g", "50"])
+                        cmd.extend(["-c:v", "libx264", "-preset", "veryfast", "-crf", crf_compat, "-g", "50"])
                     
                     cmd.extend(["-c:a", "aac", "-b:a", "128k"])
 
