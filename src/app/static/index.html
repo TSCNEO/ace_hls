@@ -88,38 +88,86 @@
                 </select>
             </div>
 
-            <h4 style="margin-top:15px; margin-bottom:5px; color:#aaa;">Transcodificación (Opcional)</h4>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                <div>
-                    <label style="font-size:0.8em; color:#888;">Bitrate 720p</label>
-                    <input type="text" id="cfg-bitrate-720" placeholder="2500k" onchange="saveTranscodeCfg()"
-                        style="width:100%; box-sizing:border-box; padding:5px; background:#222; border:1px solid #444; color:white;">
+            <!-- General Section -->
+            <details open style="margin-bottom: 10px; border: 1px solid #444; padding: 5px;">
+                <summary style="cursor:pointer; color:#eee;">🌐 General & Red</summary>
+                <div style="margin-top:10px; display:grid; grid-template-columns: 1fr; gap:10px;">
+                    <div>
+                        <label style="font-size:0.8em; color:#888;">Endpoint Público (URL Base)</label>
+                        <input type="text" id="cfg-endpoint" placeholder="https://..." onchange="saveTranscodeCfg()"
+                            style="width:100%; box-sizing:border-box; padding:5px; background:#222; border:1px solid #444; color:white;">
+                    </div>
+                    <div>
+                        <label style="font-size:0.8em; color:#888;">Token de Seguridad</label>
+                        <input type="text" id="cfg-token" placeholder="" onchange="saveTranscodeCfg()"
+                            style="width:100%; box-sizing:border-box; padding:5px; background:#222; border:1px solid #444; color:white;">
+                    </div>
                 </div>
-                <div>
-                    <label style="font-size:0.8em; color:#888;">Bitrate 480p</label>
-                    <input type="text" id="cfg-bitrate-480" placeholder="1000k" onchange="saveTranscodeCfg()"
-                        style="width:100%; box-sizing:border-box; padding:5px; background:#222; border:1px solid #444; color:white;">
-                </div>
-                <div style="grid-column: span 2;">
-                    <label style="font-size:0.8em; color:#888;">CRF Compatib. (0-51, default 23)</label>
-                    <input type="text" id="cfg-crf" placeholder="23" onchange="saveTranscodeCfg()"
-                        style="width:100%; box-sizing:border-box; padding:5px; background:#222; border:1px solid #444; color:white;">
-                </div>
-            </div>
+            </details>
 
-            <h4 style="margin-top:15px; margin-bottom:5px; color:#aaa;">Endpoint Público (Opcional)</h4>
-            <div style="display:grid; grid-template-columns: 1fr; gap:10px;">
-                <div>
-                    <label style="font-size:0.8em; color:#888;">URL Base (ej. https://mi-dominio.com)</label>
-                    <input type="text" id="cfg-endpoint" placeholder="https://..." onchange="saveTranscodeCfg()"
-                        style="width:100%; box-sizing:border-box; padding:5px; background:#222; border:1px solid #444; color:white;">
+            <!-- Video Advanced Section -->
+            <details style="margin-bottom: 10px; border: 1px solid #444; padding: 5px;">
+                <summary style="cursor:pointer; color:#eee;">🎬 Video Avanzado (v1.8.2)</summary>
+                <div style="margin-top:10px; display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                    <div>
+                        <label style="font-size:0.8em; color:#888;">Codec Video</label>
+                        <select id="cfg-vcodec" onchange="saveTranscodeCfg()"
+                            style="width:100%; padding:5px; background:#222; border:1px solid #444; color:white;">
+                            <option value="h264" selected>H.264 (Compatible)</option>
+                            <option value="hevc">H.265 / HEVC (Eficiente)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:0.8em; color:#888;">Preset CPU</label>
+                        <select id="cfg-preset" onchange="saveTranscodeCfg()"
+                            style="width:100%; padding:5px; background:#222; border:1px solid #444; color:white;">
+                            <option value="ultrafast">Ultrafast (Peor calidad)</option>
+                            <option value="superfast">Superfast</option>
+                            <option value="veryfast" selected>Veryfast (Default)</option>
+                            <option value="faster">Faster</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:0.8em; color:#888;">Desentrelazar</label>
+                        <div style="margin-top:5px;">
+                            <input type="checkbox" id="cfg-deinterlace" onchange="saveTranscodeCfg()"> <span
+                                style="font-size:0.9em; color:#ccc;">Activar (Deportes/TV)</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label style="font-size:0.8em; color:#888;">Audio Bitrate</label>
+                        <select id="cfg-abitrate" onchange="saveTranscodeCfg()"
+                            style="width:100%; padding:5px; background:#222; border:1px solid #444; color:white;">
+                            <option value="64k">64k (Bajo)</option>
+                            <option value="96k">96k</option>
+                            <option value="128k" selected>128k (Estándar)</option>
+                            <option value="192k">192k (Alto)</option>
+                        </select>
+                    </div>
                 </div>
-                <div>
-                    <label style="font-size:0.8em; color:#888;">Token (Opcional)</label>
-                    <input type="text" id="cfg-token" placeholder="secret-token" onchange="saveTranscodeCfg()"
-                        style="width:100%; box-sizing:border-box; padding:5px; background:#222; border:1px solid #444; color:white;">
+            </details>
+
+            <!-- Bitrates Section -->
+            <details style="margin-bottom: 10px; border: 1px solid #444; padding: 5px;">
+                <summary style="cursor:pointer; color:#eee;">📊 Bitrates & Calidad</summary>
+                <div style="margin-top:10px; display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                    <div>
+                        <label style="font-size:0.8em; color:#888;">Bitrate 720p</label>
+                        <input type="text" id="cfg-bitrate-720" placeholder="2500k" onchange="saveTranscodeCfg()"
+                            style="width:100%; box-sizing:border-box; padding:5px; background:#222; border:1px solid #444; color:white;">
+                    </div>
+                    <div>
+                        <label style="font-size:0.8em; color:#888;">Bitrate 480p</label>
+                        <input type="text" id="cfg-bitrate-480" placeholder="1000k" onchange="saveTranscodeCfg()"
+                            style="width:100%; box-sizing:border-box; padding:5px; background:#222; border:1px solid #444; color:white;">
+                    </div>
+                    <div style="grid-column: span 2;">
+                        <label style="font-size:0.8em; color:#888;">CRF Compatib. (0-51)</label>
+                        <input type="text" id="cfg-crf" placeholder="23" onchange="saveTranscodeCfg()"
+                            style="width:100%; box-sizing:border-box; padding:5px; background:#222; border:1px solid #444; color:white;">
+                    </div>
                 </div>
-            </div>
+            </details>
 
             <h3>Fuentes Activas</h3>
             <ul id="sources-list" class="source-list"></ul>

@@ -102,22 +102,27 @@ class HLSManager:
         settings = settings_manager.get_all()
 
         # Determine params (Settings > Config Defaults)
+        # Determine params (Settings > Config Defaults)
         bitrate_720p = settings.get('transcode_720p_bitrate', Config.TRANSCODE_720P_BITRATE)
         bitrate_480p = settings.get('transcode_480p_bitrate', Config.TRANSCODE_480P_BITRATE)
         crf_compat = settings.get('transcode_compat_crf', Config.TRANSCODE_COMPAT_CRF)
+        
+        # v1.8.2 Advanced Settings
+        video_codec = settings.get('transcode_video_codec', 'h264') # h264, hevc
+        audio_bitrate = settings.get('transcode_audio_bitrate', '128k')
+        preset = settings.get('transcode_preset', 'veryfast')
+        deinterlace = settings.get('transcode_deinterlace', False)
 
         # If profile is original (or None), do NOT append suffix.
         effective_id = f"{ace_id}_{profile}" if profile and profile != 'original' else ace_id
 
         with self.lock:
-            # Check if active - Simplified: If overrides are present, force restart to apply them?
-            # Or assume frontend handles stop/start? 
-            # For now, let's assume if it's running we return it. If user wants to apply new settings, they must Stop first.
+            # Check if active
             if effective_id in self.processes:
                 proc = self.processes[effective_id]
                 if proc.poll() is None:
                     self.activity[effective_id] = time.time()
-                    return True, effective_id # Return effective ID for URL gen
+                    return True, effective_id 
                 else:
                     del self.processes[effective_id]
             
@@ -144,7 +149,7 @@ class HLSManager:
             
             # Transcoding Logic
             if not Config.ENABLE_TRANSCODE or not profile or profile == 'original':
-                # Original / Passthrough (Simpler is better for stability)
+                # Original / Passthrough
                 cmd.extend(["-c", "copy"])
             else:
                 # Transcoding: Strict mapping
@@ -159,28 +164,53 @@ class HLSManager:
                     cmd.insert(5, "-hwaccel_output_format")
                     cmd.insert(6, "vaapi")
                     
-                    if profile == '720p':
-                        cmd.extend(["-vf", "scale_vaapi=w=-2:h=720:format=nv12", "-c:v", "h264_vaapi", "-b:v", bitrate_720p])
-                    elif profile == '480p':
-                        cmd.extend(["-vf", "scale_vaapi=w=-2:h=480:format=nv12", "-c:v", "h264_vaapi", "-b:v", bitrate_480p])
-                    elif profile == 'max_compat':
-                        # Max Compatibility: Same Resolution but Force Re-encode to H.264
-                        # Just format conversion to NV12 for VAAPI is enough to trigger encode
-                        cmd.extend(["-vf", "scale_vaapi=format=nv12", "-c:v", "h264_vaapi", "-b:v", "5000k", "-g", "50"])
+                    # Codec Selection (VAAPI)
+                    vcodec = "h264_vaapi" if video_codec == 'h264' else "hevc_vaapi"
                     
-                    cmd.extend(["-c:a", "aac", "-b:a", "128k"]) # Encode audio too just in case
+                    # Filters Construction
+                    filters = []
+                    if deinterlace:
+                        filters.append("deinterlace_vaapi")
+                    
+                    if profile == '720p':
+                        filters.append("scale_vaapi=w=-2:h=720:format=nv12")
+                        cmd.extend(["-c:v", vcodec, "-b:v", bitrate_720p])
+                    elif profile == '480p':
+                        filters.append("scale_vaapi=w=-2:h=480:format=nv12")
+                        cmd.extend(["-c:v", vcodec, "-b:v", bitrate_480p])
+                    elif profile == 'max_compat':
+                        filters.append("scale_vaapi=format=nv12")
+                        cmd.extend(["-c:v", vcodec, "-b:v", "5000k", "-g", "50"])
+                    
+                    if filters:
+                        cmd.extend(["-vf", ",".join(filters)])
+                    
                 else:
                     # CPU Fallback
                     logger.warning(f"No HW Accel detected. CPU transcoding for {profile}!")
-                    if profile == '720p':
-                        cmd.extend(["-vf", "scale=-2:720", "-c:v", "libx264", "-preset", "veryfast", "-b:v", bitrate_720p])
-                    elif profile == '480p':
-                        cmd.extend(["-vf", "scale=-2:480", "-c:v", "libx264", "-preset", "veryfast", "-b:v", bitrate_480p])
-                    elif profile == 'max_compat':
-                        # CPU: Re-encode with libx264, no scale
-                        cmd.extend(["-c:v", "libx264", "-preset", "veryfast", "-crf", crf_compat, "-g", "50"])
                     
-                    cmd.extend(["-c:a", "aac", "-b:a", "128k"])
+                    # Codec Selection (CPU)
+                    vcodec = "libx264" if video_codec == 'h264' else "libx265"
+                    
+                    # Filters Construction
+                    filters = []
+                    if deinterlace:
+                        filters.append("yadif")
+                        
+                    if profile == '720p':
+                        filters.append("scale=-2:720")
+                        cmd.extend(["-c:v", vcodec, "-preset", preset, "-b:v", bitrate_720p])
+                    elif profile == '480p':
+                        filters.append("scale=-2:480")
+                        cmd.extend(["-c:v", vcodec, "-preset", preset, "-b:v", bitrate_480p])
+                    elif profile == 'max_compat':
+                        cmd.extend(["-c:v", vcodec, "-preset", preset, "-crf", crf_compat, "-g", "50"])
+                    
+                    if filters:
+                        cmd.extend(["-vf", ",".join(filters)])
+                
+                # Audio Encoding (Common)
+                cmd.extend(["-c:a", "aac", "-b:a", audio_bitrate])
 
             # Global HLS Flags
             cmd.extend([

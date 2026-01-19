@@ -45,6 +45,13 @@ async function fetchSettings() {
         document.getElementById('cfg-crf').value = settings.transcode_compat_crf || '';
         document.getElementById('cfg-endpoint').value = settings.acexy_public_endpoint || '';
         document.getElementById('cfg-token').value = settings.acexy_public_token || '';
+
+        // v1.8.2 Advanced
+        document.getElementById('cfg-vcodec').value = settings.transcode_video_codec || 'h264';
+        document.getElementById('cfg-preset').value = settings.transcode_preset || 'veryfast';
+        document.getElementById('cfg-abitrate').value = settings.transcode_audio_bitrate || '128k';
+        document.getElementById('cfg-deinterlace').checked = settings.transcode_deinterlace || false;
+
     } catch (e) {
         console.error("Failed to fetch settings:", e);
     }
@@ -56,7 +63,12 @@ async function saveSettings() {
         transcode_480p_bitrate: document.getElementById('cfg-bitrate-480').value,
         transcode_compat_crf: document.getElementById('cfg-crf').value,
         acexy_public_endpoint: document.getElementById('cfg-endpoint').value,
-        acexy_public_token: document.getElementById('cfg-token').value
+        acexy_public_token: document.getElementById('cfg-token').value,
+        // v1.8.2
+        transcode_video_codec: document.getElementById('cfg-vcodec').value,
+        transcode_preset: document.getElementById('cfg-preset').value,
+        transcode_audio_bitrate: document.getElementById('cfg-abitrate').value,
+        transcode_deinterlace: document.getElementById('cfg-deinterlace').checked
     };
 
     try {
