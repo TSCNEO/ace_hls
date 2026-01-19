@@ -47,6 +47,10 @@ El proyecto se ejecuta sobre Docker y consta de tres servicios principales defin
 │   │   │   ├── settings_manager.py # (v1.8.1) Gestión de configuración backend (settings.json)
 │   │   │   └── hls_manager.py     # Gestión de procesos FFmpeg
 │   │   └── static/     # Frontend (HTML, CSS, JS, Iconos)
+│   │       ├── index.html      # Interfaz principal (Grid, Player, Settings)
+│   │       ├── dashboard.html  # (v1.9.0) Panel de sistema y logs
+│   │       ├── script.js       # Lógica de frontend
+│   │       └── style.css       # Estilos
 │   ├── requirements.txt
 │   └── wsgi.py         # Punto de entrada para Gunicorn
 

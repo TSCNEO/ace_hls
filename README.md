@@ -56,6 +56,12 @@ Usa la lista M3U generada dinámicamente:
 - **URL**: `http://TU_IP:8088/playlist.m3u`
 - Esta lista usa enlaces directos HTTP (`http://TU_IP:ACEXY_PORT/ace/getstream...`) para que la carga sea instantánea y eficiente (sin transcodificación).
 
+### 🖥️ Dashboard de Sistema
+Accede a `http://TU_IP:8088/dashboard` o pulsa el icono 🖥️ en la cabecera.
+- Monitoriza el uso de CPU, RAM y espacio en disco.
+- Visualiza los streams activos y detenlos manualmente si es necesario.
+- Revisa los últimos logs del sistema para depurar errores.
+
 ---
 
 ## 🗑️ Limpieza Automática

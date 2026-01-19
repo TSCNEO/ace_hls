@@ -261,9 +261,7 @@ class HLSManager:
                 if ace_id in self.validated_sessions: self.validated_sessions.remove(ace_id)
                 
                 stream_dir = os.path.join(Config.HLS_DIR, ace_id)
-        if os.path.exists(stream_dir):
-                    shutil.rmtree(stream_dir)
-
+                if os.path.exists(stream_dir):
                     shutil.rmtree(stream_dir)
 
     def get_active_streams_info(self):
