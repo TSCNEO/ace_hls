@@ -395,10 +395,6 @@ button:hover {
     color: white;
 }
 
-footer {
-    text-align: center;
-}
-
 /* Dropdown Menu Row */
 .menu-row {
     display: flex;
@@ -406,6 +402,7 @@ footer {
     justify-content: space-between;
     padding-right: 5px;
 }
+
 .menu-row a {
     flex-grow: 1;
     display: block;
@@ -413,9 +410,11 @@ footer {
     text-decoration: none;
     color: var(--text-color);
 }
+
 .menu-row a:hover {
     background-color: var(--hover-color);
 }
+
 .icon-btn-small {
     background: none;
     border: none;
@@ -426,9 +425,13 @@ footer {
     color: var(--text-color);
     transition: background 0.2s;
 }
+
 .icon-btn-small:hover {
-    background-color: rgba(255,255,255,0.1);
+    background-color: rgba(255, 255, 255, 0.1);
 }
+
+footer {
+    text-align: center;
     margin-top: 40px;
     padding: 20px;
     color: #666;

@@ -820,28 +820,39 @@ async function sendFeedback(vote) {
     if (vote === 'like' && likeBtn) likeBtn.classList.add('active-like');
     if (vote === 'dislike' && dislikeBtn) dislikeBtn.classList.add('active-dislike');
 
+    // Optimistic UI Update
+    const ch = allChannels.find(c => c.id === currentAceId);
+    let previousStats = null;
+
+    if (ch) {
+        if (!ch.stats) ch.stats = { success_count: 0, last_ok: Math.floor(Date.now() / 1000) };
+        if (!ch.stats.diff_votes) ch.stats.diff_votes = 0;
+
+        // Save previous state for rollback
+        previousStats = { ...ch.stats };
+
+        if (vote === 'like') ch.stats.diff_votes++;
+        else ch.stats.diff_votes--;
+
+        filterChannels(); // Re-render grid immediately
+    }
+
     try {
         await fetch('/api/stats/feedback', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: currentAceId, vote: vote })
         });
-
-        // Optimistic UI Update
-        const ch = allChannels.find(c => c.id === currentAceId);
-        if (ch) {
-            if (!ch.stats) ch.stats = { success_count: 0, last_ok: Math.floor(Date.now() / 1000) };
-            if (!ch.stats.diff_votes) ch.stats.diff_votes = 0;
-
-            if (vote === 'like') ch.stats.diff_votes++;
-            else ch.stats.diff_votes--;
-
-            filterChannels(); // Re-render grid immediately
-        }
-
     } catch (e) {
         console.error("Feedback error", e);
+        // Rollback
+        if (ch && previousStats) {
+            ch.stats = previousStats;
+            filterChannels();
+        }
     }
+
+
 }
 
 function updatePlayerTechBadge(t) {
