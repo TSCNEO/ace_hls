@@ -13,6 +13,7 @@ class Config:
     # AceXY Connection
     ACEXY_IP = os.environ.get("ACEXY_IP", "127.0.0.1")
     ACEXY_PORT = os.environ.get("ACEXY_PORT", "8080")
+    ACEXY_API_TOKEN = os.environ.get("ACEXY_API_TOKEN", "defaultpassword")
 
     # Transcoding
     ENABLE_TRANSCODE = os.environ.get("ENABLE_TRANSCODE", "false").lower() == "true"

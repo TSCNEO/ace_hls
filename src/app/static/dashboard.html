@@ -198,25 +198,48 @@
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Active Streams -->
-        <div class="card">
-            <h3>Transcodificadores Activos</h3>
-            <table id="streams-table">
-                <thead>
-                    <tr>
-                        <th>ID / Source</th>
-                        <th>Profile</th>
-                        <th>Uptime</th>
-                        <th>Acciones</th>
-                    </tr>
-                </thead>
-                <tbody id="streams-body">
-                    <!-- JS populated -->
-                </tbody>
-            </table>
-            <div id="streams-empty" class="empty-state">No hay streams activos</div>
-        </div>
+    <!-- Orchestrator Status -->
+    <div class="card">
+        <h3>🧩 Orchestrator Status</h3>
+        <table id="orchestrator-table">
+            <thead>
+                <tr>
+                    <th>Engine</th>
+                    <th>Host:Port</th>
+                    <th>Streams</th>
+                    <th>uptime</th>
+                    <th>Health</th>
+                </tr>
+            </thead>
+            <tbody id="orchestrator-body">
+            </tbody>
+        </table>
+        <div id="orchestrator-empty" class="empty-state">Conectando...</div>
+    </div>
+
+    <!-- Active Streams -->
+    <div class="card">
+        <h3>Transcodificadores Activos</h3>
+        <table id="streams-table">
+            <thead>
+                <tr>
+                    <th>ID / Source</th>
+                    <th>Profile</th>
+                    <th>Peers</th>
+                    <th>Down</th>
+                    <th>Up</th>
+                    <th>Uptime</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="streams-body">
+                <!-- JS populated -->
+            </tbody>
+        </table>
+        <div id="streams-empty" class="empty-state">No hay streams activos</div>
+    </div>
     </div>
 
     <div class="card">
@@ -251,8 +274,16 @@ Cargando logs del sistema...
 
         async function fetchStats() {
             try {
-                const res = await fetch('/api/system/stats');
+                const [res, orchRes] = await Promise.all([
+                    fetch('/api/system/stats'),
+                    fetch('/api/orchestrator/streams')
+                ]);
                 const data = await res.json();
+                const orchData = await orchRes.json();
+                const statsMap = {};
+                if (Array.isArray(orchData)) {
+                    orchData.forEach(s => statsMap[s.key] = s);
+                }
 
                 // Fetch logs separately
                 fetch('/api/system/logs')
@@ -287,11 +318,23 @@ Cargando logs del sistema...
                         empty.style.display = 'none';
                         data.streams.forEach(stream => {
                             const tr = document.createElement('tr');
+
+                            const stats = statsMap[stream.id] || {};
+                            const peers = stats.peers !== undefined ? stats.peers : '-';
+                            const speedDownVal = stats.speed_down ? (stats.speed_down / 1024) : 0;
+                            const speedDown = speedDownVal < 10 && speedDownVal > 0 ? speedDownVal.toFixed(1) + ' KB/s' : speedDownVal.toFixed(0) + ' KB/s';
+
+                            const speedUpVal = stats.speed_up ? (stats.speed_up / 1024) : 0;
+                            const speedUp = speedUpVal < 10 && speedUpVal > 0 ? speedUpVal.toFixed(1) + ' KB/s' : speedUpVal.toFixed(0) + ' KB/s';
+
                             tr.innerHTML = `
                             <td title="${stream.id}" style="max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                                 ${stream.id.substring(0, 10)}...
                             </td>
                             <td><span class="status-badge">${stream.profile}</span></td>
+                            <td>👤 ${peers}</td>
+                            <td>⬇️ ${speedDown}</td>
+                            <td>⬆️ ${speedUp}</td>
                             <td>${formatTime(stream.uptime)}</td>
                             <td>
                                 <button class="action-btn" onclick="stopStream('${stream.id}')">⏹️ Stop</button>
@@ -304,7 +347,48 @@ Cargando logs del sistema...
             } catch (e) {
                 console.error("Dashboard fetch error:", e);
             }
+
+            // Fetch Orchestrator Stats
+            try {
+                const res = await fetch('/api/orchestrator/status');
+                const engines = await res.json();
+                const tbody = document.getElementById('orchestrator-body');
+                const empty = document.getElementById('orchestrator-empty');
+
+                if (Array.isArray(engines)) {
+                    tbody.innerHTML = '';
+                    if (engines.length === 0) {
+                        empty.textContent = 'No hay motores activos';
+                        empty.style.display = 'block';
+                    } else {
+                        empty.style.display = 'none';
+                        engines.forEach(eng => {
+                            const tr = document.createElement('tr');
+                            const isHealthy = eng.health_status === 'healthy';
+                            const streamsCount = eng.streams ? eng.streams.length : 0;
+
+                            // Uptime calc
+                            const uptime = eng.first_seen ? formatTime((Date.now() - new Date(eng.first_seen).getTime()) / 1000) : '-';
+
+                            tr.innerHTML = `
+                                <td>${eng.container_name}</td>
+                                <td>${eng.host}:${eng.port}</td>
+                                <td>${streamsCount}</td>
+                                <td>${uptime}</td>
+                                <td><span class="status-badge" style="background:${isHealthy ? 'rgba(46, 160, 67, 0.2)' : 'rgba(218, 54, 51, 0.2)'}; color:${isHealthy ? '#2ea043' : '#da3633'}">${eng.health_status}</span></td>
+                            `;
+                            tbody.appendChild(tr);
+                        });
+                    }
+                } else if (engines.error) {
+                    empty.textContent = 'Error: ' + engines.error;
+                    empty.style.display = 'block';
+                }
+            } catch (e) {
+                console.error("Orchestrator fetch error:", e);
+            }
         }
+
 
         async function stopStream(aceId) {
             if (!confirm('¿Seguro que quieres detener este stream?')) return;

@@ -19,7 +19,7 @@
     <script src="https://cdn.vidstack.io/player" type="module"></script>
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="style.css?v=1.9.8">
+    <link rel="stylesheet" href="style.css?v=v2.1.2">
 </head>
 
 <body>
@@ -240,8 +240,10 @@
             </div>
 
             <div class="player-controls-row"
-                style="display:flex; justify-content:center; gap:15px; margin-bottom:10px;">
+                style="display:flex; justify-content:center; gap:15px; margin-bottom:10px; flex-wrap:wrap;">
                 <div id="player-tech-info" style="min-height:20px;"></div>
+                <div id="player-engine-info"
+                    style="min-height:20px; color:#aaa; font-size:0.9em; display:flex; align-items:center;"></div>
             </div>
 
             <div id="player-error"
@@ -306,7 +308,7 @@
     </footer>
 
     <!-- Custom Scripts -->
-    <script src="script.js?v=1.9.8"></script>
+    <script src="script.js?v=v2.1.2"></script>
     </script>
     <script>
         if ('serviceWorker' in navigator) {

@@ -245,6 +245,20 @@ def submit_feedback():
     stats_manager.update_user_feedback(ace_id, vote)
     return jsonify({"status": "ok", "vote": vote})
 
+@main_bp.route('/api/orchestrator/status')
+def orchestrator_status():
+    from app.services.orchestrator import OrchestratorService
+    service = OrchestratorService()
+    data = service.get_status()
+    return jsonify(data)
+
+
+@main_bp.route('/api/orchestrator/streams')
+def orchestrator_streams():
+    from app.services.orchestrator import OrchestratorService
+    service = OrchestratorService()
+    data = service.get_streams()
+    return jsonify(data)
 
 @main_bp.route('/api/hls/start/<ace_id>')
 def start_hls(ace_id):

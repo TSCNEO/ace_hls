@@ -324,11 +324,87 @@ function isIOS() {
 
 let loadTimeout;
 let statsInterval;
+let engineInfoInterval;
+
+// Phase 5: Engine Info Logic
+async function fetchEngineInfo(aceId, isUpdate = false) {
+    const container = document.getElementById('player-engine-info');
+    if (!container) return;
+
+    if (!isUpdate) {
+        container.innerHTML = '<span class="status-dot dot-grey" style="position:static; display:inline-block; margin-right:5px;"></span> Buscando info...';
+    }
+    // console.log(`[EngineInfo] Fetching for ID: ${aceId} (Update: ${isUpdate})`);
+
+    try {
+        const [engRes, strRes] = await Promise.all([
+            fetch('/api/orchestrator/status'),
+            fetch('/api/orchestrator/streams')
+        ]);
+
+        const engines = await engRes.json();
+        const streams = await strRes.json();
+
+        let html = '';
+
+        // Engine Info
+        if (Array.isArray(engines)) {
+            const engine = engines.find(e =>
+                e.streams && e.streams.some(s => s.toLowerCase().includes(aceId.toLowerCase()))
+            );
+            if (engine) {
+                const isHealthy = engine.health_status === 'healthy';
+                const color = isHealthy ? '#2ea043' : '#da3633';
+                html += `
+                    <span class="status-dot" style="position:static; display:inline-block; margin-right:5px; background:${color}"></span>
+                    Engine: <strong>${engine.container_name}</strong>
+                `;
+            }
+        }
+
+        // Stream Stats
+        if (Array.isArray(streams)) {
+            const stream = streams.find(s => s.key && s.key.toLowerCase() === aceId.toLowerCase());
+            if (stream) {
+                const peers = stream.peers !== undefined ? stream.peers : 0;
+                const downVal = stream.speed_down ? (stream.speed_down / 1024) : 0;
+                const downStr = downVal < 10 && downVal > 0 ? downVal.toFixed(1) : downVal.toFixed(0);
+                html += ` <span style="margin-left:10px; opacity:0.8;">| 👤 ${peers} | ⬇️ ${downStr} KB/s</span>`;
+            }
+        }
+
+        if (html === '') {
+            container.innerHTML = 'Motor no identificado';
+        } else {
+            container.innerHTML = html;
+        }
+
+    } catch (e) {
+        console.error("Engine info error", e);
+        container.innerHTML = '';
+    }
+}
 
 async function playChannel(channel) {
+    if (!channel) return;
+
+    // Call Engine Info
+    fetchEngineInfo(channel.id);
+
     const modal = document.getElementById('player-modal');
     const errorDiv = document.getElementById('player-error');
     errorDiv.style.display = 'none'; // Reset error
+
+    // Reset Engine Info if exists (it's updated by async call above, but good to clear if re-opening)
+    const engineInfo = document.getElementById('player-engine-info');
+
+    // Clear previous if any
+    if (engineInfoInterval) clearInterval(engineInfoInterval);
+
+    fetchEngineInfo(channel.id); // Initial call
+    engineInfoInterval = setInterval(() => fetchEngineInfo(channel.id, true), 3000); // Poll every 3s
+
+    // ... rest of function continues ...
 
     // Append ID to title for visibility
     const displayTitle = `${channel.name} <span style="font-size:0.8em; color:#ddd;">[${channel.id.slice(-4)}]</span>`;
@@ -529,6 +605,7 @@ function closePlayer(fromHistory = false) {
     document.getElementById('player-modal').style.display = 'none';
     if (loadTimeout) clearTimeout(loadTimeout);
     if (statsInterval) clearInterval(statsInterval);
+    if (engineInfoInterval) clearInterval(engineInfoInterval);
 }
 
 function playManual() {
