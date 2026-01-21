@@ -257,7 +257,7 @@ function filterChannels() {
                 const t = ch.stats.tech_info;
                 let res = '';
                 if (t.height) res = t.height >= 720 ? `${t.height}p` : 'SD';
-                if (t.fps && t.fps > 30) res += `${t.fps}`;
+                if (t.fps) res += `${t.fps}`;
 
                 let codec = t.acodec ? t.acodec.toUpperCase() : '';
                 if (codec === 'AC3' || codec === 'EAC3') codec = '🔊 ' + codec;
