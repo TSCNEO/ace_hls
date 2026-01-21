@@ -33,6 +33,7 @@ El proyecto se ejecuta sobre Docker y consta de tres servicios principales defin
 ```
 /root/OnGoing/ace_hls/
 ├── .env                # Variables de entorno (puertos, IPs, configuración)
+│                         # Clave: ACEXY_API_TOKEN para autenticación con orquestador
 ├── docker-compose.yml  # Orquestación de servicios
 ├── Dockerfile          # Definición de la imagen de ace-hls
 ├── src/

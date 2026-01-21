@@ -38,7 +38,13 @@ Edita `.env` si es necesario.
 ```bash
 cp .env.example .env
 ```
-Edita `.env` si es necesario (por defecto funciona para uso local).
+Edita `.env` si es necesario. Variables principales:
+
+| Variable | Descripción | Defecto |
+|---|---|---|
+| `URL_ORIGEN` | URL de tu lista M3U (opcional) | (vacio) |
+| `ENABLE_TRANSCODE` | Habilitar transcodificación FFMPEG | `false` |
+| `ACEXY_API_TOKEN` | Token para stats del Orquestador (opcional) | `defaultpassword` |
 
 ### 2. Arrancar
 ```bash
