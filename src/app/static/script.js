@@ -185,11 +185,13 @@ function populateCategoryDropdown() {
     if (categories.has(current) || current === 'favorites') select.value = current;
 }
 
+let filteredChannels = []; // Global variable for filtered channels
+
 function filterChannels() {
     const search = document.getElementById('searchInput').value.toLowerCase();
     const cat = document.getElementById('categorySelect').value;
 
-    const filtered = allChannels.filter(ch => {
+    filteredChannels = allChannels.filter(ch => {
         const matchesSearch = ch.name.toLowerCase().includes(search);
         if (!matchesSearch) return false;
 
@@ -198,8 +200,12 @@ function filterChannels() {
         return ch.group === cat;
     });
 
+    renderChannels(filteredChannels);
+}
+
+function renderChannels(channelsToRender) {
     // Sort: Favorites first, then alphabetical
-    filtered.sort((a, b) => {
+    channelsToRender.sort((a, b) => {
         const favA = favorites.has(a.id);
         const favB = favorites.has(b.id);
         if (favA && !favB) return -1;

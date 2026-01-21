@@ -19,7 +19,7 @@
     <script src="https://cdn.vidstack.io/player" type="module"></script>
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="style.css?v=1.9.3">
+    <link rel="stylesheet" href="style.css?v=1.9.5">
 </head>
 
 <body>
@@ -227,8 +227,17 @@
     <!-- Modal with Vidstack -->
     <div id="player-modal">
         <div id="player-container">
-            <button class="close-btn" onclick="closePlayer()">&times;</button>
-            <h2 id="player-title" style="color:white; margin:0 0 5px 0; text-align: center;"></h2>
+            <div class="player-header-row"
+                style="display:flex; align-items:center; justify-content:center; position:relative; margin-bottom:10px;">
+                <button class="zap-btn" onclick="playPrevChannel()" title="Canal Anterior (Zapping)">❮</button>
+                <div style="flex-grow:1; display:flex; flex-direction:column; align-items:center; overflow:hidden;">
+                    <h2 id="player-title"
+                        style="color:white; margin:0; text-align: center; font-size:1.1rem; line-height:1.2;"></h2>
+                </div>
+                <button class="zap-btn" onclick="playNextChannel()" title="Canal Siguiente (Zapping)">❯</button>
+                <button class="close-btn" onclick="closePlayer()"
+                    style="position:absolute; right:0; top:-5px;">&times;</button>
+            </div>
 
             <div class="player-controls-row"
                 style="display:flex; justify-content:center; gap:15px; margin-bottom:10px;">
@@ -297,7 +306,7 @@
     </footer>
 
     <!-- Custom Scripts -->
-    <script src="script.js?v=1.9.3"></script>
+    <script src="script.js?v=1.9.5"></script>
     <script>
         if ('serviceWorker' in navigator) {
             // Placeholder for service worker registration logic

@@ -557,3 +557,29 @@ footer {
 }
 
 /* Hidden by default until checked */
+
+/* Zapping Buttons */
+.zap-btn {
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 1.5rem;
+    padding: 0 15px;
+    cursor: pointer;
+    transition: color 0.2s, transform 0.1s;
+    user-select: none;
+}
+
+.zap-btn:hover {
+    color: white;
+    transform: scale(1.2);
+}
+
+.zap-btn:active {
+    transform: scale(0.9);
+}
+
+.player-header-row {
+    padding-right: 40px;
+    /* Space for close button */
+}
