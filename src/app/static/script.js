@@ -203,6 +203,27 @@ function filterChannels() {
     renderChannels(filteredChannels);
 }
 
+// Zapping Logic
+function playNextChannel() {
+    if (!currentAceId || filteredChannels.length === 0) return;
+    const idx = filteredChannels.findIndex(ch => ch.id === currentAceId);
+    if (idx === -1) return;
+
+    // Loop to start if at end
+    const nextIdx = (idx + 1) % filteredChannels.length;
+    playChannel(filteredChannels[nextIdx]);
+}
+
+function playPrevChannel() {
+    if (!currentAceId || filteredChannels.length === 0) return;
+    const idx = filteredChannels.findIndex(ch => ch.id === currentAceId);
+    if (idx === -1) return;
+
+    // Loop to end if at start
+    const prevIdx = (idx - 1 + filteredChannels.length) % filteredChannels.length;
+    playChannel(filteredChannels[prevIdx]);
+}
+
 function renderChannels(channelsToRender) {
     // Sort: Favorites first, then alphabetical
     channelsToRender.sort((a, b) => {
