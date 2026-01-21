@@ -105,16 +105,11 @@
     <div id="settings-modal" class="modal">
         <div class="modal-content">
             <span class="close-btn" onclick="closeSettings()">&times;</span>
-            <h2>Gestión de Fuentes</h2>
-            <div class="source-input-group">
-                <input type="text" id="newSourceUrl" placeholder="URL lista M3U (ej: https://...)"
-                    style="flex-grow:1; padding:8px;">
-                <button onclick="addSource()">Añadir</button>
-            </div>
+            <h2>Configuración</h2>
 
-            <h3 style="margin-top:20px;">Preferencias</h3>
-            <div class="source-input-group" style="align-items:center;">
-                <label for="default-quality" style="color:#ddd; margin-right:10px;">Calidad por Defecto:</label>
+            <div class="source-input-group" style="align-items:center; margin-bottom:10px;">
+                <label for="default-quality" style="color:#ddd; margin-right:10px; font-size:0.9em;">Calidad por
+                    Defecto:</label>
                 <select id="default-quality" onchange="saveDefaultQuality()" class="utility-select"
                     style="flex-grow:1;">
                     <option value="original">Original (Passthrough)</option>
@@ -124,8 +119,27 @@
                 </select>
             </div>
 
+            <!-- Lists Management Section -->
+            <details style="margin-bottom: 10px; border: 1px solid #444; padding: 5px;">
+                <summary style="cursor:pointer; color:#eee;">📂 Listas M3U</summary>
+                <div style="margin-top:10px;">
+                    <div class="source-input-group">
+                        <input type="text" id="newSourceUrl" placeholder="URL lista M3U (ej: https://...)"
+                            style="flex-grow:1; padding:8px;">
+                        <button onclick="addSource()">Añadir</button>
+                    </div>
+                    <h4 style="margin:10px 0 5px 0; font-size:0.9em; color:#aaa;">Fuentes Activas</h4>
+                    <ul id="sources-list" class="source-list"></ul>
+                    <div class="modal-actions" style="margin-top: 10px; text-align: right;">
+                        <button onclick="refreshChannelsFromServer()"
+                            style="background: var(--primary-color); font-size:0.8em; padding:5px 10px;">Actualizar
+                            Canales Ahora</button>
+                    </div>
+                </div>
+            </details>
+
             <!-- General Section -->
-            <details open style="margin-bottom: 10px; border: 1px solid #444; padding: 5px;">
+            <details style="margin-bottom: 10px; border: 1px solid #444; padding: 5px;">
                 <summary style="cursor:pointer; color:#eee;">🌐 General & Red</summary>
                 <div style="margin-top:10px; display:grid; grid-template-columns: 1fr; gap:10px;">
                     <div>
@@ -207,12 +221,6 @@
                 </div>
             </details>
 
-            <h3>Fuentes Activas</h3>
-            <ul id="sources-list" class="source-list"></ul>
-            <div class="modal-actions" style="margin-top: 20px; text-align: right;">
-                <button onclick="refreshChannelsFromServer()" style="background: var(--primary-color);">Actualizar
-                    Canales Ahora</button>
-            </div>
         </div>
     </div>
 

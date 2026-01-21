@@ -319,15 +319,14 @@ button:hover {
 
 .modal-content {
     background: var(--card-bg);
-    padding: 25px;
-    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    padding: 20px;
+    border-radius: 8px;
     width: 90%;
     max-width: 600px;
-    position: relative;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+    /* FIX: Scroll on mobile */
     max-height: 90vh;
-    display: flex;
-    flex-direction: column;
+    overflow-y: auto;
 }
 
 .utility-options-row {
