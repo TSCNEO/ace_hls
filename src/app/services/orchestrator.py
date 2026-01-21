@@ -13,7 +13,7 @@ class OrchestratorService:
 
     def is_enabled(self):
         from app.services.settings_manager import settings_manager
-        return settings_manager.get("orchestrator_enabled", True)
+        return settings_manager.get("orchestrator_enabled", False)
 
     def get_status(self):
         if not self.is_enabled():

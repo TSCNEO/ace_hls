@@ -24,7 +24,7 @@ class SettingsManager:
                 "transcode_audio_bitrate": "128k",
                 "transcode_preset": "veryfast", # ultrafast, superfast, veryfast, faster, fast, medium...
                 "transcode_deinterlace": False,
-                "orchestrator_enabled": True
+                "orchestrator_enabled": False
             }
             self.save(defaults)
             logger.info(f"Created settings.json with defaults: {defaults}")

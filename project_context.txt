@@ -16,7 +16,8 @@ El proyecto se ejecuta sobre Docker y consta de tres servicios principales defin
     *   **Puerto**: 8088 (Externo) -> 5000 (Interno).
     *   **Reglas de Desarrollo**: 
         *   **Siempre actualizar `src/app/version.txt` al hacer un commit**.
-    *   **Dependencias**: `requirements.txt` (Flask, requests, gunicorn), FFmpeg (instalado via Dockerfile).
+    *   **Dependencias**: `requirements.txt` (Flask, requests, gunicorn), FFmpeg.
+    *   **Integraciones External**: [AceStream Orchestrator](https://github.com/krinkuto11/acestream-orchestrator) (Opcional, v2.x) para estadísticas de rendimiento.
 
 2.  **acexy (`acexy`)**:
     *   **Función**: Un proxy intermedio que facilita la comunicación con el motor AceStream. Expone una API HTTP para solicitar streams por ID.
@@ -45,6 +46,7 @@ El proyecto se ejecuta sobre Docker y consta de tres servicios principales defin
 │   │   │   ├── source_manager.py  # Gestión persistente de fuentes M3U
 │   │   │   ├── stats_manager.py   # Persistencia de salud y metadatos de streams
 │   │   │   ├── settings_manager.py # (v1.8.1) Gestión de configuración backend (settings.json)
+│   │   │   ├── orchestrator.py    # (v2.0) Cliente API para AceStream Orchestrator
 │   │   │   └── hls_manager.py     # Gestión de procesos FFmpeg
 │   │   └── static/     # Frontend (HTML, CSS, JS, Iconos)
 │   │       ├── index.html      # Interfaz principal (Grid, Player, Settings)
@@ -115,6 +117,11 @@ AceHLS utiliza un volumen de Docker montado en `/app/data` para persistencia:
     *   Calcula el conteo de éxitos (`success_count`) y la última vez que se vió activo (`last_ok`).
     *   Gestiona el feedback de usuarios (Like/Dislike), calculando `diff_votes` (votos netos) para mostrar indicadores de calidad en el frontend.
     *   Extrae metadatos técnicos (Resolución, CODEC, FPS) usando `ffprobe` asíncrono y los anexa a la información del canal.
+
+*   **`src/app/services/orchestrator.py` (v2.x)**:
+    *   Gestiona la comunicación con el Orquestador externo (si está habilitado en Settings).
+    *   Obtiene estado de motores y estadísticas de streams (Peers, Velocidad).
+    *   Endpoints: `/engines` (Salud), `/streams` (Stats).
 
 *   **Frontend (`src/app/static/`)**:
     *   **Votos**: Permite calificar streams. Si `diff_votes < 0`, muestra un punto rojo 🔴 indicando problemas.

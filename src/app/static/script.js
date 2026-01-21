@@ -52,7 +52,7 @@ async function fetchSettings() {
         document.getElementById('cfg-preset').value = settings.transcode_preset || 'veryfast';
         document.getElementById('cfg-abitrate').value = settings.transcode_audio_bitrate || '128k';
         document.getElementById('cfg-deinterlace').checked = settings.transcode_deinterlace || false;
-        document.getElementById('cfg-orchestrator').checked = settings.orchestrator_enabled !== false; // Default true if undefined
+        document.getElementById('cfg-orchestrator').checked = settings.orchestrator_enabled === true; // Default false if undefined
 
     } catch (e) {
         console.error("Failed to fetch settings:", e);
