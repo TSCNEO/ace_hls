@@ -145,7 +145,13 @@ class HLSManager:
             output_file = os.path.join(stream_dir, "index.m3u8")
 
             # --- BUILD COMMAND ---
-            cmd = ["ffmpeg", "-fflags", "+genpts+igndts", "-i", start_url]
+            # Added resilience flags for slow streams (v2.2.2)
+            cmd = ["ffmpeg", 
+                   "-analyzeduration", "10000000", "-probesize", "10000000", # 10s buffer for analysis
+                   # Reconnect logic for HTTP input
+                   "-reconnect", "1", "-reconnect_at_eof", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
+                   "-rw_timeout", "15000000", # 15s read/write timeout
+                   "-fflags", "+genpts+igndts", "-i", start_url]
             
             # Transcoding Logic
             if not Config.ENABLE_TRANSCODE or not profile or profile == 'original':
