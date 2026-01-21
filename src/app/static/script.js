@@ -367,8 +367,8 @@ async function fetchEngineInfo(aceId, isUpdate = false) {
             const stream = streams.find(s => s.key && s.key.toLowerCase() === aceId.toLowerCase());
             if (stream) {
                 const peers = stream.peers !== undefined ? stream.peers : 0;
-                const downVal = stream.speed_down ? (stream.speed_down / 1024) : 0;
-                const downStr = downVal < 10 && downVal > 0 ? downVal.toFixed(1) : downVal.toFixed(0);
+                const downVal = stream.speed_down ? stream.speed_down : 0;
+                const downStr = downVal; // Raw value is apparently already KB/s
                 html += ` <span style="margin-left:10px; opacity:0.8;">| 👤 ${peers} | ⬇️ ${downStr} KB/s</span>`;
             }
         }
