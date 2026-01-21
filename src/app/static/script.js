@@ -52,6 +52,7 @@ async function fetchSettings() {
         document.getElementById('cfg-preset').value = settings.transcode_preset || 'veryfast';
         document.getElementById('cfg-abitrate').value = settings.transcode_audio_bitrate || '128k';
         document.getElementById('cfg-deinterlace').checked = settings.transcode_deinterlace || false;
+        document.getElementById('cfg-orchestrator').checked = settings.orchestrator_enabled !== false; // Default true if undefined
 
     } catch (e) {
         console.error("Failed to fetch settings:", e);
@@ -76,7 +77,8 @@ async function saveSettings() {
         transcode_video_codec: document.getElementById('cfg-vcodec').value,
         transcode_preset: document.getElementById('cfg-preset').value,
         transcode_audio_bitrate: document.getElementById('cfg-abitrate').value,
-        transcode_deinterlace: document.getElementById('cfg-deinterlace').checked
+        transcode_deinterlace: document.getElementById('cfg-deinterlace').checked,
+        orchestrator_enabled: document.getElementById('cfg-orchestrator').checked
     };
 
     try {

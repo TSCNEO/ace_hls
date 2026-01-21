@@ -11,7 +11,14 @@ class OrchestratorService:
         self.token = os.getenv('ACEXY_API_TOKEN', 'defaultpassword')
         self.base_url = f"http://{self.ip}:{self.port}"
 
+    def is_enabled(self):
+        from app.services.settings_manager import settings_manager
+        return settings_manager.get("orchestrator_enabled", True)
+
     def get_status(self):
+        if not self.is_enabled():
+            return {"error": "Orchestrator integration is disabled in settings"}
+        
         url = f"{self.base_url}/engines"
         headers = {
             'Authorization': f'Bearer {self.token}',
@@ -28,6 +35,9 @@ class OrchestratorService:
             logger.error("Orchestrator request timed out")
             return {"error": "Timeout connecting to Orchestrator"}
     def get_streams(self):
+        if not self.is_enabled():
+            return []
+
         url = f"{self.base_url}/streams?status=started"
         headers = {
             'Authorization': f'Bearer {self.token}',
