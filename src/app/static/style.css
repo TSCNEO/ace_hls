@@ -221,6 +221,14 @@ button:hover {
     width: 90%;
     max-width: 1100px;
     position: relative;
+    max-height: 95vh;
+    overflow-y: auto;
+    /* Hide scrollbar but allow scroll */
+    scrollbar-width: none;
+}
+
+#player-container::-webkit-scrollbar {
+    display: none;
 }
 
 .close-btn {
