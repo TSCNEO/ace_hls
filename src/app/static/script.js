@@ -215,12 +215,13 @@ function renderChannels(channelsToRender) {
 
     const grid = document.getElementById('channel-grid');
     grid.innerHTML = '';
-    if (filtered.length === 0) {
+
+    if (channelsToRender.length === 0) {
         grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;">No hay resultados</div>';
         return;
     }
 
-    filtered.forEach(ch => {
+    channelsToRender.forEach(ch => {
         const card = document.createElement('div');
         card.className = 'channel-card';
         card.onclick = () => playChannel(ch);
