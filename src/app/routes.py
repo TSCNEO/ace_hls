@@ -4,6 +4,7 @@ import json
 import shutil
 import requests
 import psutil
+from urllib.parse import parse_qs, urlparse
 from flask import Blueprint, jsonify, send_from_directory, Response, request, current_app
 from app.config import Config
 from app.services.hls_manager import hls_manager
@@ -260,28 +261,212 @@ def orchestrator_streams():
     data = service.get_streams()
     return jsonify(data)
 
+def _normalize_hls_profile(profile):
+    if Config.ENABLE_TRANSCODE and profile not in ['original', '720p', '480p', 'max_compat']:
+        return 'original'
+    if not Config.ENABLE_TRANSCODE:
+        return 'original'
+    return profile
+
+def _manifest_has_segment(manifest_path):
+    if not os.path.exists(manifest_path):
+        return False
+
+    stream_dir = os.path.dirname(manifest_path)
+    try:
+        with open(manifest_path, 'r') as f:
+            lines = [line.strip() for line in f.readlines()]
+    except OSError:
+        return False
+
+    for line in lines:
+        if not line or line.startswith('#'):
+            continue
+        if line.startswith(('http://', 'https://')):
+            return True
+        segment_path = os.path.join(stream_dir, line.split('?')[0])
+        if os.path.exists(segment_path) and os.path.getsize(segment_path) > 0:
+            return True
+    return False
+
+def _wait_for_ready_manifest(effective_id, timeout=45):
+    manifest = os.path.join(Config.HLS_DIR, effective_id, 'index.m3u8')
+    deadline = time.time() + timeout
+
+    while time.time() < deadline:
+        if _manifest_has_segment(manifest):
+            return True
+
+        proc = hls_manager.processes.get(effective_id)
+        if proc and proc.poll() is not None:
+            return False
+
+        time.sleep(0.5)
+
+    return False
+
+def _upstream_has_media(ace_id):
+    try:
+        resp = requests.get(_internal_acexy_stream_url(ace_id), timeout=5, stream=True)
+        resp.raise_for_status()
+    except requests.RequestException:
+        return False
+
+    content_type = resp.headers.get('content-type', '').lower()
+    try:
+        chunk = next(resp.iter_content(4096), b'')
+    except requests.RequestException:
+        return False
+    finally:
+        resp.close()
+
+    text = chunk.decode('utf-8', 'replace')
+
+    if '#EXTM3U' not in text and 'mpegurl' not in content_type:
+        return True
+
+    for line in text.splitlines():
+        line = line.strip()
+        if line and not line.startswith('#'):
+            return True
+    return False
+
+def _wait_for_upstream_media(ace_id, timeout=30):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if _upstream_has_media(ace_id):
+            return True
+        time.sleep(2)
+    return False
+
+def _internal_acexy_stream_url(ace_id):
+    internal_host = utils.get_acexy_host_for_server()
+    return f"http://{internal_host}:{Config.ACEXY_PORT}/ace/getstream?id={ace_id}"
+
+def _internal_acexy_segment_url(ace_id, seq):
+    internal_host = utils.get_acexy_host_for_server()
+    return f"http://{internal_host}:{Config.ACEXY_PORT}/ace/hls/segment.ts?stream={ace_id}&seq={seq}"
+
+def _rewrite_upstream_manifest(ace_id, manifest_text):
+    rewritten = []
+    for line in manifest_text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith('#'):
+            rewritten.append(line)
+            continue
+
+        seq = None
+        if stripped.startswith(('http://', 'https://')):
+            query = parse_qs(urlparse(stripped).query)
+            seq_values = query.get('seq')
+            if seq_values:
+                seq = seq_values[0]
+        elif 'seq=' in stripped:
+            query = parse_qs(urlparse(stripped).query)
+            seq_values = query.get('seq')
+            if seq_values:
+                seq = seq_values[0]
+
+        if seq is not None:
+            rewritten.append(f"/proxy/hls/{ace_id}/segment.ts?seq={seq}")
+        else:
+            rewritten.append(line)
+
+    return "\n".join(rewritten) + "\n"
+
+def _start_hls_with_retries(ace_id, profile, force=False, attempts=3, wait_timeout=45):
+    last_effective_id = None
+
+    for attempt in range(1, attempts + 1):
+        if not _wait_for_upstream_media(ace_id, timeout=30):
+            if attempt < attempts:
+                time.sleep(min(attempt, 3))
+                continue
+            break
+
+        restart = force or attempt > 1
+        success, effective_id = hls_manager.start_stream(ace_id, profile, force=restart)
+        last_effective_id = effective_id
+
+        if success and _wait_for_ready_manifest(effective_id, wait_timeout):
+            return {
+                "status": "ok",
+                "url": f"/hls/{effective_id}/index.m3u8",
+                "attempts": attempt,
+                "retryable": False,
+                "effective_id": effective_id
+            }
+
+        hls_manager.stop_stream(effective_id)
+        if attempt < attempts:
+            time.sleep(min(attempt, 3))
+
+    return {
+        "status": "timeout",
+        "message": "El motor AceStream no entregó segmentos reproducibles a tiempo.",
+        "attempts": attempts,
+        "retryable": True,
+        "effective_id": last_effective_id
+    }
+
 @main_bp.route('/api/hls/start/<ace_id>')
 def start_hls(ace_id):
-    profile = request.args.get('profile', 'original')
-    if Config.ENABLE_TRANSCODE and profile not in ['original', '720p', '480p', 'max_compat']:
-        profile = 'original'
-    
-    # If transcode disabled, force original
-    if not Config.ENABLE_TRANSCODE:
-        profile = 'original'
+    profile = _normalize_hls_profile(request.args.get('profile', 'original'))
+    force = request.args.get('force') == '1'
 
-    # Overrides are now handled globally via SettingsManager in hls_manager
-    # We pass None for overrides to maintain signature or update call
-    success, effective_id = hls_manager.start_stream(ace_id, profile)
-    if success:
-        # Wait for file creation (max 45s)
-        manifest = os.path.join(Config.HLS_DIR, effective_id, 'index.m3u8')
-        for _ in range(90):
-            if os.path.exists(manifest):
-                return jsonify({"status": "ok", "url": f"/hls/{effective_id}/index.m3u8"})
-            time.sleep(0.5)
-        return jsonify({"status": "timeout"}), 504
-    return jsonify({"status": "error"}), 500
+    if profile == 'original' and _upstream_has_media(ace_id):
+        return jsonify({
+            "status": "ok",
+            "url": f"/proxy/hls/{ace_id}/index.m3u8",
+            "attempts": 1,
+            "retryable": False,
+            "effective_id": ace_id,
+            "direct": True
+        })
+
+    result = _start_hls_with_retries(ace_id, profile, force=force)
+    if result["status"] == "ok":
+        return jsonify(result)
+    return jsonify(result), 504
+
+@main_bp.route('/proxy/hls/<ace_id>/index.m3u8')
+def proxy_upstream_manifest(ace_id):
+    try:
+        resp = requests.get(_internal_acexy_stream_url(ace_id), timeout=10)
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        return str(e), 502
+
+    response = Response(
+        _rewrite_upstream_manifest(ace_id, resp.text),
+        mimetype='application/vnd.apple.mpegurl'
+    )
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+@main_bp.route('/proxy/hls/<ace_id>/segment.ts')
+def proxy_upstream_segment(ace_id):
+    seq = request.args.get('seq')
+    if not seq:
+        return "Missing seq", 400
+
+    try:
+        upstream = requests.get(_internal_acexy_segment_url(ace_id, seq), timeout=15, stream=True)
+        upstream.raise_for_status()
+    except requests.RequestException as e:
+        return str(e), 502
+
+    def generate():
+        try:
+            for chunk in upstream.iter_content(chunk_size=1024 * 256):
+                if chunk:
+                    yield chunk
+        finally:
+            upstream.close()
+
+    response = Response(generate(), mimetype='video/mp2t')
+    response.headers["Cache-Control"] = "max-age=30"
+    return response
 
 
 @main_bp.route('/hls/<path:filename>')
@@ -301,6 +486,10 @@ def serve_hls(filename):
         response.mimetype = 'application/vnd.apple.mpegurl'
     elif filename.endswith('.ts'):
         response.mimetype = 'video/mp2t'
+    elif filename.endswith('.m4s'):
+        response.mimetype = 'video/iso.segment'
+    elif filename.endswith('.mp4'):
+        response.mimetype = 'video/mp4'
         
     return response
 
@@ -415,20 +604,14 @@ def get_playlist_all():
 @main_bp.route('/stream/<ace_id>.m3u8')
 def auto_start_manifest(ace_id):
     # Wrapper to auto-start stream and redirect to real HLS
-    profile = request.args.get('profile', 'original')
-    if Config.ENABLE_TRANSCODE and profile not in ['original', '720p', '480p', 'max_compat']: profile = 'original'
-    if not Config.ENABLE_TRANSCODE: profile = 'original'
+    profile = _normalize_hls_profile(request.args.get('profile', 'original'))
+    if profile == 'original' and _upstream_has_media(ace_id):
+        return current_app.redirect(f"/proxy/hls/{ace_id}/index.m3u8")
 
-    success, effective_id = hls_manager.start_stream(ace_id, profile)
-    if success:
-        # Wait for file creation (max 30s - AceStream can be slow)
-        manifest = os.path.join(Config.HLS_DIR, effective_id, 'index.m3u8')
-        for _ in range(60):
-            if os.path.exists(manifest):
-                return current_app.redirect(f"/hls/{effective_id}/index.m3u8")
-            time.sleep(0.5)
-        return "Stream timeout", 504
-    return "Stream error", 500
+    result = _start_hls_with_retries(ace_id, profile, attempts=3, wait_timeout=30)
+    if result["status"] == "ok":
+        return current_app.redirect(result["url"])
+    return result.get("message", "Stream timeout"), 504
 
 @main_bp.route('/api/hls/stop/<ace_id>')
 def stop_hls(ace_id):

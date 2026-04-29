@@ -1,28 +1,47 @@
-const CACHE_NAME = 'acehls-v1';
+const CACHE_NAME = 'acehls-v2-player';
 const urlsToCache = [
     '/',
-    '/static/index.html', // mapped by Flask often, but keeping generic
-    'https://cdn.vidstack.io/player/theme.css',
-    'https://cdn.vidstack.io/player/video.css',
-    'https://cdn.vidstack.io/player'
+    '/index.html',
+    '/style.css',
+    '/script.js',
+    '/vendor/hls.min.js',
+    '/placeholder.svg'
 ];
+
+function shouldBypassCache(request) {
+    if (request.method !== 'GET') return true;
+    const url = new URL(request.url);
+    if (url.origin !== self.location.origin) return true;
+    if (url.pathname.startsWith('/api/')) return true;
+    if (url.pathname.startsWith('/hls/')) return true;
+    if (url.pathname.endsWith('.m3u8')) return true;
+    if (url.pathname.endsWith('.ts')) return true;
+    return false;
+}
 
 self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(cache => {
                 console.log('Opened cache');
-                // We catch errors here so one failed file doesn't break everything
                 return cache.addAll(urlsToCache).catch(err => console.error(err));
             })
     );
+    self.skipWaiting();
 });
 
 self.addEventListener('fetch', event => {
-    // Network first for API, Cache first for assets?
-    // For simplicity: Network First, falling back to cache
+    if (shouldBypassCache(event.request)) {
+        event.respondWith(fetch(event.request));
+        return;
+    }
+
     event.respondWith(
-        fetch(event.request).catch(() => {
+        fetch(event.request).then(response => {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+            return response;
+        }).catch(() => {
             return caches.match(event.request);
         })
     );
@@ -41,4 +60,5 @@ self.addEventListener('activate', event => {
             );
         })
     );
+    self.clients.claim();
 });

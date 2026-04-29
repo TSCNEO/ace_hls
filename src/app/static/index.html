@@ -13,13 +13,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
 
-    <!-- Vidstack Styles & Script -->
-    <link rel="stylesheet" href="https://cdn.vidstack.io/player/theme.css" />
-    <link rel="stylesheet" href="https://cdn.vidstack.io/player/video.css" />
-    <script src="https://cdn.vidstack.io/player" type="module"></script>
-
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="style.css?v=v2.2.3">
+    <link rel="stylesheet" href="style.css?v=v2.3.3">
 </head>
 
 <body>
@@ -231,7 +226,7 @@
         </div>
     </div>
 
-    <!-- Modal with Vidstack -->
+    <!-- Player Modal -->
     <div id="player-modal">
         <div id="player-container">
             <div class="player-header-row"
@@ -254,17 +249,15 @@
             </div>
 
             <div id="player-error"
-                style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; background:black; color:white; z-index:10; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
-                <div style="font-size:3rem; margin-bottom:10px;">⚠️</div>
-                <div style="font-size:1.2rem; font-weight:bold;">Stream no disponible</div>
-                <div style="color:#aaa; margin-top:5px;">No hay fuentes (seeds) o el canal está off-line.<br>Prueba otro
-                    canal.</div>
+                style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.92); color:white; z-index:10; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:20px; box-sizing:border-box;">
+                <div id="player-error-icon" style="font-size:3rem; margin-bottom:10px;">⚠️</div>
+                <div id="player-error-title" style="font-size:1.2rem; font-weight:bold;">Preparando stream</div>
+                <div id="player-error-message" style="color:#aaa; margin-top:5px;">Esperando datos de AceStream...</div>
+                <button id="player-retry-btn" class="utility-btn btn-ios" onclick="retryCurrentPlayback(true)"
+                    style="display:none; margin-top:15px;">Reintentar</button>
             </div>
 
-            <media-player id="player" title="AceHLS Stream" aspect-ratio="16/9" loop playsinline>
-                <media-provider></media-provider>
-                <media-video-layout></media-video-layout>
-            </media-player>
+            <video id="player" title="AceHLS Stream" controls playsinline webkit-playsinline></video>
 
             <div class="utility-box">
                 <div class="feedback-controls"
@@ -290,7 +283,7 @@
 
                     <!-- iOS Native Button -->
                     <button id="ios-btn" class="utility-btn btn-ios" onclick="playNativeIOS()" style="display:none;">
-                        Usar Reproductor Nativo
+                        Abrir directo
                     </button>
 
                     <!-- Copy Dropdown -->
@@ -315,16 +308,8 @@
     </footer>
 
     <!-- Custom Scripts -->
-    <script src="script.js?v=v2.2.3"></script>
-    </script>
-    <script>
-        if ('serviceWorker' in navigator) {
-            // Placeholder for service worker registration logic
-            // This block was incomplete in the original instruction.
-            // Assuming it's meant to be a standard service worker registration.
-            // For now, it's left as an empty but syntactically correct block.
-        }
-    </script>
+    <script src="vendor/hls.min.js?v=1.5.18"></script>
+    <script src="script.js?v=v2.3.3"></script>
 </body>
 
 </html>

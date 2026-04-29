@@ -2,13 +2,45 @@ let allChannels = [];
 let categories = new Set();
 let currentStreamUrl = "";
 let currentAceId = null;
-const player = document.querySelector('media-player');
 let currentAbortController = null; // Phase 2: Stale Alert Fix
+let hlsInstance = null;
+let currentProfile = 'original';
+let playbackGeneration = 0;
+let playbackRetryCount = 0;
+let suppressPlayerErrors = false;
+const MAX_PLAYBACK_RECOVERY_ATTEMPTS = 2;
+
+function absolutizeUrl(url) {
+    if (!url) return '';
+    if (/^https?:\/\//i.test(url)) return url;
+    return window.location.origin + url;
+}
+
+function isChromeBrowser() {
+    const ua = navigator.userAgent;
+    return /Chrome|CriOS/i.test(ua) && !/Edg|OPR|Firefox|FxiOS/i.test(ua);
+}
+
+function getInitialPlaybackProfile() {
+    const saved = localStorage.getItem('ace_default_quality');
+    if (saved) return saved;
+    return 'original';
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     loadChannels();
     loadSettings(); // Phase 2: Persistence
     loadTranscodeCfg(); // Phase 3: Transcode Config
+
+    const player = getPlayerElement();
+    if (player) {
+        player.addEventListener('playing', hidePlayerStatus);
+        player.addEventListener('loadedmetadata', hidePlayerStatus);
+        player.addEventListener('canplay', hidePlayerStatus);
+        player.addEventListener('error', () => {
+            if (currentAceId && !suppressPlayerErrors) recoverPlayback('El reproductor nativo emitió un error.', true);
+        });
+    }
 
     // Phase 2: History API for Back Button
     window.addEventListener('popstate', (event) => {
@@ -390,17 +422,9 @@ async function fetchEngineInfo(aceId, isUpdate = false) {
 async function playChannel(channel) {
     if (!channel) return;
 
-    // Call Engine Info
-    fetchEngineInfo(channel.id);
-
     const modal = document.getElementById('player-modal');
-    const errorDiv = document.getElementById('player-error');
-    errorDiv.style.display = 'none'; // Reset error
-
-    // Reset Engine Info if exists (it's updated by async call above, but good to clear if re-opening)
-    const engineInfo = document.getElementById('player-engine-info');
-
-    // Clear previous if any
+    hidePlayerStatus();
+    resetPlayerEngine();
     if (engineInfoInterval) clearInterval(engineInfoInterval);
 
     fetchEngineInfo(channel.id); // Initial call
@@ -463,8 +487,7 @@ async function playChannel(channel) {
     statsInterval = setInterval(() => pollStats(channel.id), 5000);
 
     // Initial Play
-    const defaultInfo = localStorage.getItem('ace_default_quality');
-    const startProfile = defaultInfo || 'original';
+    const startProfile = getInitialPlaybackProfile();
 
     // Update selector to match default
     if (qualitySel) qualitySel.value = startProfile;
@@ -472,13 +495,129 @@ async function playChannel(channel) {
     // Push History State (so Back button works)
     history.pushState({ modalOpen: true }, "", "#player");
 
-    startPlayback(channel.id, startProfile);
+    startPlayback(channel.id, startProfile, { force: false, resetRetries: true });
 }
 
-async function startPlayback(aceId, profile) {
-    const player = document.querySelector('media-player');
-    const errorDiv = document.getElementById('player-error');
-    if (errorDiv) errorDiv.style.display = 'none';
+function getPlayerElement() {
+    return document.getElementById('player');
+}
+
+function showPlayerStatus(title, message, options = {}) {
+    const box = document.getElementById('player-error');
+    const icon = document.getElementById('player-error-icon');
+    const titleEl = document.getElementById('player-error-title');
+    const messageEl = document.getElementById('player-error-message');
+    const retryBtn = document.getElementById('player-retry-btn');
+
+    if (!box) return;
+    box.style.display = 'flex';
+    if (icon) icon.textContent = options.icon || '⏳';
+    if (titleEl) titleEl.textContent = title;
+    if (messageEl) messageEl.textContent = message || '';
+    if (retryBtn) retryBtn.style.display = options.retry ? 'inline-block' : 'none';
+}
+
+function hidePlayerStatus() {
+    const box = document.getElementById('player-error');
+    if (box) box.style.display = 'none';
+}
+
+function resetPlayerEngine() {
+    if (loadTimeout) {
+        clearTimeout(loadTimeout);
+        loadTimeout = null;
+    }
+
+    if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+    }
+
+    const player = getPlayerElement();
+    if (player) {
+        suppressPlayerErrors = true;
+        player.pause();
+        player.removeAttribute('src');
+        player.load();
+        setTimeout(() => { suppressPlayerErrors = false; }, 250);
+    }
+}
+
+function attachHlsToPlayer(player, streamUrl, aceId, profile, generation) {
+    if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+    }
+
+    if (window.Hls && Hls.isSupported()) {
+        hlsInstance = new Hls({
+            lowLatencyMode: false,
+            backBufferLength: 30,
+            manifestLoadingTimeOut: 20000,
+            levelLoadingTimeOut: 20000,
+            fragLoadingTimeOut: 30000
+        });
+
+        hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+            if (!data || !data.fatal || generation !== playbackGeneration || currentAceId !== aceId) return;
+            console.warn('Fatal hls.js error:', data);
+
+            if (data.type === Hls.ErrorTypes.MEDIA_ERROR && hlsInstance) {
+                showPlayerStatus('Recuperando reproducción', 'hls.js detectó un error de medio. Reintentando...');
+                hlsInstance.recoverMediaError();
+                setTimeout(() => {
+                    const stillStalled = player.readyState < 2 || player.paused;
+                    if (stillStalled && generation === playbackGeneration && currentAceId === aceId) {
+                        recoverPlayback('El reproductor no pudo recuperarse.', true);
+                    }
+                }, 4000);
+                return;
+            }
+
+            recoverPlayback('El stream HLS falló durante la reproducción.', true);
+        });
+
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+            hidePlayerStatus();
+            const playPromise = player.play();
+            if (playPromise) playPromise.catch(() => {
+                hidePlayerStatus();
+            });
+        });
+
+        hlsInstance.on(Hls.Events.FRAG_LOADED, () => {
+            hidePlayerStatus();
+        });
+
+        hlsInstance.on(Hls.Events.MEDIA_ATTACHED, () => {
+            hlsInstance.loadSource(streamUrl);
+        });
+        hlsInstance.attachMedia(player);
+        return;
+    }
+
+    if (player.canPlayType('application/vnd.apple.mpegurl') || player.canPlayType('application/x-mpegURL')) {
+        player.src = streamUrl;
+        const playPromise = player.play();
+        hidePlayerStatus();
+        if (playPromise) playPromise.catch(() => {
+            hidePlayerStatus();
+        });
+        return;
+    }
+
+    showPlayerStatus('Player no compatible', 'Este navegador no soporta HLS y hls.js no está disponible.', { icon: '⚠️', retry: true });
+}
+
+async function startPlayback(aceId, profile, options = {}) {
+    const player = getPlayerElement();
+    if (!player) return;
+
+    const force = options.force === true;
+    const resetRetries = options.resetRetries !== false;
+    if (resetRetries) playbackRetryCount = 0;
+    currentProfile = profile || 'original';
+    const generation = ++playbackGeneration;
 
     // Abort previous request if any
     if (currentAbortController) {
@@ -486,32 +625,32 @@ async function startPlayback(aceId, profile) {
     }
     currentAbortController = new AbortController();
     const signal = currentAbortController.signal;
+    resetPlayerEngine();
+    showPlayerStatus('Preparando stream', force ? 'Reiniciando AceStream y esperando segmentos...' : 'Conectando con AceStream...');
 
     try {
         // Phase 3: Configurable Quality Overrides (Now handled server-side)
-        let url = `/api/hls/start/${aceId}?profile=${profile}`;
+        let url = `/api/hls/start/${aceId}?profile=${encodeURIComponent(currentProfile)}`;
+        if (force) url += '&force=1';
 
         // No longer appending params here. Server reads settings.json directly.
 
         const res = await fetch(url, { signal });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({ status: 'error', message: 'Respuesta inválida del servidor' }));
+        if (signal.aborted || generation !== playbackGeneration) return;
 
         if (data.status === 'ok') {
             currentStreamUrl = data.url;
-            player.src = { src: data.url, type: 'application/x-mpegurl' };
             player.muted = true;
             player.playsInline = true;
             player.autoplay = true;
-
-            const playPromise = player.play();
-            if (playPromise !== undefined) {
-                playPromise.catch(e => console.log("Autoplay prevented"));
-            }
+            showPlayerStatus('Cargando player', `HLS preparado en ${data.attempts || 1} intento(s).`);
+            attachHlsToPlayer(player, data.url, aceId, currentProfile, generation);
 
             // Enable Copy Button (Dropdown Trigger)
             const vlcBtn = document.getElementById('vlc-link');
             if (vlcBtn) {
-                vlcBtn.setAttribute('data-url', window.location.origin + data.url);
+                vlcBtn.setAttribute('data-url', absolutizeUrl(data.url));
                 vlcBtn.disabled = false;
                 vlcBtn.innerHTML = "🔗 Copiar...";
                 vlcBtn.style.pointerEvents = "auto";
@@ -525,30 +664,48 @@ async function startPlayback(aceId, profile) {
             if (loadTimeout) clearTimeout(loadTimeout);
             loadTimeout = setTimeout(() => {
                 // Check if still playing THIS stream
-                if (player.currentTime < 1 && currentAceId === aceId) {
+                if (player.readyState === 0 && currentAceId === aceId) {
                     console.warn("Stream timeout");
-                    if (errorDiv) errorDiv.style.display = 'flex';
-                    player.pause();
+                    recoverPlayback('El player no empezó a reproducir a tiempo.', true);
                 }
             }, 20000);
 
             player.addEventListener('playing', () => {
                 if (loadTimeout) clearTimeout(loadTimeout);
-                if (errorDiv) errorDiv.style.display = 'none';
+                hidePlayerStatus();
             }, { once: true });
 
         } else {
-            // Only alert if not aborted
-            if (!signal.aborted) alert("Error servidor: " + data.status);
+            const msg = data.message || `Error servidor: ${data.status}`;
+            showPlayerStatus('Stream no disponible', msg, { icon: '⚠️', retry: data.retryable !== false });
         }
     } catch (e) {
         if (e.name === 'AbortError') {
             console.log("Fetch aborted (user closed player or switched)");
         } else {
             console.error(e);
-            alert("Error de conexión");
+            showPlayerStatus('Error de conexión', 'No se pudo contactar con el servidor HLS.', { icon: '⚠️', retry: true });
         }
     }
+}
+
+function recoverPlayback(reason, forceRestart) {
+    if (!currentAceId) return;
+
+    if (playbackRetryCount < MAX_PLAYBACK_RECOVERY_ATTEMPTS) {
+        playbackRetryCount++;
+        showPlayerStatus('Reintentando stream', `${reason} Intento ${playbackRetryCount}/${MAX_PLAYBACK_RECOVERY_ATTEMPTS}...`);
+        startPlayback(currentAceId, currentProfile, { force: forceRestart, resetRetries: false });
+        return;
+    }
+
+    resetPlayerEngine();
+    showPlayerStatus('Stream no disponible', `${reason} No se pudo recuperar automáticamente.`, { icon: '⚠️', retry: true });
+}
+
+function retryCurrentPlayback(force = true) {
+    if (!currentAceId) return;
+    startPlayback(currentAceId, currentProfile, { force, resetRetries: true });
 }
 
 function changeQuality(profile) {
@@ -560,7 +717,7 @@ function changeQuality(profile) {
     sel.options[sel.selectedIndex].text = "Cambiando... ⏳";
     sel.disabled = true;
 
-    startPlayback(currentAceId, profile).then(() => {
+    startPlayback(currentAceId, profile, { force: false, resetRetries: true }).then(() => {
         // ... (rest is same, promise usually resolves fast)
         // Note: startPlayback is async, so we might need to handle this better
         // but existing logic just unblocks UI which is fine.
@@ -575,8 +732,11 @@ function changeQuality(profile) {
 }
 
 function playNativeIOS() {
-    if (!currentStreamUrl) return alert("Espera a que cargue el stream...");
-    const fullUrl = window.location.origin + currentStreamUrl;
+    if (!currentStreamUrl) {
+        showPlayerStatus('Stream aún no listo', 'Espera a que cargue el stream antes de abrirlo directo.', { icon: '⏳' });
+        return;
+    }
+    const fullUrl = absolutizeUrl(currentStreamUrl);
     // Open in new tab to trigger native player or download without blocking UI
     window.open(fullUrl, '_blank');
 }
@@ -600,12 +760,12 @@ function closePlayer(fromHistory = false) {
         }
     }
 
-    const player = document.querySelector('media-player');
-    player.pause();
-    player.src = ''; // Unload
     currentStreamUrl = "";
+    currentAceId = null;
+    currentProfile = 'original';
+    playbackGeneration++;
+    resetPlayerEngine();
     document.getElementById('player-modal').style.display = 'none';
-    if (loadTimeout) clearTimeout(loadTimeout);
     if (statsInterval) clearInterval(statsInterval);
     if (engineInfoInterval) clearInterval(engineInfoInterval);
 }
@@ -1008,5 +1168,3 @@ function handleImageError(img, id) {
         ch.logo = FALLBACK_LOGO;
     }
 }
-
-document.addEventListener('DOMContentLoaded', loadChannels);

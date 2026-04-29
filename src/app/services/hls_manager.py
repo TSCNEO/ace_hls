@@ -92,11 +92,36 @@ class HLSManager:
             if ace_id in self.processes:
                 self.activity[ace_id] = time.time()
 
-    def start_stream(self, ace_id, profile=None, overrides=None):
+    def _cleanup_stream_locked(self, stream_id, remove_files=True):
+        if stream_id in self.activity:
+            del self.activity[stream_id]
+
+        if stream_id in self.processes:
+            proc = self.processes[stream_id]
+            if proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+            del self.processes[stream_id]
+
+        if stream_id in self.start_times:
+            del self.start_times[stream_id]
+        if stream_id in self.validated_sessions:
+            self.validated_sessions.remove(stream_id)
+
+        if remove_files:
+            stream_dir = os.path.join(Config.HLS_DIR, stream_id)
+            if os.path.exists(stream_dir):
+                shutil.rmtree(stream_dir)
+
+    def start_stream(self, ace_id, profile=None, overrides=None, force=False):
         """
         Starts the HLS stream. 
         profile: None (Original), '720p', '480p'
         overrides: Dict (Deprecated, backward compat). Now uses SettingsManager.
+        force: Restart an existing stream and rebuild its HLS files.
         """
         from app.services.settings_manager import settings_manager
         settings = settings_manager.get_all()
@@ -117,6 +142,10 @@ class HLSManager:
         effective_id = f"{ace_id}_{profile}" if profile and profile != 'original' else ace_id
 
         with self.lock:
+            if force and effective_id in self.processes:
+                logger.info(f"Force restarting stream {effective_id}.")
+                self._cleanup_stream_locked(effective_id)
+
             # Check if active
             if effective_id in self.processes:
                 proc = self.processes[effective_id]
@@ -124,7 +153,7 @@ class HLSManager:
                     self.activity[effective_id] = time.time()
                     return True, effective_id 
                 else:
-                    del self.processes[effective_id]
+                    self._cleanup_stream_locked(effective_id)
             
             # Prepare directory
             stream_dir = os.path.join(Config.HLS_DIR, effective_id)
@@ -148,18 +177,18 @@ class HLSManager:
             # Added resilience flags for slow streams (v2.2.2)
             cmd = ["ffmpeg", 
                    "-analyzeduration", "10000000", "-probesize", "10000000", # 10s buffer for analysis
-                   # Reconnect logic for HTTP input
-                   "-reconnect", "1", "-reconnect_at_eof", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
                    "-rw_timeout", "15000000", # 15s read/write timeout
                    "-fflags", "+genpts+igndts", "-i", start_url]
             
             # Transcoding Logic
+            is_recode_profile = Config.ENABLE_TRANSCODE and profile and profile != 'original'
+
             if not Config.ENABLE_TRANSCODE or not profile or profile == 'original':
-                # Original / Passthrough
+                # True original passthrough. The web UI normally uses the upstream proxy for this.
                 cmd.extend(["-c", "copy"])
             else:
                 # Transcoding: Strict mapping
-                cmd.extend(["-map", "0:v", "-map", "0:a", "-sn", "-dn", "-ignore_unknown"])
+                cmd.extend(["-map", "0:v:0", "-map", "0:a:0?", "-sn", "-dn", "-ignore_unknown"])
 
                 if self.hw_accel_type == 'vaapi':
                     # VAAPI Init
@@ -188,7 +217,7 @@ class HLSManager:
                         # Max Compatibility: Same Resolution but Force Re-encode to H.264
                         # Use ACP/QP instead of fixed bitrate to respect CRF setting.
                         # VAAPI uses -qp for Constant Quantization Parameter (similar to CRF)
-                        cmd.extend(["-vf", "scale_vaapi=format=nv12", "-c:v", vcodec, "-qp", str(crf_compat), "-g", "50"])
+                        cmd.extend(["-vf", "scale_vaapi=format=nv12", "-c:v", "h264_vaapi", "-qp", str(crf_compat), "-g", "50", "-bf", "0"])
                     
                     if filters:
                         cmd.extend(["-vf", ",".join(filters)])
@@ -207,26 +236,41 @@ class HLSManager:
                         
                     if profile == '720p':
                         filters.append("scale=-2:720")
-                        cmd.extend(["-c:v", vcodec, "-preset", preset, "-b:v", bitrate_720p])
+                        cmd.extend(["-c:v", "libx264", "-preset", preset, "-b:v", bitrate_720p])
                     elif profile == '480p':
                         filters.append("scale=-2:480")
-                        cmd.extend(["-c:v", vcodec, "-preset", preset, "-b:v", bitrate_480p])
+                        cmd.extend(["-c:v", "libx264", "-preset", preset, "-b:v", bitrate_480p])
                     elif profile == 'max_compat':
-                        cmd.extend(["-c:v", vcodec, "-preset", preset, "-crf", crf_compat, "-g", "50"])
+                        cmd.extend(["-c:v", "libx264", "-preset", preset, "-crf", crf_compat, "-g", "50"])
                     
                     if filters:
                         cmd.extend(["-vf", ",".join(filters)])
                 
                 # Audio Encoding (Common)
-                cmd.extend(["-c:a", "aac", "-b:a", audio_bitrate])
+                cmd.extend([
+                    "-pix_fmt", "yuv420p",
+                    "-profile:v", "main",
+                    "-level", "4.1",
+                    "-sc_threshold", "0",
+                    "-keyint_min", "50",
+                    "-c:a", "aac",
+                    "-ac", "2",
+                    "-ar", "48000",
+                    "-b:a", audio_bitrate
+                ])
 
             # Global HLS Flags
-            cmd.extend([
-                "-hls_time", "4",
-                "-hls_list_size", "6",
-                "-hls_flags", "delete_segments",
-                output_file
-            ])
+            hls_flags = "delete_segments+independent_segments" if is_recode_profile else "delete_segments"
+            cmd.extend(["-hls_time", "4", "-hls_list_size", "6", "-hls_flags", hls_flags])
+
+            if is_recode_profile:
+                cmd.extend([
+                    "-hls_segment_type", "fmp4",
+                    "-hls_fmp4_init_filename", "init.mp4",
+                    "-hls_segment_filename", os.path.join(stream_dir, "index%d.m4s")
+                ])
+
+            cmd.append(output_file)
             
             logger.info(f"Starting FFMPEG for {effective_id} [Profile: {profile}]: {' '.join(cmd)}")
             
@@ -246,30 +290,16 @@ class HLSManager:
             time.sleep(1)
             if proc.poll() is not None:
                 logger.error(f"FFMPEG failed for {effective_id}. Check {log_file}")
+                self._cleanup_stream_locked(effective_id, remove_files=False)
                 return False, effective_id
 
             return True, effective_id
 
     def stop_stream(self, ace_id):
         with self.lock:
-            if ace_id in self.activity:
-                 del self.activity[ace_id]
-
             if ace_id in self.processes:
                 logger.info(f"Stream {ace_id} parado desde dashboard.")
-                proc = self.processes[ace_id]
-                proc.terminate()
-                try:
-                    proc.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-                del self.processes[ace_id]
-                if ace_id in self.start_times: del self.start_times[ace_id]
-                if ace_id in self.validated_sessions: self.validated_sessions.remove(ace_id)
-                
-                stream_dir = os.path.join(Config.HLS_DIR, ace_id)
-                if os.path.exists(stream_dir):
-                    shutil.rmtree(stream_dir)
+            self._cleanup_stream_locked(ace_id)
 
     def get_active_streams_info(self):
         """Returns list of active streams with metadata for dashboard."""

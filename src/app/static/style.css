@@ -31,14 +31,15 @@ body {
     transition: background-color 0.3s, color 0.3s;
 }
 
-/* Vidstack Player Customization */
-media-player {
+/* HTML5 Player */
+#player {
     width: 100%;
     aspect-ratio: 16/9;
     background-color: black;
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    display: block;
 }
 
 /* Layout & Grid */
