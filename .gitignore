@@ -38,9 +38,6 @@ ENV/
 # Documentation
 docs/
 
-# Tests
-tests/
-
 # Database
 *.db
 *.sqlite3

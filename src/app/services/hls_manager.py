@@ -217,7 +217,8 @@ class HLSManager:
                         # Max Compatibility: Same Resolution but Force Re-encode to H.264
                         # Use ACP/QP instead of fixed bitrate to respect CRF setting.
                         # VAAPI uses -qp for Constant Quantization Parameter (similar to CRF)
-                        cmd.extend(["-vf", "scale_vaapi=format=nv12", "-c:v", "h264_vaapi", "-qp", str(crf_compat), "-g", "50", "-bf", "0"])
+                        filters.append("scale_vaapi=format=nv12")
+                        cmd.extend(["-c:v", "h264_vaapi", "-qp", str(crf_compat), "-g", "50", "-bf", "0"])
                     
                     if filters:
                         cmd.extend(["-vf", ",".join(filters)])
