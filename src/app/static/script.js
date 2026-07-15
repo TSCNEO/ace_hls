@@ -551,6 +551,11 @@ function attachHlsToPlayer(player, streamUrl, aceId, profile, generation) {
 
     if (window.Hls && Hls.isSupported()) {
         hlsInstance = new Hls({
+            // Some browser extensions wrap Worker message listeners and throw
+            // when optional EME globals (MediaKeyMessageEvent) are absent.
+            // Running the transmuxer on the main thread avoids losing hls.js
+            // events while keeping playback compatible with those browsers.
+            enableWorker: false,
             lowLatencyMode: false,
             backBufferLength: 30,
             manifestLoadingTimeOut: 20000,
@@ -559,8 +564,9 @@ function attachHlsToPlayer(player, streamUrl, aceId, profile, generation) {
         });
 
         hlsInstance.on(Hls.Events.ERROR, (event, data) => {
-            if (!data || !data.fatal || generation !== playbackGeneration || currentAceId !== aceId) return;
-            console.warn('Fatal hls.js error:', data);
+            if (!data || generation !== playbackGeneration || currentAceId !== aceId) return;
+            console.warn(data.fatal ? 'Fatal hls.js error:' : 'hls.js warning:', data);
+            if (!data.fatal) return;
 
             if (data.type === Hls.ErrorTypes.MEDIA_ERROR && hlsInstance) {
                 showPlayerStatus('Recuperando reproducción', 'hls.js detectó un error de medio. Reintentando...');

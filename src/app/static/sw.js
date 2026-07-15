@@ -1,4 +1,4 @@
-const CACHE_NAME = 'acehls-v2-player';
+const CACHE_NAME = 'acehls-v2.3.5';
 const urlsToCache = [
     '/',
     '/index.html',
