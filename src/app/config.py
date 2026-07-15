@@ -5,6 +5,8 @@ class Config:
     ACE_HLS_PORT = int(os.environ.get("ACE_HLS_PORT", 8088))
     CACHE_DURATION = int(os.environ.get("CACHE_DURATION", 300))
     PLAYLIST_REFRESH_INTERVAL = max(60, int(os.environ.get("PLAYLIST_REFRESH_INTERVAL", 900)))
+    FFMPEG_RW_TIMEOUT = max(5, int(os.environ.get("FFMPEG_RW_TIMEOUT", 60)))
+    HLS_IDLE_TIMEOUT = max(60, int(os.environ.get("HLS_IDLE_TIMEOUT", 120)))
     # Use absolute path to avoid confusion with send_from_directory
     DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
     

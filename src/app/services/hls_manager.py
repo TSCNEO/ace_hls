@@ -1,8 +1,11 @@
+import json
 import os
+import re
 import shutil
 import subprocess
 import threading
 import time
+import uuid
 import logging
 from app.utils import get_acexy_host_for_server
 from app.config import Config
@@ -57,9 +60,14 @@ class HLSManager:
             
             # Identify inactive streams first (to avoid blocking excessively)
             to_remove = []
+            dead_streams = []
             with self.lock:
                 for ace_id, last_active in self.activity.items():
                     idle_time = now - last_active
+                    proc = self.processes.get(ace_id)
+                    if proc and proc.poll() is not None:
+                        dead_streams.append((ace_id, proc.returncode))
+                        continue
                     
                     # --- PASSIVE VALIDATION ---
                     # If stream has been running > 30s and active, mark as success
@@ -74,13 +82,29 @@ class HLSManager:
                                 self.validated_sessions.add(ace_id)
 
                     # logger.info(f"[Monitor] {ace_id} idle for {idle_time:.1f}s") # Verbose debug
-                    if idle_time > 60: # 60 seconds timeout
+                    if idle_time > Config.HLS_IDLE_TIMEOUT:
                         to_remove.append(ace_id)
             
             # Stop them
+            for ace_id, return_code in dead_streams:
+                logger.error(
+                    "FFmpeg exited unexpectedly for %s (exit_code=%s). Preserving logs.",
+                    ace_id,
+                    return_code,
+                )
+                with self.lock:
+                    self._cleanup_stream_locked(ace_id, remove_files=False)
+
             for ace_id in to_remove:
-                logger.info(f"[Inactivity Monitor] Stopping {ace_id} due to timeout (Idle > 60s).")
-                self.stop_stream(ace_id)
+                idle_seconds = int(now - self.activity.get(ace_id, now))
+                logger.info(
+                    "[Inactivity Monitor] Stopping %s: no HLS requests for %ss "
+                    "(limit=%ss).",
+                    ace_id,
+                    idle_seconds,
+                    Config.HLS_IDLE_TIMEOUT,
+                )
+                self.stop_stream(ace_id, reason="inactivity")
                 cnt_removed += 1
             
             if cnt_removed > 0:
@@ -121,7 +145,7 @@ class HLSManager:
         Starts the HLS stream. 
         profile: None (Original), '720p', '480p'
         overrides: Dict (Deprecated, backward compat). Now uses SettingsManager.
-        force: Restart an existing stream and rebuild its HLS files.
+        force: Restart an existing stale stream; healthy/preparing sessions are reused.
         """
         from app.services.settings_manager import settings_manager
         settings = settings_manager.get_all()
@@ -143,7 +167,12 @@ class HLSManager:
 
         with self.lock:
             if force and effective_id in self.processes:
-                logger.info(f"Force restarting stream {effective_id}.")
+                proc = self.processes[effective_id]
+                if proc.poll() is None and self._session_is_reusable(effective_id):
+                    logger.info("Reusing healthy stream %s despite force request.", effective_id)
+                    self.activity[effective_id] = time.time()
+                    return True, effective_id
+                logger.info("Force restarting stale stream %s.", effective_id)
                 self._cleanup_stream_locked(effective_id)
 
             # Check if active
@@ -172,12 +201,15 @@ class HLSManager:
             env = os.environ.copy()
             env["FFREPORT"] = f"file={log_file}:level=32"
             output_file = os.path.join(stream_dir, "index.m3u8")
+            client_id = uuid.uuid4().hex
+            user_agent = f"AceHLS-FFmpeg/{effective_id}/{client_id}"
 
             # --- BUILD COMMAND ---
             # Added resilience flags for slow streams (v2.2.2)
             cmd = ["ffmpeg", 
                    "-analyzeduration", "10000000", "-probesize", "10000000", # 10s buffer for analysis
-                   "-rw_timeout", "15000000", # 15s read/write timeout
+                   "-rw_timeout", str(Config.FFMPEG_RW_TIMEOUT * 1_000_000),
+                   "-user_agent", user_agent,
                    "-fflags", "+genpts+igndts", "-i", start_url]
             
             # Transcoding Logic
@@ -283,9 +315,11 @@ class HLSManager:
             if effective_id in self.validated_sessions:
                 self.validated_sessions.remove(effective_id)
 
-            # Force probe if Original profile to ensure fresh data and valid cache for variants
-            force_probe = (profile == 'original')
-            threading.Thread(target=self._analyze_stream, args=(effective_id, start_url, force_probe), daemon=True).start()
+            threading.Thread(
+                target=self._analyze_stream,
+                args=(effective_id,),
+                daemon=True,
+            ).start()
 
             # Check dead-on-arrival
             time.sleep(1)
@@ -296,10 +330,22 @@ class HLSManager:
 
             return True, effective_id
 
-    def stop_stream(self, ace_id):
+    def _session_is_reusable(self, stream_id):
+        """Reuse young sessions and streams whose manifest is still advancing."""
+        started_at = self.start_times.get(stream_id, 0)
+        if started_at and (time.time() - started_at) < 60:
+            return True
+
+        manifest = os.path.join(Config.HLS_DIR, stream_id, 'index.m3u8')
+        try:
+            return (time.time() - os.path.getmtime(manifest)) < 15
+        except OSError:
+            return False
+
+    def stop_stream(self, ace_id, reason="manual"):
         with self.lock:
             if ace_id in self.processes:
-                logger.info(f"Stream {ace_id} parado desde dashboard.")
+                logger.info("Stopping stream %s (reason=%s).", ace_id, reason)
             self._cleanup_stream_locked(ace_id)
 
     def get_active_streams_info(self):
@@ -309,18 +355,27 @@ class HLSManager:
             for pid, proc in self.processes.items():
                 start_time = self.start_times.get(pid, 0)
                 uptime = int(time.time() - start_time) if start_time else 0
+                last_access = self.activity.get(pid, 0)
+                manifest = os.path.join(Config.HLS_DIR, pid, 'index.m3u8')
+                try:
+                    manifest_age = round(time.time() - os.path.getmtime(manifest), 1)
+                except OSError:
+                    manifest_age = None
                 
                 # Try to get CPU usage of ffmpeg process? (Maybe too heavy here)
                 # Just basic info
                 streams.append({
                     "id": pid,
                     "uptime": uptime,
-                    "profile": pid.split('_')[-1] if '_' in pid else "original"
+                    "profile": pid.split('_')[-1] if '_' in pid else "original",
+                    "process_alive": proc.poll() is None,
+                    "idle_seconds": round(time.time() - last_access, 1) if last_access else None,
+                    "manifest_age_seconds": manifest_age,
                 })
         return streams
 
-    def _analyze_stream(self, playback_id, stream_url, force_probe=False):
-        """Runs ffprobe on the INPUT stream to capture original quality."""
+    def _analyze_stream(self, playback_id):
+        """Probe generated HLS files without opening a second upstream client."""
         
         # Identify Raw ID (Source) from Playback ID (Process key)
         # Acestream IDs are 40 chars. playback_id might have suffixes.
@@ -328,16 +383,13 @@ class HLSManager:
 
         # Check cache first to avoid redundant probes/timeouts
         # Cache expires after 24h (86400s) to refresh technical info
-        cached = None
         now = time.time()
-        
-        if not force_probe:
-            # ALWAYS check raw_id stats first (Single Source of Truth)
-            stats = stats_manager.get_stats(raw_id)
-            if stats and stats.get('tech_info'):
-                last_ok = stats.get('last_ok', 0)
-                if (now - last_ok) < 86400: # 24h validity
-                    cached = stats
+        stats = stats_manager.get_stats(raw_id)
+        cached = None
+        if stats and stats.get('tech_info'):
+            last_ok = stats.get('last_ok', 0)
+            if (now - last_ok) < 86400: # 24h validity
+                cached = stats
         
         if cached:
             logger.info(f"Skipping probe for {raw_id} (playing {playback_id}), using cached tech info (Age: {int(now - cached.get('last_ok',0))}s).")
@@ -348,14 +400,12 @@ class HLSManager:
                 self.validated_sessions.add(playback_id)
             return
 
-        time.sleep(15) # Wait for stream to stabilize/buffer
-        
-        with self.lock:
-            # Check if still running (using the effective process key)
-            if playback_id not in self.processes:
-                return
+        probe_target = self._wait_for_local_probe_target(playback_id, timeout=30)
+        if not probe_target:
+            logger.warning("No local media available for ffprobe: %s", playback_id)
+            return
 
-        logger.info(f"Analyzing source {raw_id} (via {playback_id})...")
+        logger.info("Analyzing local HLS output for %s via %s", raw_id, probe_target)
         try:
             cmd = [
                 "ffprobe", 
@@ -363,12 +413,11 @@ class HLSManager:
                 "-print_format", "json", 
                 "-show_streams", 
                 "-show_format",
-                stream_url
+                probe_target,
             ]
             # Timeout is important to avoid hanging threads
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
             if result.returncode == 0:
-                import json
                 data = json.loads(result.stdout)
                 
                 tech_info = {}
@@ -399,9 +448,54 @@ class HLSManager:
                     with self.lock:
                         self.validated_sessions.add(playback_id)
             else:
-                 logger.warning(f"ffprobe failed for {raw_id}")
+                logger.warning("ffprobe failed for %s (exit_code=%s)", raw_id, result.returncode)
         except Exception as e:
             logger.error(f"Error analyzing stream {raw_id}: {e}")
+
+    def _wait_for_local_probe_target(self, playback_id, timeout=30):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            with self.lock:
+                proc = self.processes.get(playback_id)
+                if not proc or proc.poll() is not None:
+                    return None
+
+            target = self._local_probe_target(playback_id)
+            if target:
+                return target
+            time.sleep(0.5)
+        return None
+
+    def _local_probe_target(self, playback_id):
+        stream_dir = os.path.join(Config.HLS_DIR, playback_id)
+        manifest = os.path.join(stream_dir, 'index.m3u8')
+        try:
+            with open(manifest, 'r') as handle:
+                lines = [line.strip() for line in handle]
+        except OSError:
+            return None
+
+        init_candidates = []
+        media_candidates = []
+        for line in lines:
+            if line.startswith('#EXT-X-MAP:'):
+                match = re.search(r'URI="([^"]+)"', line)
+                if match:
+                    init_candidates.append(match.group(1))
+            elif line and not line.startswith('#'):
+                media_candidates.append(line)
+
+        for relative in init_candidates + list(reversed(media_candidates)):
+            relative = relative.split('?', 1)[0]
+            candidate = os.path.abspath(os.path.join(stream_dir, relative))
+            if os.path.commonpath([stream_dir, candidate]) != os.path.abspath(stream_dir):
+                continue
+            try:
+                if os.path.getsize(candidate) > 0:
+                    return candidate
+            except OSError:
+                continue
+        return None
 
 # Global Instance
 hls_manager = HLSManager()

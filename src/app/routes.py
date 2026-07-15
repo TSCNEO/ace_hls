@@ -336,7 +336,7 @@ def _wait_for_ready_manifest(effective_id, timeout=45):
             return True
 
         proc = hls_manager.processes.get(effective_id)
-        if proc and proc.poll() is not None:
+        if not proc or proc.poll() is not None:
             return False
 
         time.sleep(0.5)

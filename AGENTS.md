@@ -42,7 +42,7 @@ components:
         persistence: stats.json
       hls_manager:
         file: src/app/services/hls_manager.py
-        responsibilities: [ffmpeg_process_lifecycle, hls_generation, idle_cleanup, ffprobe_metadata]
+        responsibilities: [ffmpeg_process_lifecycle, unique_upstream_client_identity, healthy_session_reuse, hls_generation, idle_cleanup, local_output_ffprobe_metadata]
       orchestrator:
         file: src/app/services/orchestrator.py
         api_default: /api/v1

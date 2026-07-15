@@ -2,7 +2,7 @@
 
 Interfaz web autogestionada para descubrir, reproducir y exportar canales AceStream. Convierte streams AceStream en HLS compatible con navegadores, iPhone/iPad y clientes IPTV, y puede integrarse con AceStream Orchestrator para mostrar el estado de motores y streams.
 
-Versión actual: `v2.4.1`.
+Versión actual: `v2.4.2`.
 
 ## Características
 
@@ -19,7 +19,7 @@ Versión actual: `v2.4.1`.
 - Listas M3U para VLC, TiviMate, IPTV Smarters y otros clientes.
 - Perfiles opcionales `original`, `max_compat`, `720p` y `480p`.
 - Transcodificación opcional por CPU o VAAPI cuando `/dev/dri/renderD128` está disponible en el contenedor.
-- Cierre automático de procesos FFmpeg tras 60 segundos sin actividad.
+- Cierre automático configurable de procesos FFmpeg sin peticiones HLS; el valor predeterminado es 120 segundos.
 - Dashboard de CPU, RAM, disco, procesos FFmpeg, logs y motores del Orchestrator.
 - Estadísticas persistentes de funcionamiento y datos técnicos obtenidos mediante FFprobe.
 - Configuración persistente en el volumen de datos.
@@ -33,6 +33,8 @@ Versión actual: `v2.4.1`.
 - Actualizada la integración con AceStream Orchestrator a la API unificada `/api/v1`, con Bearer token opcional y errores estructurados.
 - Adaptados el player y el dashboard a los campos actuales `container_id`, `content_id`, `stream_count`, peers y velocidades.
 - Añadida caché independiente por fuente, migración desde la caché global y fallback ante fallos parciales.
+- Eliminada la colisión de sesiones entre FFmpeg y FFprobe: cada FFmpeg usa identidad upstream única y FFprobe analiza la salida HLS local.
+- Los reintentos reutilizan sesiones FFmpeg sanas o todavía en preparación y el timeout de lectura upstream es configurable.
 - Añadida la arquitectura machine-readable del proyecto en [`AGENTS.md`](AGENTS.md).
 
 ## Arquitectura
@@ -72,6 +74,8 @@ Edita `.env`. `URL_ORIGEN` puede quedar vacío; las fuentes también pueden aña
 | `URL_ORIGEN` | Fuente M3U inicial opcional | vacío/reemplazar |
 | `CACHE_DURATION` | Antigüedad para el refresh solicitado por la WebUI | `300` |
 | `PLAYLIST_REFRESH_INTERVAL` | Intervalo del refresh autónomo, en segundos | `900` |
+| `FFMPEG_RW_TIMEOUT` | Timeout de lectura del proxy upstream, en segundos | `60` |
+| `HLS_IDLE_TIMEOUT` | Tiempo sin peticiones HLS antes de cerrar FFmpeg | `120` |
 | `ENABLE_TRANSCODE` | Habilita perfiles con recodificación | `false` |
 | `ORCHESTRATOR_URL` | URL base de la API; vacío reutiliza `ACEXY_IP:ACEXY_PORT` | vacío |
 | `ORCHESTRATOR_API_PREFIX` | Prefijo de la API unificada actual | `/api/v1` |
