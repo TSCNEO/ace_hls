@@ -2,6 +2,9 @@ import os
 import json
 import re
 import time
+import fcntl
+import tempfile
+import threading
 import requests
 import logging
 from app.config import Config
@@ -10,15 +13,41 @@ logger = logging.getLogger(__name__)
 
 class ChannelManager:
     def __init__(self):
-        self.last_update = 0
+        self.last_update = self._cache_mtime()
+        self._update_lock = threading.Lock()
+        self._process_lock_file = os.path.join(Config.DATA_DIR, 'channels.refresh.lock')
         if not os.path.exists(Config.DATA_DIR):
             os.makedirs(Config.DATA_DIR)
 
     def update_channels(self):
         """Downloads and processes the M3U list from ALL sources with deduplication."""
+        return self._run_update(force=True)
+
+    def update_channels_if_due(self, max_age):
+        """Refresh once per max_age across threads and Gunicorn workers."""
+        return self._run_update(force=False, max_age=max_age)
+
+    def is_update_due(self, max_age):
+        cache_mtime = self._cache_mtime()
+        return not cache_mtime or (time.time() - cache_mtime) >= max_age
+
+    def _cache_mtime(self):
+        try:
+            return os.path.getmtime(Config.JSON_FILE)
+        except OSError:
+            return 0
+
+    def _run_update(self, force, max_age=None):
+        os.makedirs(Config.DATA_DIR, exist_ok=True)
+        with self._update_lock:
+            with open(self._process_lock_file, 'a+') as process_lock:
+                fcntl.flock(process_lock.fileno(), fcntl.LOCK_EX)
+                if not force and not self.is_update_due(max_age):
+                    return None
+                return self._update_channels_locked()
+
+    def _update_channels_locked(self):
         from app.services.source_manager import source_manager
-        
-        # Default behavior: Update always. Caller controls frequency.
 
         logger.info("Updating channels list from all sources...")
         
@@ -26,6 +55,7 @@ class ChannelManager:
         all_channels = []
         seen_ids = set()
         new_m3u_content = ["#EXTM3U"]
+        successful_sources = 0
         
         requests.packages.urllib3.disable_warnings()
 
@@ -36,6 +66,7 @@ class ChannelManager:
                 response = requests.get(url, timeout=30, verify=False)
                 response.raise_for_status()
                 content = response.text
+                successful_sources += 1
                 
                 self._parse_m3u_content(content, url, all_channels, seen_ids, new_m3u_content)
                 
@@ -43,18 +74,36 @@ class ChannelManager:
                 logger.error(f"Failed to download list from {url}: {e}")
                 # Continue to next source
 
-        # Save results safely
+        if sources and successful_sources == 0:
+            logger.error("Channel refresh aborted: all sources failed; preserving current cache.")
+            return False
+
         try:
-            with open(Config.JSON_FILE, 'w') as f:
-                json.dump(all_channels, f, indent=2)
-            
-            with open(Config.M3U_FILE, 'w') as f:
-                f.write("\n".join(new_m3u_content))
-            
+            self._atomic_write(Config.JSON_FILE, json.dumps(all_channels, indent=2))
+            self._atomic_write(Config.M3U_FILE, "\n".join(new_m3u_content))
+
             self.last_update = time.time()
-            logger.info(f"Update complete. Total: {len(all_channels)} channels from {len(sources)} sources.")
+            logger.info(
+                f"Update complete. Total: {len(all_channels)} channels from "
+                f"{successful_sources}/{len(sources)} successful sources."
+            )
+            return True
         except Exception as e:
             logger.error(f"Error saving output files: {e}")
+            return False
+
+    def _atomic_write(self, destination, content):
+        directory = os.path.dirname(destination)
+        fd, temporary = tempfile.mkstemp(prefix='.ace-hls-', dir=directory, text=True)
+        try:
+            with os.fdopen(fd, 'w') as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, destination)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
 
     def _parse_m3u_content(self, content, source_url, channels_list, seen_ids, m3u_lines):
         lines = content.splitlines()

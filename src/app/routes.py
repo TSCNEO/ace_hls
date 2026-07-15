@@ -127,6 +127,9 @@ def health_check():
         "active_streams": len(hls_manager.processes)
     }
 
+    from app.services.refresh_scheduler import playlist_refresh_scheduler
+    health["components"]["playlist_refresh"] = playlist_refresh_scheduler.status()
+
     status_code = 200 if health["status"] == "ok" else 500
     return jsonify(health), status_code
 
@@ -237,6 +240,12 @@ def refresh_sources():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@main_bp.route('/api/sources/refresh/status')
+def refresh_sources_status():
+    from app.services.refresh_scheduler import playlist_refresh_scheduler
+
+    return jsonify(playlist_refresh_scheduler.status())
+
 @main_bp.route('/api/stats/feedback', methods=['POST'])
 def submit_feedback():
     data = request.get_json()
@@ -263,6 +272,28 @@ def orchestrator_streams():
     service = OrchestratorService()
     data = service.get_streams()
     return jsonify(data)
+
+@main_bp.route('/api/orchestrator/overview')
+def orchestrator_overview():
+    from app.services.orchestrator import OrchestratorService
+
+    service = OrchestratorService()
+    return jsonify(service.get_overview())
+
+@main_bp.route('/api/orchestrator/metrics')
+def orchestrator_metrics():
+    from app.services.orchestrator import OrchestratorService
+
+    service = OrchestratorService()
+    window_seconds = request.args.get('window_seconds', 900, type=int)
+    return jsonify(service.get_dashboard_metrics(window_seconds))
+
+@main_bp.route('/api/orchestrator/config')
+def orchestrator_config():
+    from app.services.orchestrator import OrchestratorService
+
+    service = OrchestratorService()
+    return jsonify(service.connection_info())
 
 def _normalize_hls_profile(profile):
     if Config.ENABLE_TRANSCODE and profile not in ['original', '720p', '480p', 'max_compat']:

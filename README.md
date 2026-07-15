@@ -11,6 +11,7 @@ Una interfaz web moderna y autogestionada para visualizar y reproducir canales d
 *   **🧟 Monitor de Inactividad**: Sistema "Watchdog" que mata automáticamente los procesos de video si cierras la pestaña o dejas de ver un canal, ahorrando ancho de banda y CPU.
 *   **📋 Lista M3U Universal**: Genera una lista compatible con VLC, TiviMate, IPTV Smarters, etc.
 *   **⚙️ Gestión de Fuentes Multiples**: Permite añadir múltiples listas M3U desde la interfaz web, con deduplicación automática y persistencia.
+*   **⏱️ Actualización Autónoma**: Refresca las fuentes M3U cada 15 minutos aunque ningún usuario abra la WebUI.
 *   **🤖 Monitor de Salud "Social"**: Validación pasiva de canales. El sistema recuerda cuándo funcionó un canal por última vez y muestra sus datos técnicos (Resolución, FPS, Codecs) extraídos automáticamente.
 *   **🏥 Health Check Integrado**: Sistema de autodiagnóstico que vigila el espacio en disco y la conexión con AceStream, permitiendo a Docker reiniciar el servicio si algo falla.
 *   **🏎️ Transcoding HW & Perfiles**: (Experimental) Soporte para **Aceleración por Hardware (VAAPI/QSV)**. Transcodifica al vuelo a **720p/480p** para ahorrar datos o mejorar compatibilidad. Selector de calidad integrado.
@@ -44,7 +45,11 @@ Edita `.env` si es necesario. Variables principales:
 |---|---|---|
 | `URL_ORIGEN` | URL de tu lista M3U (opcional) | (vacio) |
 | `ENABLE_TRANSCODE` | Habilitar transcodificación FFMPEG | `false` |
-| `ACEXY_API_TOKEN` | Token para stats del Orquestador (opcional) | `defaultpassword` |
+| `PLAYLIST_REFRESH_INTERVAL` | Intervalo autónomo de fuentes (segundos) | `900` |
+| `ORCHESTRATOR_URL` | URL base del Orchestrator; vacío reutiliza AceXY | vacío |
+| `ORCHESTRATOR_API_PREFIX` | Prefijo API del Orchestrator Go unificado | `/api/v1` |
+| `ORCHESTRATOR_API_TOKEN` | Bearer token del Orchestrator | `defaultpassword` |
+| `ORCHESTRATOR_TIMEOUT` | Timeout de API en segundos | `5` |
 
 ### 2. Arrancar
 ```bash

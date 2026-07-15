@@ -282,7 +282,11 @@ Cargando logs del sistema...
                 const orchData = await orchRes.json();
                 const statsMap = {};
                 if (Array.isArray(orchData)) {
-                    orchData.forEach(s => statsMap[s.key] = s);
+                    orchData.forEach(s => {
+                        [s.key, s.content_id, s.id].forEach(key => {
+                            if (key) statsMap[key] = s;
+                        });
+                    });
                 }
 
                 // Fetch logs separately
@@ -319,7 +323,7 @@ Cargando logs del sistema...
                         data.streams.forEach(stream => {
                             const tr = document.createElement('tr');
 
-                            const stats = statsMap[stream.id] || {};
+                            const stats = statsMap[stream.id] || statsMap[stream.id.substring(0, 40)] || {};
                             const peers = stats.peers !== undefined ? stats.peers : '-';
                             const speedDownVal = stats.speed_down ? stats.speed_down : 0;
                             const speedDown = speedDownVal + ' KB/s';
@@ -365,7 +369,9 @@ Cargando logs del sistema...
                         engines.forEach(eng => {
                             const tr = document.createElement('tr');
                             const isHealthy = eng.health_status === 'healthy';
-                            const streamsCount = eng.streams ? eng.streams.length : 0;
+                            const streamsCount = eng.stream_count !== undefined
+                                ? eng.stream_count
+                                : (eng.streams ? eng.streams.length : 0);
 
                             // Uptime calc
                             const uptime = eng.first_seen ? formatTime((Date.now() - new Date(eng.first_seen).getTime()) / 1000) : '-';

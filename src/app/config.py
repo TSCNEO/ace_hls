@@ -4,6 +4,7 @@ class Config:
     # AceHLS Settings
     ACE_HLS_PORT = int(os.environ.get("ACE_HLS_PORT", 8088))
     CACHE_DURATION = int(os.environ.get("CACHE_DURATION", 300))
+    PLAYLIST_REFRESH_INTERVAL = max(60, int(os.environ.get("PLAYLIST_REFRESH_INTERVAL", 900)))
     # Use absolute path to avoid confusion with send_from_directory
     DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
     
@@ -14,6 +15,18 @@ class Config:
     ACEXY_IP = os.environ.get("ACEXY_IP", "127.0.0.1")
     ACEXY_PORT = os.environ.get("ACEXY_PORT", "8080")
     ACEXY_API_TOKEN = os.environ.get("ACEXY_API_TOKEN", "defaultpassword")
+
+    # AceStream Orchestrator management API (Go unified API uses /api/v1).
+    ORCHESTRATOR_URL = (
+        os.environ.get("ORCHESTRATOR_URL")
+        or f"http://{ACEXY_IP}:{ACEXY_PORT}"
+    ).rstrip('/')
+    ORCHESTRATOR_API_PREFIX = os.environ.get("ORCHESTRATOR_API_PREFIX", "/api/v1").strip()
+    if ORCHESTRATOR_API_PREFIX and not ORCHESTRATOR_API_PREFIX.startswith('/'):
+        ORCHESTRATOR_API_PREFIX = f"/{ORCHESTRATOR_API_PREFIX}"
+    ORCHESTRATOR_API_PREFIX = ORCHESTRATOR_API_PREFIX.rstrip('/')
+    ORCHESTRATOR_API_TOKEN = os.environ.get("ORCHESTRATOR_API_TOKEN", ACEXY_API_TOKEN)
+    ORCHESTRATOR_TIMEOUT = max(1.0, float(os.environ.get("ORCHESTRATOR_TIMEOUT", 5)))
 
     # Transcoding
     ENABLE_TRANSCODE = os.environ.get("ENABLE_TRANSCODE", "false").lower() == "true"

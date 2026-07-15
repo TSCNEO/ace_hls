@@ -381,10 +381,17 @@ async function fetchEngineInfo(aceId, isUpdate = false) {
 
         let html = '';
 
+        const stream = Array.isArray(streams) ? streams.find(s =>
+            [s.key, s.content_id, s.id].some(value =>
+                typeof value === 'string' && value.toLowerCase().includes(aceId.toLowerCase())
+            )
+        ) : null;
+
         // Engine Info
         if (Array.isArray(engines)) {
             const engine = engines.find(e =>
-                e.streams && e.streams.some(s => s.toLowerCase().includes(aceId.toLowerCase()))
+                (stream && e.container_id === stream.container_id) ||
+                (e.streams && e.streams.some(s => s.toLowerCase().includes(aceId.toLowerCase())))
             );
             if (engine) {
                 const isHealthy = engine.health_status === 'healthy';
@@ -397,14 +404,10 @@ async function fetchEngineInfo(aceId, isUpdate = false) {
         }
 
         // Stream Stats
-        if (Array.isArray(streams)) {
-            const stream = streams.find(s => s.key && s.key.toLowerCase() === aceId.toLowerCase());
-            if (stream) {
-                const peers = stream.peers !== undefined ? stream.peers : 0;
-                const downVal = stream.speed_down ? stream.speed_down : 0;
-                const downStr = downVal; // Raw value is apparently already KB/s
-                html += ` <span style="margin-left:10px; opacity:0.8;">| 👤 ${peers} | ⬇️ ${downStr} KB/s</span>`;
-            }
+        if (stream) {
+            const peers = stream.peers !== undefined ? stream.peers : 0;
+            const downVal = stream.speed_down ? stream.speed_down : 0;
+            html += ` <span style="margin-left:10px; opacity:0.8;">| 👤 ${peers} | ⬇️ ${downVal} KB/s</span>`;
         }
 
         if (html === '') {

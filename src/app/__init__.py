@@ -4,6 +4,7 @@ from flask import Flask
 
 from app.config import Config
 from app.services.channel_manager import channel_manager
+from app.services.refresh_scheduler import playlist_refresh_scheduler
 
 def create_app():
     app = Flask(__name__, static_url_path='')
@@ -20,8 +21,6 @@ def create_app():
     )
     app.logger.setLevel(logging.INFO)
 
-    # Scheduler removed as per user request (Lazy loading preferred)
-    
     # Initial update
     # But useful to have *some* data.
     try:
@@ -33,6 +32,10 @@ def create_app():
 
     from app.routes import main_bp
     app.register_blueprint(main_bp)
+
+    # Independent from WebUI traffic; cross-process locking prevents duplicate
+    # refreshes if Gunicorn is later configured with multiple workers.
+    playlist_refresh_scheduler.start()
 
     return app
 
