@@ -25,7 +25,7 @@ components:
     services:
       channel_manager:
         file: src/app/services/channel_manager.py
-        responsibilities: [download_m3u, parse_acestream_ids, deduplicate, atomic_cache_write, cross_process_single_flight]
+        responsibilities: [download_m3u, parse_acestream_ids, deduplicate, per_source_cache_fallback, atomic_cache_write, cross_process_single_flight]
       refresh_scheduler:
         file: src/app/services/refresh_scheduler.py
         interval_env: PLAYLIST_REFRESH_INTERVAL
@@ -71,6 +71,7 @@ persistence:
   container_default: /app/data
   files:
     channels.json: normalized_channel_cache
+    source_cache/: last_valid_normalized_channels_per_source
     ace_hls.m3u: generated_direct_playlist
     sources.json: source_registry
     settings.json: web_settings
@@ -87,8 +88,8 @@ http_api:
   health: /health
 flows:
   playlist_refresh:
-    sequence: [scheduler_due_check, cross_process_lock, fetch_all_sources, parse_deduplicate, atomic_replace]
-    failure_policy: preserve_previous_cache_if_all_sources_fail
+    sequence: [scheduler_due_check, cross_process_lock, migrate_legacy_global_cache, fetch_each_source, update_or_reuse_source_snapshot, deduplicate, atomic_replace]
+    failure_policy: reuse_last_valid_snapshot_for_each_failed_source
   browser_playback:
     sequence: [probe_upstream_type, ffmpeg_for_mpegts_or_proxy_for_real_hls, wait_for_playable_manifest, hls_js_attach]
   exported_playlist:

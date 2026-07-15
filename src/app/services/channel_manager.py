@@ -1,3 +1,4 @@
+import hashlib
 import os
 import json
 import re
@@ -52,45 +53,174 @@ class ChannelManager:
         logger.info("Updating channels list from all sources...")
         
         sources = source_manager.get_sources()
-        all_channels = []
-        seen_ids = set()
-        new_m3u_content = ["#EXTM3U"]
+        previous_channels = self._load_global_channels()
+        os.makedirs(Config.SOURCE_CACHE_DIR, exist_ok=True)
+        self._migrate_global_cache(sources, previous_channels)
+
+        source_snapshots = []
         successful_sources = 0
+        cached_sources = 0
         
         requests.packages.urllib3.disable_warnings()
 
         for src in sources:
             url = src['url']
+            cached_channels = self._load_source_cache(url)
             try:
                 logger.info(f"Fetching source: {url}")
                 response = requests.get(url, timeout=30, verify=False)
                 response.raise_for_status()
                 content = response.text
+                if "#EXTM3U" not in content.upper():
+                    raise ValueError("response is not an M3U playlist")
+
+                source_channels = []
+                self._parse_m3u_content(
+                    content,
+                    url,
+                    source_channels,
+                    set(),
+                    ["#EXTM3U"],
+                )
+                if cached_channels and not source_channels:
+                    raise ValueError("empty playlist would replace a non-empty source cache")
+
+                self._save_source_cache(url, source_channels)
+                source_snapshots.append(source_channels)
                 successful_sources += 1
-                
-                self._parse_m3u_content(content, url, all_channels, seen_ids, new_m3u_content)
-                
             except Exception as e:
                 logger.error(f"Failed to download list from {url}: {e}")
-                # Continue to next source
+                fallback = cached_channels or self._legacy_channels_for_source(previous_channels, url)
+                source_snapshots.append(fallback)
+                if fallback:
+                    cached_sources += 1
+                    logger.warning(
+                        "Using cached source: %s | Channels: %s",
+                        url,
+                        len(fallback),
+                    )
+
+        all_channels = self._merge_source_snapshots(source_snapshots)
 
         if sources and successful_sources == 0:
-            logger.error("Channel refresh aborted: all sources failed; preserving current cache.")
+            if not os.path.exists(Config.JSON_FILE) and all_channels:
+                return self._save_global_outputs(all_channels, successful_sources, cached_sources, len(sources))
+            logger.error(
+                "Channel refresh aborted: all sources failed; preserving current global cache."
+            )
             return False
 
+        return self._save_global_outputs(
+            all_channels,
+            successful_sources,
+            cached_sources,
+            len(sources),
+        )
+
+    def _save_global_outputs(self, channels, successful_sources, cached_sources, source_count):
         try:
-            self._atomic_write(Config.JSON_FILE, json.dumps(all_channels, indent=2))
-            self._atomic_write(Config.M3U_FILE, "\n".join(new_m3u_content))
+            self._atomic_write(Config.JSON_FILE, json.dumps(channels, indent=2))
+            self._atomic_write(Config.M3U_FILE, self._render_m3u(channels))
 
             self.last_update = time.time()
             logger.info(
-                f"Update complete. Total: {len(all_channels)} channels from "
-                f"{successful_sources}/{len(sources)} successful sources."
+                "Update complete. Total: %s channels | Fresh sources: %s/%s | "
+                "Cached fallbacks: %s",
+                len(channels),
+                successful_sources,
+                source_count,
+                cached_sources,
             )
             return True
         except Exception as e:
             logger.error(f"Error saving output files: {e}")
             return False
+
+    def _source_cache_path(self, source_url):
+        digest = hashlib.sha256(source_url.encode('utf-8')).hexdigest()
+        return os.path.join(Config.SOURCE_CACHE_DIR, f"{digest}.json")
+
+    def _save_source_cache(self, source_url, channels):
+        payload = {
+            "schema_version": 1,
+            "source_url": source_url,
+            "updated_at": time.time(),
+            "channels": channels,
+        }
+        self._atomic_write(
+            self._source_cache_path(source_url),
+            json.dumps(payload, indent=2),
+        )
+
+    def _load_source_cache(self, source_url):
+        try:
+            with open(self._source_cache_path(source_url), 'r') as handle:
+                payload = json.load(handle)
+            channels = payload.get("channels")
+            if (
+                payload.get("source_url") != source_url
+                or not isinstance(channels, list)
+                or not all(isinstance(channel, dict) for channel in channels)
+            ):
+                raise ValueError("invalid source cache payload")
+            return channels
+        except (OSError, ValueError, TypeError, AttributeError) as exc:
+            if not isinstance(exc, FileNotFoundError):
+                logger.warning("Ignoring invalid source cache for %s: %s", source_url, exc)
+            return []
+
+    def _load_global_channels(self):
+        try:
+            with open(Config.JSON_FILE, 'r') as handle:
+                channels = json.load(handle)
+            return channels if isinstance(channels, list) else []
+        except (OSError, ValueError):
+            return []
+
+    def _legacy_channels_for_source(self, channels, source_url):
+        return [channel for channel in channels if channel.get("source") == source_url]
+
+    def _migrate_global_cache(self, sources, previous_channels):
+        if not previous_channels:
+            return
+        for source in sources:
+            url = source['url']
+            if os.path.exists(self._source_cache_path(url)):
+                continue
+            legacy_channels = self._legacy_channels_for_source(previous_channels, url)
+            if legacy_channels:
+                self._save_source_cache(url, legacy_channels)
+                logger.info(
+                    "Migrated global cache for source: %s | Channels: %s",
+                    url,
+                    len(legacy_channels),
+                )
+
+    def _merge_source_snapshots(self, snapshots):
+        channels = []
+        seen_ids = set()
+        for snapshot in snapshots:
+            for original in snapshot:
+                ace_id = original.get("id")
+                if not ace_id or ace_id in seen_ids:
+                    continue
+                seen_ids.add(ace_id)
+                channel = dict(original)
+                channel["url"] = (
+                    f"http://{Config.ACEXY_IP}:{Config.ACEXY_PORT}/ace/getstream?id={ace_id}"
+                )
+                channels.append(channel)
+        return channels
+
+    def _render_m3u(self, channels):
+        lines = ["#EXTM3U"]
+        for channel in channels:
+            name = str(channel.get("name") or "Unknown").replace('\n', ' ')
+            logo = str(channel.get("logo") or "").replace('"', '')
+            group = str(channel.get("group") or "General").replace('"', '')
+            lines.append(f'#EXTINF:-1 tvg-logo="{logo}" group-title="{group}",{name}')
+            lines.append(channel["url"])
+        return "\n".join(lines)
 
     def _atomic_write(self, destination, content):
         directory = os.path.dirname(destination)

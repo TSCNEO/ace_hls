@@ -70,6 +70,8 @@ class PlaylistRefreshScheduler:
                 break
 
     def _seconds_until_due(self):
+        if self.last_result == "failed":
+            return min(60, self.interval)
         cache_mtime = self.manager._cache_mtime()
         if not cache_mtime:
             return min(60, self.interval)
