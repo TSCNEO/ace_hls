@@ -65,11 +65,14 @@ documentation:
   configuration: docs/configuration.md
   api: docs/api.md
   sources_v2: docs/sources-v2.md
+  orchestrator_deployment: docs/orchestrator-deployment.md
   releases: CHANGELOG.md
 external_services:
   orchestrator_proxy:
-    config: [STREAM_BACKEND, STREAM_PROXY_HOST, STREAM_PROXY_PORT, STREAM_PUBLIC_PORT, STREAM_PUBLIC_ENDPOINT]
+    config: [STREAM_BACKEND, ORCHESTRATOR_MODE, ORCHESTRATOR_HOST, ORCHESTRATOR_PORT, STREAM_PROXY_HOST, STREAM_PROXY_PORT, STREAM_PUBLIC_PORT, STREAM_PUBLIC_ENDPOINT]
     compose_image: ghcr.io/krinkuto11/acestream-orchestrator:v2.1.0.3
+    compose_local: [docker-compose.yml, release/docker-compose.yml]
+    compose_remote: [docker-compose.orchestrator-remote.yml, release/docker-compose.orchestrator-remote.yml]
     stream_endpoint: /ace/getstream?id={id_or_content_id}|infohash={infohash}
     payloads: [video/mp2t_continuous, hls_manifest]
     panel: /panel
@@ -79,7 +82,7 @@ external_services:
     compose_files: [docker-compose.acexy.yml, release/docker-compose.acexy.yml]
     image: ghcr.io/javinator9889/acexy:0.2.2
   orchestrator_management:
-    config: [ORCHESTRATOR_URL, ORCHESTRATOR_API_PREFIX, ORCHESTRATOR_API_TOKEN, ORCHESTRATOR_TIMEOUT]
+    config: [ORCHESTRATOR_HOST, ORCHESTRATOR_PORT, ORCHESTRATOR_URL, ORCHESTRATOR_API_PREFIX, ORCHESTRATOR_API_TOKEN, ORCHESTRATOR_TIMEOUT]
     default_prefix: /api/v1
     endpoints:
       engines: /engines
@@ -133,6 +136,7 @@ invariants:
   - orchestrator secrets never appear in API responses or logs
   - management bearer tokens never appear in playback URLs
   - STREAM_* takes precedence over ACEXY_* aliases
+  - remote orchestrator compose never mounts the Docker socket or starts local streaming services
 validation:
   unit: PYTHONPATH=src .venv/bin/python -m pytest -q
   syntax_python: .venv/bin/python -m compileall -q src tests

@@ -8,6 +8,8 @@
 - Compartido el Bearer token de gestión sin incluirlo en URLs de reproducción, respuestas ni logs.
 - Conservado el stack AceXY anterior en Compose legacy y migrados sus ajustes persistentes.
 - Ampliadas la WebUI, la API de configuración y la salud para mostrar el backend efectivo.
+- Añadido despliegue con Orchestrator externo mediante IP, hostname o IPv6, sin crear servicios ni montar Docker socket localmente.
+- Añadidos Compose y ejemplo de entorno remotos, junto con una guía completa de instalación, verificación, actualización y diagnóstico.
 
 ## v2.5.1
 

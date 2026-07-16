@@ -12,7 +12,7 @@ La infraestructura se configura mediante entorno. La WebUI guarda sus ajustes en
 | `STREAM_PUBLIC_PORT` | `8000` | Puerto publicado y usado al calcular listas directas. |
 | `STREAM_PUBLIC_ENDPOINT` | vacío | Override HTTP/HTTPS completo; admite dominio, IPv6, ruta y puerto propios. |
 
-Sin override, una petición a `http://192.168.1.20:8088` produce enlaces directos `http://192.168.1.20:8000/ace/getstream`. El host se deriva de cada petición, por lo que funciona desde LAN o VPN sin fijar una IP.
+En modo local y sin override, una petición a `http://192.168.1.20:8088` produce enlaces directos `http://192.168.1.20:8000/ace/getstream`. En modo remoto se usa `ORCHESTRATOR_HOST:ORCHESTRATOR_PORT`.
 
 Durante v2.x, `ACEXY_IP`, `ACEXY_PORT` y `ACEXY_PUBLIC_ENDPOINT` son aliases de `STREAM_PROXY_HOST`, `STREAM_PROXY_PORT` y `STREAM_PUBLIC_ENDPOINT`. Las variables nuevas tienen prioridad. `ACEXY_PUBLIC_TOKEN` se conserva solo para AceXY y nunca recibe el token de gestión del Orchestrator.
 
@@ -20,14 +20,21 @@ Durante v2.x, `ACEXY_IP`, `ACEXY_PORT` y `ACEXY_PUBLIC_ENDPOINT` son aliases de 
 
 | Variable | Predeterminado | Uso |
 |---|---:|---|
+| `ORCHESTRATOR_MODE` | `local` | `local` o `remote`; describe el despliegue efectivo en API y WebUI. |
+| `ORCHESTRATOR_HOST` | `orchestrator` | Host del servicio; en remoto es obligatorio y admite IPv4, hostname o IPv6. |
+| `ORCHESTRATOR_PORT` | `8000` | Puerto accesible del Orchestrator; en local debe conservar el puerto interno `8000`. |
 | `ORCHESTRATOR_IMAGE` | `ghcr.io/krinkuto11/acestream-orchestrator:v2.1.0.3` | Imagen fijada, reemplazable al probar otra versión. |
-| `ORCHESTRATOR_URL` | `http://orchestrator:8000` en Compose | Base interna de proxy y API. |
+| `ORCHESTRATOR_URL` | derivada de host y puerto | Override exclusivo de la base de la API de gestión. |
 | `ORCHESTRATOR_API_PREFIX` | `/api/v1` | Prefijo de gestión. |
 | `ORCHESTRATOR_API_TOKEN` | `change-this-local-token` | Se pasa como `API_KEY` y como Bearer token de AceHLS. |
 | `ORCHESTRATOR_TIMEOUT` | `5` | Timeout de gestión en segundos. |
 | `ORCHESTRATOR_VPN_ENABLED` | `false` | Activa la VPN administrada; requiere configurarla después en el panel. |
 
 El panel está en `http://HOST:8000/panel` y la salud del proxy en `/proxy/health`. El Compose monta `/var/run/docker.sock`, persiste `/app/app/config` en `orchestrator_data` y establece `DOCKER_NETWORK=ace_hls_stream`. El token protege operaciones de gestión; el endpoint `/ace/getstream` permanece accesible sin añadir secretos a la URL.
+
+El Compose remoto está en `docker-compose.orchestrator-remote.yml` y su variante publicada en `release/docker-compose.orchestrator-remote.yml`. Solo crea AceHLS. Usa `.env.orchestrator-remote.example` como base y consulta la [guía de despliegue](orchestrator-deployment.md).
+
+`STREAM_PROXY_HOST/PORT` prevalece sobre `ORCHESTRATOR_HOST/PORT` para la reproducción interna. `ORCHESTRATOR_URL` solo afecta a gestión y `STREAM_PUBLIC_ENDPOINT` solo a enlaces para clientes.
 
 `ACEXY_API_TOKEN` sigue siendo fallback de `ORCHESTRATOR_API_TOKEN` para despliegues antiguos que no usen los Compose suministrados.
 

@@ -62,7 +62,7 @@ Un canal personalizado requiere `name` y `stream_id`; admite `group`, `logo` y `
 | `GET` | `/api/orchestrator/streams` | `/api/v1/streams?status=started` |
 | `GET` | `/api/orchestrator/overview` | `/api/v1/orchestrator/status` |
 | `GET` | `/api/orchestrator/metrics` | `/api/v1/metrics/dashboard`; query `window_seconds`. |
-| `GET` | `/api/orchestrator/config` | Backend, URL interna, endpoint público, panel, puertos y autenticación efectiva sin revelar el token. |
+| `GET` | `/api/orchestrator/config` | Backend, despliegue local/remoto, URL de gestión, hosts, puertos, endpoint público, panel y autenticación efectiva sin revelar el token. |
 
 `STREAM_BACKEND=orchestrator` activa la integración automáticamente. Sin esa variable se conserva el ajuste `orchestrator_enabled`. Cuando está desactivada o el upstream falla, estos endpoints devuelven errores JSON estructurados en lugar de propagar una excepción Flask.
 

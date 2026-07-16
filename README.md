@@ -27,13 +27,14 @@ Navegador o IPTV ─► AceHLS ─► Orchestrator ─► motores AceStream ┘
                        └─ MPEG-TS: FFmpeg a HLS
 ```
 
-El Compose predeterminado ejecuta `ace-hls` y AceStream Orchestrator `v2.1.0.3`. El Orchestrator crea y administra los motores bajo demanda. El stack simple AceXY continúa disponible en `docker-compose.acexy.yml`.
+El Compose predeterminado ejecuta `ace-hls` y AceStream Orchestrator `v2.1.0.3`. También existe un Compose que conecta AceHLS a un Orchestrator instalado en otra IP. El stack simple AceXY continúa disponible en `docker-compose.acexy.yml`.
 
-## Instalación
+## Instalación con Orchestrator local
 
 ```bash
 cp .env.example .env
-docker compose up -d --build
+# Editar ORCHESTRATOR_API_TOKEN
+docker compose --env-file .env up -d --build --remove-orphans
 ```
 
 La WebUI queda en `http://IP_DEL_HOST:8088`, el panel del Orchestrator en `http://IP_DEL_HOST:8000/panel` y la reproducción directa usa el mismo puerto `8000`. Cambia `ORCHESTRATOR_API_TOKEN` antes de usar el stack fuera de una red de confianza.
@@ -41,18 +42,30 @@ La WebUI queda en `http://IP_DEL_HOST:8088`, el panel del Orchestrator en `http:
 Para usar la imagen publicada:
 
 ```bash
-docker compose -f release/docker-compose.yml pull
-docker compose -f release/docker-compose.yml up -d
+docker compose -f release/docker-compose.yml --env-file .env pull
+docker compose -f release/docker-compose.yml --env-file .env up -d --remove-orphans
 ```
 
 El Compose de release usa `tscneo/ace-hls-viewer:latest`. Para fijar una versión:
 
 ```bash
 ACE_HLS_IMAGE=tscneo/ace-hls-viewer:2.6.0-dev \
-docker compose -f release/docker-compose.yml up -d
+docker compose -f release/docker-compose.yml --env-file .env up -d --remove-orphans
 ```
 
-La configuración completa está en [`docs/configuration.md`](docs/configuration.md).
+## Instalación con Orchestrator externo
+
+```bash
+cp .env.orchestrator-remote.example .env
+# Editar ORCHESTRATOR_HOST y ORCHESTRATOR_API_TOKEN
+ACE_HLS_IMAGE=tscneo/ace-hls-viewer:2.6.0-dev \
+docker compose -f release/docker-compose.orchestrator-remote.yml --env-file .env \
+  up -d --remove-orphans
+```
+
+Este modo solo ejecuta AceHLS y utiliza por defecto `http://ORCHESTRATOR_HOST:ORCHESTRATOR_PORT` para la API y la reproducción. No monta el Docker socket ni publica un Orchestrator local.
+
+La guía paso a paso, verificación y diagnóstico está en [`docs/orchestrator-deployment.md`](docs/orchestrator-deployment.md). La referencia de variables está en [`docs/configuration.md`](docs/configuration.md).
 
 ## Fuentes y persistencia
 
@@ -86,7 +99,7 @@ Detalles del formato y compatibilidad: [`docs/sources-v2.md`](docs/sources-v2.md
 | 480p | `/playlist.m3u?profile=480p` |
 | Todas las variantes | `/api/playlist/all.m3u` |
 
-`direct` genera automáticamente `http://IP_DEL_HOST:8000/ace/getstream`; `STREAM_PUBLIC_ENDPOINT` permite sobrescribirlo. `max_compat`, `720p` y `480p` requieren `ENABLE_TRANSCODE=true`. Si se habilita VAAPI, debe montarse `/dev/dri` en el contenedor.
+En modo local, `direct` genera `http://IP_DEL_HOST:8000/ace/getstream`. En modo remoto usa `ORCHESTRATOR_HOST:ORCHESTRATOR_PORT`. `STREAM_PUBLIC_ENDPOINT` permite sobrescribir ambos casos. `max_compat`, `720p` y `480p` requieren `ENABLE_TRANSCODE=true`. Si se habilita VAAPI, debe montarse `/dev/dri` en el contenedor.
 
 La referencia completa de endpoints está en [`docs/api.md`](docs/api.md).
 
@@ -116,6 +129,7 @@ PYTHONPATH=src .venv/bin/python -m pytest -q
 .venv/bin/python -m compileall -q src tests
 node --check src/app/static/script.js
 docker compose --env-file .env.example config -q
+docker compose -f docker-compose.orchestrator-remote.yml --env-file .env.orchestrator-remote.example config -q
 docker compose -f docker-compose.acexy.yml --env-file .env.example config -q
 docker build -t ace-hls-viewer:test .
 ```
