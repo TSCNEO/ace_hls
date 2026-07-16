@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
+from app import create_app
 from app.config import Config
 from app.services.channel_manager import ChannelManager
 from app.services.custom_channel_manager import (
@@ -33,10 +34,8 @@ def configure_paths(tmp_path):
 
 
 def test_legacy_sources_migrate_once_with_backup_and_stable_ids(tmp_path):
-    legacy = [
-        {"url": "https://one.example/list.m3u", "added_at": 10},
-        {"url": "https://one.example/other.m3u", "added_at": 20},
-    ]
+    fixture = Path(__file__).parent / "fixtures/sources-v1.json"
+    legacy = json.loads(fixture.read_text(encoding="utf-8"))
     (tmp_path / "sources.json").write_text(json.dumps(legacy))
     manager = SourceManager()
 
@@ -67,6 +66,19 @@ def test_future_or_corrupt_source_schema_is_never_overwritten(tmp_path):
         with pytest.raises(SourceRegistryError):
             manager.get_sources()
     assert (tmp_path / "sources.json").read_text() == corrupt
+
+
+def test_app_startup_migrates_without_synchronous_source_download(tmp_path):
+    fixture = Path(__file__).parent / "fixtures/sources-v1.json"
+    (tmp_path / "sources.json").write_text(fixture.read_text(encoding="utf-8"), encoding="utf-8")
+
+    with configure_paths(tmp_path), patch("app.playlist_refresh_scheduler.start"):
+        with patch("app.services.source_validator.SourceValidator.validate") as validate:
+            create_app()
+        sources = SourceManager().get_sources()
+
+    validate.assert_not_called()
+    assert all(source["validation"]["status"] == "pending" for source in sources)
 
 
 @pytest.mark.parametrize(

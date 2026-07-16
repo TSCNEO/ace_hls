@@ -1,0 +1,10 @@
+[
+  {
+    "url": "https://one.example/list.m3u",
+    "added_at": 10
+  },
+  {
+    "url": "https://one.example/other.m3u",
+    "added_at": 20
+  }
+]
