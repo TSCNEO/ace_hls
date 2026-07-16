@@ -37,7 +37,7 @@ services:
       - ace_hls_stream
 
   acexy:
-    image: ghcr.io/javinator9889/acexy:0.2.0
+    image: ghcr.io/javinator9889/acexy:0.2.2
     container_name: acexy
     restart: unless-stopped
     ports:
