@@ -2,7 +2,7 @@ from app.config import Config
 
 LOCAL_INDICATORS = ['127.0.0.1', 'localhost', '0.0.0.0', 'acexy', 'acestream']
 
-def get_acexy_url_for_client(request_host, ace_id=None):
+def get_acexy_url_for_client(request_host, ace_id=None, identifier_type="id"):
     """
     Determines the URL the browser should use to reach AceXY.
     """
@@ -19,7 +19,8 @@ def get_acexy_url_for_client(request_host, ace_id=None):
         # Build Query Params
         params = []
         if ace_id:
-            params.append(f"id={ace_id}")
+            query_key = "infohash" if identifier_type == "infohash" else "id"
+            params.append(f"{query_key}={ace_id}")
         if public_token:
             params.append(f"token={public_token}")
             
@@ -34,7 +35,8 @@ def get_acexy_url_for_client(request_host, ace_id=None):
         
     base_url = f"http://{target_ip}:{Config.ACEXY_PORT}/ace/getstream"
     if ace_id:
-        return f"{base_url}?id={ace_id}"
+        query_key = "infohash" if identifier_type == "infohash" else "id"
+        return f"{base_url}?{query_key}={ace_id}"
     return base_url
 
 def get_acexy_host_for_server():

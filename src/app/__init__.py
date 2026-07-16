@@ -3,8 +3,8 @@ import os
 from flask import Flask
 
 from app.config import Config
-from app.services.channel_manager import channel_manager
 from app.services.refresh_scheduler import playlist_refresh_scheduler
+from app.services.source_manager import SourceRegistryError, source_manager
 
 def create_app():
     app = Flask(__name__, static_url_path='')
@@ -21,14 +21,12 @@ def create_app():
     )
     app.logger.setLevel(logging.INFO)
 
-    # Initial update
-    # But useful to have *some* data.
+    # Upgrade the persistent source registry before serving requests. Migration
+    # is idempotent and never overwrites corrupt or future schemas.
     try:
-        if not path_exists_check(Config.JSON_FILE):
-             app.logger.info("Performing initial channel update...")
-             channel_manager.update_channels()
-    except Exception as e:
-         app.logger.error(f"Failed initial channel update: {e}")
+        source_manager.get_sources()
+    except SourceRegistryError as exc:
+        app.logger.error("Source registry unavailable; cached channels remain usable: %s", exc)
 
     from app.routes import main_bp
     app.register_blueprint(main_bp)
@@ -38,7 +36,3 @@ def create_app():
     playlist_refresh_scheduler.start()
 
     return app
-
-def path_exists_check(path):
-    import os
-    return os.path.exists(path)

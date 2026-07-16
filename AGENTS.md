@@ -1,4 +1,4 @@
-schema_version: 1
+schema_version: 2
 document_type: llm_project_architecture
 project:
   name: ace-hls-viewer
@@ -25,7 +25,10 @@ components:
     services:
       channel_manager:
         file: src/app/services/channel_manager.py
-        responsibilities: [download_m3u, parse_acestream_ids, deduplicate, per_source_cache_fallback, atomic_cache_write, cross_process_single_flight]
+        responsibilities: [refresh_sources, merge_custom_first, deduplicate_by_identifier, source_id_cache_fallback, atomic_outputs]
+      source_validator:
+        file: src/app/services/source_validator.py
+        responsibilities: [bounded_download, m3u_and_acestream_api_parse, identifier_normalization]
       refresh_scheduler:
         file: src/app/services/refresh_scheduler.py
         interval_env: PLAYLIST_REFRESH_INTERVAL
@@ -33,7 +36,11 @@ components:
         startup: immediate_due_check
       source_manager:
         file: src/app/services/source_manager.py
-        persistence: sources.json
+        persistence: sources.json_schema_v2
+        migration: legacy_array_to_v2_with_single_backup
+      custom_channel_manager:
+        file: src/app/services/custom_channel_manager.py
+        persistence: custom_channels.json_schema_v1
       settings_manager:
         file: src/app/services/settings_manager.py
         persistence: settings.json
@@ -56,7 +63,7 @@ components:
 external_services:
   acexy_or_orchestrator_proxy:
     config: [ACEXY_IP, ACEXY_PORT]
-    stream_endpoint: /ace/getstream?id={ace_id}
+    stream_endpoint: /ace/getstream?id={id_or_content_id}|infohash={infohash}
     payloads: [video/mp2t_continuous, hls_manifest]
   orchestrator_management:
     config: [ORCHESTRATOR_URL, ORCHESTRATOR_API_PREFIX, ORCHESTRATOR_API_TOKEN, ORCHESTRATOR_TIMEOUT]
@@ -74,6 +81,8 @@ persistence:
     source_cache/: last_valid_normalized_channels_per_source
     ace_hls.m3u: generated_direct_playlist
     sources.json: source_registry
+    sources.v1.backup.json: one_time_legacy_backup
+    custom_channels.json: custom_channel_registry
     settings.json: web_settings
     stats.json: channel_health_and_media_metadata
     app.log: application_log
@@ -81,14 +90,15 @@ persistence:
 http_api:
   channels: /api/channels
   playlists: [/playlist.m3u, /api/playlist/all.m3u]
-  sources: [/api/sources, /api/sources/refresh, /api/sources/refresh/status]
+  sources: [/api/sources, /api/sources/{source_id}, /api/sources/{source_id}/validate, /api/sources/refresh, /api/sources/refresh/status]
+  custom_channels: [/api/custom-channels, /api/custom-channels/{channel_id}]
   hls_start: /api/hls/start/{ace_id}
   hls_files: /hls/{stream_id}/{filename}
   orchestrator: [/api/orchestrator/status, /api/orchestrator/streams, /api/orchestrator/overview, /api/orchestrator/metrics, /api/orchestrator/config]
   health: /health
 flows:
   playlist_refresh:
-    sequence: [scheduler_due_check, cross_process_lock, migrate_legacy_global_cache, fetch_each_source, update_or_reuse_source_snapshot, deduplicate, atomic_replace]
+    sequence: [scheduler_due_check, cross_process_lock, fetch_enabled_sources, validate_shared_parser, update_or_reuse_source_id_snapshot, prepend_custom_channels, deduplicate, atomic_replace]
     failure_policy: reuse_last_valid_snapshot_for_each_failed_source
   browser_playback:
     sequence: [probe_upstream_type, ffmpeg_for_mpegts_or_proxy_for_real_hls, wait_for_playable_manifest, hls_js_attach]
@@ -100,13 +110,19 @@ invariants:
   - never treat continuous video/mp2t as an HLS manifest
   - preserve persisted data and unrelated worktree changes
   - use atomic replacement for generated shared files
+  - never overwrite an unknown future persistence schema
+  - disabled sources never fetch or contribute channels
+  - render remote metadata with DOM text properties, never HTML interpolation
   - orchestrator read failures return structured JSON and never raise Flask 500
   - orchestrator secrets never appear in API responses or logs
 validation:
-  unit: PYTHONPATH=src python -m pytest -q
-  syntax_python: python -m compileall -q src tests
+  unit: PYTHONPATH=src .venv/bin/python -m pytest -q
+  syntax_python: .venv/bin/python -m compileall -q src tests
   syntax_javascript: node --check src/app/static/script.js
-  docker: docker build -t ace-hls-viewer:test .
+  docker: docker build -t ace-hls-viewer:2.5.0-test .
 release:
   script: push_docker.sh
-  images: [tscneo/ace-hls-viewer:{version}, tscneo/ace-hls-viewer:latest]
+  versioned_image: tscneo/ace-hls-viewer:2.5.0
+  platforms: [linux/amd64, linux/arm64]
+  latest_allowed_for_release: true
+  compose_image_env: ACE_HLS_IMAGE

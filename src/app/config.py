@@ -7,6 +7,10 @@ class Config:
     PLAYLIST_REFRESH_INTERVAL = max(60, int(os.environ.get("PLAYLIST_REFRESH_INTERVAL", 900)))
     FFMPEG_RW_TIMEOUT = max(5, int(os.environ.get("FFMPEG_RW_TIMEOUT", 60)))
     HLS_IDLE_TIMEOUT = max(60, int(os.environ.get("HLS_IDLE_TIMEOUT", 120)))
+    SOURCE_CONNECT_TIMEOUT = max(1, int(os.environ.get("SOURCE_CONNECT_TIMEOUT", 8)))
+    SOURCE_READ_TIMEOUT = max(1, int(os.environ.get("SOURCE_READ_TIMEOUT", 30)))
+    SOURCE_MAX_BYTES = max(1024, int(os.environ.get("SOURCE_MAX_BYTES", 10 * 1024 * 1024)))
+    SOURCE_TLS_VERIFY = os.environ.get("SOURCE_TLS_VERIFY", "false").lower() == "true"
     # Use absolute path to avoid confusion with send_from_directory
     DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
     
@@ -44,5 +48,6 @@ class Config:
     JSON_FILE = os.path.join(DATA_DIR, "channels.json")
     SOURCE_CACHE_DIR = os.path.join(DATA_DIR, "source_cache")
     SOURCES_FILE = os.path.join(DATA_DIR, "sources.json")
+    CUSTOM_CHANNELS_FILE = os.path.join(DATA_DIR, "custom_channels.json")
     M3U_FILE = os.path.join(DATA_DIR, "ace_hls.m3u")
     HLS_DIR = os.path.join(DATA_DIR, "hls")

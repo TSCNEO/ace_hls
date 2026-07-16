@@ -2,7 +2,7 @@
 
 Interfaz web autogestionada para descubrir, reproducir y exportar canales AceStream. Convierte streams AceStream en HLS compatible con navegadores, iPhone/iPad y clientes IPTV, y puede integrarse con AceStream Orchestrator para mostrar el estado de motores y streams.
 
-Versión actual: `v2.4.2`.
+Versión actual: `v2.5.0`.
 
 ## Características
 
@@ -12,8 +12,10 @@ Versión actual: `v2.4.2`.
   - Un manifiesto HLS real se sirve mediante proxy y reescritura de segmentos.
   - Un stream continuo `video/mp2t` se remultiplexa a HLS con FFmpeg.
 - Compatibilidad con extensiones de navegador problemáticas: el worker de HLS.js está desactivado para evitar errores relacionados con `MediaKeyMessageEvent`.
-- Gestión persistente de múltiples fuentes M3U desde la WebUI.
-- Deduplicación global por AceStream ID.
+- Sources 2.0: fuentes con nombre, estado, activación, validación y migración automática desde v2.4.x.
+- Fuentes M3U y JSON de AceStream; admite `id`, `infohash`, URI AceStream y parámetros de URL.
+- Canales personalizados gestionables desde la WebUI y con prioridad sobre metadatos remotos.
+- Deduplicación global por tipo de identificador e identificador.
 - Actualización autónoma de fuentes cada 15 minutos, sin depender de visitas a la WebUI.
 - Caché persistente por fuente: una lista caída reutiliza su última copia válida sin eliminar sus canales.
 - Listas M3U para VLC, TiviMate, IPTV Smarters y otros clientes.
@@ -26,16 +28,7 @@ Versión actual: `v2.4.2`.
 
 ## Cambios recientes
 
-- Corregida la preparación infinita del player: AceHLS ya distingue un manifiesto HLS de un stream MPEG-TS continuo antes de decidir entre proxy y FFmpeg.
-- Evitado el bloqueo al inspeccionar streams continuos y mantenida activa la sesión mientras FFmpeg prepara el primer segmento.
-- Desactivado el worker de HLS.js para evitar que extensiones del navegador rompan la reproducción cuando `MediaKeyMessageEvent` no está disponible.
-- Añadido el scheduler autónomo de fuentes con intervalo predeterminado de 15 minutos.
-- Actualizada la integración con AceStream Orchestrator a la API unificada `/api/v1`, con Bearer token opcional y errores estructurados.
-- Adaptados el player y el dashboard a los campos actuales `container_id`, `content_id`, `stream_count`, peers y velocidades.
-- Añadida caché independiente por fuente, migración desde la caché global y fallback ante fallos parciales.
-- Eliminada la colisión de sesiones entre FFmpeg y FFprobe: cada FFmpeg usa identidad upstream única y FFprobe analiza la salida HLS local.
-- Los reintentos reutilizan sesiones FFmpeg sanas o todavía en preparación y el timeout de lectura upstream es configurable.
-- Añadida la arquitectura machine-readable del proyecto en [`AGENTS.md`](AGENTS.md).
+Consulta [`CHANGELOG.md`](CHANGELOG.md) y la guía de migración [`docs/sources-v2.md`](docs/sources-v2.md).
 
 ## Arquitectura
 
@@ -74,6 +67,10 @@ Edita `.env`. `URL_ORIGEN` puede quedar vacío; las fuentes también pueden aña
 | `URL_ORIGEN` | Fuente M3U inicial opcional | vacío/reemplazar |
 | `CACHE_DURATION` | Antigüedad para el refresh solicitado por la WebUI | `300` |
 | `PLAYLIST_REFRESH_INTERVAL` | Intervalo del refresh autónomo, en segundos | `900` |
+| `SOURCE_CONNECT_TIMEOUT` | Timeout de conexión de fuentes | `8` |
+| `SOURCE_READ_TIMEOUT` | Timeout de lectura de fuentes | `30` |
+| `SOURCE_MAX_BYTES` | Tamaño máximo de una respuesta | `10485760` |
+| `SOURCE_TLS_VERIFY` | Verificación TLS; `false` conserva fuentes LAN/VPN con certificados propios | `false` |
 | `FFMPEG_RW_TIMEOUT` | Timeout de lectura del proxy upstream, en segundos | `60` |
 | `HLS_IDLE_TIMEOUT` | Tiempo sin peticiones HLS antes de cerrar FFmpeg | `120` |
 | `ENABLE_TRANSCODE` | Habilita perfiles con recodificación | `false` |
@@ -87,7 +84,9 @@ Edita `.env`. `URL_ORIGEN` puede quedar vacío; las fuentes también pueden aña
 ### Desarrollo o build local
 
 ```bash
-docker compose up -d --build
+python3.11 -m venv .venv
+.venv/bin/python -m pip install -r src/requirements.txt -r requirements-dev.txt
+PYTHONPATH=src .venv/bin/python -m pytest -q
 ```
 
 ### Imagen publicada
@@ -101,14 +100,14 @@ Acceso: `http://TU_IP:8088`.
 
 ## Fuentes y caché
 
-Las fuentes se guardan en `sources.json`. El scheduler se inicia junto con la aplicación, comprueba la antigüedad de `channels.json` y actualiza las listas aunque ningún usuario abra la WebUI.
+Las fuentes se guardan en el esquema versionado de `sources.json`. Una instalación v2.4.x se migra de forma atómica al arrancar, conserva una única copia `sources.v1.backup.json` y no descarga fuentes durante la migración. Un esquema futuro desconocido se sirve desde caché y bloquea las mutaciones.
 
 Cada fuente tiene un snapshot independiente dentro de `source_cache/`:
 
 - Si responde correctamente, solo se reemplaza su propio snapshot.
 - Si falla la descarga, devuelve contenido no M3U o intenta sustituir una caché no vacía por una lista vacía, se reutiliza su último snapshot válido.
 - Los snapshots disponibles se combinan y deduplican para generar `channels.json` y `ace_hls.m3u` mediante reemplazo atómico.
-- Al actualizar desde versiones anteriores, `channels.json` se migra automáticamente a snapshots por fuente.
+- Al actualizar desde versiones anteriores, las cachés por hash de URL se migran a snapshots por ID estable de fuente.
 - Si todas las fuentes fallan, se conserva la caché global y el scheduler reintenta después de 60 segundos.
 
 Limitación inevitable: una instalación con volumen completamente nuevo no puede recuperar los canales de una fuente que nunca haya respondido correctamente.
@@ -162,6 +161,8 @@ El volumen `ace_hls_data` se monta en `/app/data` y contiene:
 | Ruta | Contenido |
 |---|---|
 | `sources.json` | Registro de fuentes M3U |
+| `sources.v1.backup.json` | Copia única del registro anterior a Sources 2.0 |
+| `custom_channels.json` | Canales personalizados |
 | `source_cache/` | Último snapshot válido de cada fuente |
 | `channels.json` | Caché global deduplicada |
 | `ace_hls.m3u` | Lista directa generada |
@@ -179,9 +180,12 @@ No elimines el volumen si quieres conservar fuentes, cachés, configuración y e
 | `/health` | Disco, conexión AceXY, procesos FFmpeg y estado del scheduler |
 | `/api/version` | Versión y estado de transcodificación |
 | `/api/channels` | Canales normalizados |
-| `/api/sources` | Gestión de fuentes |
+| `/api/sources` | Listado y alta de fuentes |
+| `/api/sources/{id}` | Edición y borrado de fuentes |
+| `/api/sources/{id}/validate` | Revalidación de una fuente |
 | `/api/sources/refresh` | Refresh manual |
 | `/api/sources/refresh/status` | Estado del scheduler |
+| `/api/custom-channels` | CRUD de canales personalizados |
 | `/api/hls/start/{ace_id}` | Inicio de reproducción HLS |
 | `/dashboard` | Dashboard de sistema |
 
@@ -199,9 +203,11 @@ Adapta `ace-hls` al nombre real del servicio definido en tu Compose.
 ## Validación del proyecto
 
 ```bash
-PYTHONPATH=src python -m pytest -q
-python -m compileall -q src tests
+PYTHONPATH=src .venv/bin/python -m pytest -q
+.venv/bin/python -m compileall -q src tests
 node --check src/app/static/script.js
 docker compose config -q
-docker build -t ace-hls-viewer:test .
+docker build -t ace-hls-viewer:2.5.0-test .
 ```
+
+`push_docker.sh` publica por defecto un manifiesto compatible con `linux/amd64` y `linux/arm64`. Puede limitarse mediante `DOCKER_PLATFORMS`; las versiones `-dev` bloquean siempre la etiqueta `latest`.

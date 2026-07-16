@@ -67,6 +67,13 @@ def test_original_mpegts_uses_ffmpeg_instead_of_manifest_proxy():
         "original",
         force=False,
         upstream_ready=True,
+        identifier_type="id",
+    )
+
+
+def test_infohash_playback_uses_infohash_upstream_parameter():
+    assert routes._internal_acexy_stream_url("a" * 40, "infohash").endswith(
+        f"/ace/getstream?infohash={'a' * 40}"
     )
 
 

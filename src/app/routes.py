@@ -5,10 +5,24 @@ import shutil
 import requests
 import psutil
 from urllib.parse import parse_qs, urlparse
-from flask import Blueprint, jsonify, send_from_directory, Response, request, current_app
+from flask import Blueprint, jsonify, send_from_directory, Response, request, current_app, has_request_context
 from app.config import Config
 from app.services.hls_manager import hls_manager
-from app.services.channel_manager import channel_manager
+from app.services.channel_manager import channel_manager, _safe_m3u_value
+from app.services.custom_channel_manager import (
+    CustomChannelError,
+    CustomChannelNotFound,
+    DuplicateCustomChannel,
+    custom_channel_manager,
+)
+from app.services.source_manager import (
+    DuplicateSource,
+    SourceNotFound,
+    SourceRegistryError,
+    UnsupportedSourceSchema,
+    source_manager,
+)
+from app.services.source_validator import source_validator
 from app.services.stats_manager import stats_manager
 from app import utils
 
@@ -165,7 +179,10 @@ def get_channels():
             should_update = False
 
     if should_update:
-         channel_manager.update_channels()
+        try:
+            channel_manager.update_channels()
+        except SourceRegistryError as exc:
+            current_app.logger.warning("Serving cached channels: %s", exc)
 
     if os.path.exists(Config.JSON_FILE):
         with open(Config.JSON_FILE, 'r') as f:
@@ -187,56 +204,180 @@ def get_channels():
                  ch["url"] = ch["url"].replace(f"http://{Config.ACEXY_IP}:{Config.ACEXY_PORT}/ace/getstream", target_url)
             elif "url" in ch:
                  # Re-generate it safely
-                ch["url"] = get_acexy_url_for_client(request_host, ch['id'])
+                ch["url"] = get_acexy_url_for_client(
+                    request_host,
+                    ch['id'],
+                    ch.get('identifier_type', 'id'),
+                )
 
         return jsonify(data)
     return jsonify([]), 500
 
-from app.services.source_manager import source_manager
-
 @main_bp.route('/api/sources', methods=['GET'])
 def get_sources():
-    return jsonify(source_manager.get_sources())
+    try:
+        return jsonify(source_manager.get_sources())
+    except SourceRegistryError as exc:
+        return jsonify({"error": str(exc), "code": exc.code}), 409
 
 @main_bp.route('/api/sources', methods=['POST'])
 def add_source():
-    data = request.get_json()
-    url = data.get('url')
+    data = request.get_json(silent=True) or {}
+    url = str(data.get('url') or '').strip()
     if not url:
-        return jsonify({"error": "Missing URL"}), 400
-    
-    if source_manager.add_source(url):
-        # Auto-refresh channels on change
-        try:
-            channel_manager.update_channels()
-            return jsonify({"status": "added", "url": url, "message": "Source added and channels updated"})
-        except Exception as e:
-            return jsonify({"status": "added_but_failed_refresh", "url": url, "error": str(e)}), 200
-            
-    return jsonify({"error": "Duplicate source"}), 409
+        return jsonify({"error": "La URL es obligatoria.", "code": "missing_url"}), 400
+    name = str(data.get('name') or urlparse(url).hostname or 'Fuente').strip()
+    validation = source_validator.validate(url, name)
+    allow_invalid = data.get('allow_invalid_disabled') is True
+    if not validation.valid and not allow_invalid:
+        return jsonify({"error": validation.error, "code": validation.error_code, "validation": validation.public_data()}), 422
+    try:
+        source = source_manager.create_source(
+            name=name,
+            url=validation.normalized_url or url,
+            validation=validation,
+            allow_invalid_disabled=allow_invalid,
+        )
+        if validation.valid:
+            channel_manager.accept_validated_source(source, validation)
+            source_manager.record_refresh(source['id'], validation=validation, success=True)
+            source = source_manager.get_source(source['id'])
+        return jsonify({"status": "created", "source": source, "validation": validation.public_data()}), 201
+    except DuplicateSource as exc:
+        return jsonify({"error": str(exc), "code": exc.code}), 409
+    except SourceRegistryError as exc:
+        return jsonify({"error": str(exc), "code": exc.code}), 400
 
 @main_bp.route('/api/sources', methods=['DELETE'])
 def delete_source():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     url = data.get('url')
     if not url:
-        return jsonify({"error": "Missing URL"}), 400
-    
-    if source_manager.delete_source(url):
-        # Auto-refresh channels on change
-        try:
-            channel_manager.update_channels()
-            return jsonify({"status": "deleted", "url": url, "message": "Source deleted and channels updated"})
-        except Exception as e:
-            return jsonify({"status": "deleted_but_failed_refresh", "url": url, "error": str(e)}), 200
+        return jsonify({"error": "La URL es obligatoria.", "code": "missing_url"}), 400
+    try:
+        source = source_manager.delete_source_by_url(url)
+        channel_manager.delete_source_snapshot(source)
+        channel_manager.rebuild_from_cache()
+        response = jsonify({"status": "deleted", "source": source})
+        response.headers['Deprecation'] = 'true'
+        return response
+    except SourceNotFound as exc:
+        return jsonify({"error": str(exc), "code": exc.code}), 404
 
-    return jsonify({"error": "Source not found"}), 404
+
+@main_bp.route('/api/sources/<source_id>', methods=['PATCH'])
+def update_source(source_id):
+    data = request.get_json(silent=True) or {}
+    try:
+        current = source_manager.get_source(source_id)
+        next_url = str(data.get('url', current['url']) or '').strip()
+        enabling = data.get('enabled') is True and not current.get('enabled')
+        url_changed = next_url != current['url']
+        validation = source_validator.validate(next_url, data.get('name', current['name'])) if url_changed or enabling else None
+        allow_invalid = data.get('allow_invalid_disabled') is True
+        if validation is not None and not validation.valid and not allow_invalid:
+            return jsonify({"error": validation.error, "code": validation.error_code, "validation": validation.public_data()}), 422
+        source = source_manager.update_source(
+            source_id,
+            data,
+            validation=validation,
+            allow_invalid_disabled=allow_invalid,
+        )
+        if validation is not None and validation.valid:
+            channel_manager.accept_validated_source(source, validation)
+            source_manager.record_refresh(source_id, validation=validation, success=True)
+            source = source_manager.get_source(source_id)
+        else:
+            channel_manager.rebuild_from_cache()
+        return jsonify({"status": "updated", "source": source, "validation": validation.public_data() if validation else None})
+    except SourceNotFound as exc:
+        return jsonify({"error": str(exc), "code": exc.code}), 404
+    except DuplicateSource as exc:
+        return jsonify({"error": str(exc), "code": exc.code}), 409
+    except SourceRegistryError as exc:
+        return jsonify({"error": str(exc), "code": exc.code}), 400
+
+
+@main_bp.route('/api/sources/<source_id>', methods=['DELETE'])
+def delete_source_by_id(source_id):
+    try:
+        source = source_manager.delete_source(source_id)
+        channel_manager.delete_source_snapshot(source)
+        channel_manager.rebuild_from_cache()
+        return jsonify({"status": "deleted", "source": source})
+    except SourceNotFound as exc:
+        return jsonify({"error": str(exc), "code": exc.code}), 404
+
+
+@main_bp.route('/api/sources/<source_id>/validate', methods=['POST'])
+def validate_source(source_id):
+    data = request.get_json(silent=True) or {}
+    try:
+        current = source_manager.get_source(source_id)
+        validation = source_validator.validate(current['url'], current['name'])
+        changes = {"enabled": True} if data.get('enable') is True else {}
+        source = source_manager.update_source(
+            source_id,
+            changes,
+            validation=validation,
+            allow_invalid_disabled=True,
+        )
+        if validation.valid:
+            channel_manager.accept_validated_source(source, validation)
+            source_manager.record_refresh(source_id, validation=validation, success=True)
+            source = source_manager.get_source(source_id)
+        return jsonify({"status": validation.status, "source": source, "validation": validation.public_data()}), (200 if validation.valid else 422)
+    except SourceNotFound as exc:
+        return jsonify({"error": str(exc), "code": exc.code}), 404
+
+
+@main_bp.route('/api/custom-channels', methods=['GET', 'POST'])
+def custom_channels():
+    if request.method == 'GET':
+        return jsonify(custom_channel_manager.get_channels())
+    data = request.get_json(silent=True) or {}
+    try:
+        channel = custom_channel_manager.create(data)
+        channel_manager.rebuild_from_cache()
+        return jsonify({"status": "created", "channel": channel}), 201
+    except DuplicateCustomChannel as exc:
+        return jsonify({"error": str(exc), "code": exc.code}), 409
+    except CustomChannelError as exc:
+        return jsonify({"error": str(exc), "code": exc.code}), 400
+
+
+@main_bp.route('/api/custom-channels/<channel_id>', methods=['PATCH', 'DELETE'])
+def custom_channel_item(channel_id):
+    try:
+        if request.method == 'PATCH':
+            channel = custom_channel_manager.update(channel_id, request.get_json(silent=True) or {})
+            status = 'updated'
+        else:
+            channel = custom_channel_manager.delete(channel_id)
+            status = 'deleted'
+        channel_manager.rebuild_from_cache()
+        return jsonify({"status": status, "channel": channel})
+    except CustomChannelNotFound as exc:
+        return jsonify({"error": str(exc), "code": exc.code}), 404
+    except DuplicateCustomChannel as exc:
+        return jsonify({"error": str(exc), "code": exc.code}), 409
+    except CustomChannelError as exc:
+        return jsonify({"error": str(exc), "code": exc.code}), 400
 
 @main_bp.route('/api/sources/refresh', methods=['POST'])
 def refresh_sources():
     try:
-        channel_manager.update_channels()
+        updated = channel_manager.update_channels()
+        if updated is False:
+            return jsonify({
+                "status": "cached",
+                "message": "Todas las fuentes activas fallaron; se conserva la caché anterior.",
+            })
         return jsonify({"status": "ok", "message": "Channels refreshed"})
+    except UnsupportedSourceSchema as exc:
+        return jsonify({"error": str(exc), "code": exc.code}), 409
+    except SourceRegistryError as exc:
+        return jsonify({"error": str(exc), "code": exc.code}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -354,12 +495,22 @@ def _hls_manifest_has_media(payload):
         for line in text.splitlines()
     )
 
-def _probe_upstream_media(ace_id):
+def _normalize_identifier_type(value):
+    return 'infohash' if value == 'infohash' else 'id'
+
+
+def _request_identifier_type():
+    if not has_request_context():
+        return 'id'
+    return _normalize_identifier_type(request.args.get('identifier_type', 'id'))
+
+
+def _probe_upstream_media(ace_id, identifier_type='id'):
     """Return ``hls``, ``stream`` or ``None`` for the AceXY response."""
     resp = None
     try:
         resp = requests.get(
-            _internal_acexy_stream_url(ace_id),
+            _internal_acexy_stream_url(ace_id, identifier_type),
             timeout=(3, 5),
             stream=True
         )
@@ -379,26 +530,27 @@ def _probe_upstream_media(ace_id):
 
     return 'stream'
 
-def _upstream_has_media(ace_id):
-    return _probe_upstream_media(ace_id) is not None
+def _upstream_has_media(ace_id, identifier_type='id'):
+    return _probe_upstream_media(ace_id, identifier_type) is not None
 
-def _wait_for_upstream_media(ace_id, timeout=30):
+def _wait_for_upstream_media(ace_id, timeout=30, identifier_type='id'):
     deadline = time.time() + timeout
     while time.time() < deadline:
-        if _upstream_has_media(ace_id):
+        if _upstream_has_media(ace_id, identifier_type):
             return True
         time.sleep(2)
     return False
 
-def _internal_acexy_stream_url(ace_id):
+def _internal_acexy_stream_url(ace_id, identifier_type='id'):
     internal_host = utils.get_acexy_host_for_server()
-    return f"http://{internal_host}:{Config.ACEXY_PORT}/ace/getstream?id={ace_id}"
+    query_key = 'infohash' if identifier_type == 'infohash' else 'id'
+    return f"http://{internal_host}:{Config.ACEXY_PORT}/ace/getstream?{query_key}={ace_id}"
 
 def _internal_acexy_segment_url(ace_id, seq):
     internal_host = utils.get_acexy_host_for_server()
     return f"http://{internal_host}:{Config.ACEXY_PORT}/ace/hls/segment.ts?stream={ace_id}&seq={seq}"
 
-def _rewrite_upstream_manifest(ace_id, manifest_text):
+def _rewrite_upstream_manifest(ace_id, manifest_text, identifier_type='id'):
     rewritten = []
     for line in manifest_text.splitlines():
         stripped = line.strip()
@@ -419,7 +571,8 @@ def _rewrite_upstream_manifest(ace_id, manifest_text):
                 seq = seq_values[0]
 
         if seq is not None:
-            rewritten.append(f"/proxy/hls/{ace_id}/segment.ts?seq={seq}")
+            type_query = '&identifier_type=infohash' if identifier_type == 'infohash' else ''
+            rewritten.append(f"/proxy/hls/{ace_id}/segment.ts?seq={seq}{type_query}")
         else:
             rewritten.append(line)
 
@@ -431,20 +584,26 @@ def _start_hls_with_retries(
     force=False,
     attempts=3,
     wait_timeout=45,
-    upstream_ready=False
+    upstream_ready=False,
+    identifier_type='id',
 ):
     last_effective_id = None
 
     for attempt in range(1, attempts + 1):
         media_ready = upstream_ready if attempt == 1 else False
-        if not media_ready and not _wait_for_upstream_media(ace_id, timeout=30):
+        if not media_ready and not _wait_for_upstream_media(ace_id, timeout=30, identifier_type=identifier_type):
             if attempt < attempts:
                 time.sleep(min(attempt, 3))
                 continue
             break
 
         restart = force or attempt > 1
-        success, effective_id = hls_manager.start_stream(ace_id, profile, force=restart)
+        success, effective_id = hls_manager.start_stream(
+            ace_id,
+            profile,
+            force=restart,
+            identifier_type=identifier_type,
+        )
         last_effective_id = effective_id
 
         if success and _wait_for_ready_manifest(effective_id, wait_timeout):
@@ -472,15 +631,16 @@ def _start_hls_with_retries(
 def start_hls(ace_id):
     profile = _normalize_hls_profile(request.args.get('profile', 'original'))
     force = request.args.get('force') == '1'
-    upstream_kind = _probe_upstream_media(ace_id)
+    identifier_type = _request_identifier_type()
+    upstream_kind = _probe_upstream_media(ace_id, identifier_type)
 
     if profile == 'original' and upstream_kind == 'hls':
         return jsonify({
             "status": "ok",
-            "url": f"/proxy/hls/{ace_id}/index.m3u8",
+            "url": f"/proxy/hls/{ace_id}/index.m3u8" + ('?identifier_type=infohash' if identifier_type == 'infohash' else ''),
             "attempts": 1,
             "retryable": False,
-            "effective_id": ace_id,
+            "effective_id": hls_manager.playback_id(ace_id, identifier_type),
             "direct": True
         })
 
@@ -488,7 +648,8 @@ def start_hls(ace_id):
         ace_id,
         profile,
         force=force,
-        upstream_ready=upstream_kind is not None
+        upstream_ready=upstream_kind is not None,
+        identifier_type=identifier_type,
     )
     if result["status"] == "ok":
         return jsonify(result)
@@ -496,10 +657,11 @@ def start_hls(ace_id):
 
 @main_bp.route('/proxy/hls/<ace_id>/index.m3u8')
 def proxy_upstream_manifest(ace_id):
+    identifier_type = _request_identifier_type()
     resp = None
     try:
         resp = requests.get(
-            _internal_acexy_stream_url(ace_id),
+            _internal_acexy_stream_url(ace_id, identifier_type),
             timeout=(3, 10),
             stream=True
         )
@@ -529,7 +691,7 @@ def proxy_upstream_manifest(ace_id):
             resp.close()
 
     response = Response(
-        _rewrite_upstream_manifest(ace_id, manifest_data.decode('utf-8', 'replace')),
+        _rewrite_upstream_manifest(ace_id, manifest_data.decode('utf-8', 'replace'), identifier_type),
         mimetype='application/vnd.apple.mpegurl'
     )
     response.headers["Cache-Control"] = "no-cache"
@@ -587,9 +749,10 @@ def serve_hls(filename):
 @main_bp.route('/api/version')
 def version():
     try:
-        with open('app/version.txt', 'r') as f:
+        version_file = os.path.join(os.path.dirname(__file__), 'version.txt')
+        with open(version_file, 'r', encoding='utf-8') as f:
             v = f.read().strip()
-    except:
+    except OSError:
         v = "unknown"
     return jsonify({
         "version": v, 
@@ -620,18 +783,23 @@ def get_playlist():
             
         for ch in channels:
             # Append ID suffix for uniqueness and UI matching
-            display_name = f"{ch['name']} [{ch['id'][-4:]}]"
-            m3u_content.append(f'#EXTINF:-1 tvg-id="{ch["id"]}" tvg-logo="{ch.get("logo", "")}" group-title="{ch.get("group", "")}",{display_name}')
+            display_name = _safe_m3u_value(f"{ch['name']} [{ch['id'][-4:]}]")
+            tvg_id = _safe_m3u_value(ch.get('tvg_id') or ch['id'], strip_quotes=True)
+            logo = _safe_m3u_value(ch.get('logo'), strip_quotes=True)
+            group = _safe_m3u_value(ch.get('group'), strip_quotes=True)
+            identifier_type = ch.get('identifier_type', 'id')
+            type_suffix = '&identifier_type=infohash' if identifier_type == 'infohash' else ''
+            m3u_content.append(f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-logo="{logo}" group-title="{group}",{display_name}')
             
             # Helper to generate link
             def gen_link(p):
                 if p == 'direct':
                     # Direct AceStream Link (HTTP to AceXY)
                     # Use utils to determine correct public IP/Port based on request host
-                    return utils.get_acexy_url_for_client(host, ch['id'])
+                    return utils.get_acexy_url_for_client(host, ch['id'], identifier_type)
                     
                 # HLS variants
-                suffix = f"?profile={p}" if p and p != 'original' else ""
+                suffix = f"?profile={p}{type_suffix}" if p and p != 'original' else (f"?identifier_type=infohash" if identifier_type == 'infohash' else "")
                 return f"http://{host}/stream/{ch['id']}.m3u8{suffix}"
 
             m3u_content.append(gen_link(profile))
@@ -660,29 +828,33 @@ def get_playlist_all():
             channels = json.load(f)
             
         for ch in channels:
-            logo = ch.get("logo", "")
-            group = ch.get("group", "")
-            name = ch["name"]
+            logo = _safe_m3u_value(ch.get("logo", ""), strip_quotes=True)
+            group = _safe_m3u_value(ch.get("group", ""), strip_quotes=True)
+            name = _safe_m3u_value(ch["name"])
             cid = ch["id"]
+            tvg_id = _safe_m3u_value(ch.get('tvg_id') or cid, strip_quotes=True)
+            identifier_type = ch.get('identifier_type', 'id')
+            type_query = '?identifier_type=infohash' if identifier_type == 'infohash' else ''
+            type_param = '&identifier_type=infohash' if identifier_type == 'infohash' else ''
             
             # Append ID suffix for uniqueness
             display_name = f"{name} [{cid[-4:]}]"
             
             # Original
-            m3u_content.append(f'#EXTINF:-1 tvg-id="{cid}" tvg-logo="{logo}" group-title="{group}",{display_name}')
-            m3u_content.append(f"http://{host}/stream/{cid}.m3u8")
+            m3u_content.append(f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-logo="{logo}" group-title="{group}",{display_name}')
+            m3u_content.append(f"http://{host}/stream/{cid}.m3u8{type_query}")
 
             # Compat (Recode)
-            m3u_content.append(f'#EXTINF:-1 tvg-id="{cid}" tvg-logo="{logo}" group-title="{group}",{display_name} [Compat]')
-            m3u_content.append(f"http://{host}/stream/{cid}.m3u8?profile=max_compat")
+            m3u_content.append(f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-logo="{logo}" group-title="{group}",{display_name} [Compat]')
+            m3u_content.append(f"http://{host}/stream/{cid}.m3u8?profile=max_compat{type_param}")
             
             # 720p
-            m3u_content.append(f'#EXTINF:-1 tvg-id="{cid}" tvg-logo="{logo}" group-title="{group}",{display_name} [720p]')
-            m3u_content.append(f"http://{host}/stream/{cid}.m3u8?profile=720p")
+            m3u_content.append(f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-logo="{logo}" group-title="{group}",{display_name} [720p]')
+            m3u_content.append(f"http://{host}/stream/{cid}.m3u8?profile=720p{type_param}")
 
             # 480p
-            m3u_content.append(f'#EXTINF:-1 tvg-id="{cid}" tvg-logo="{logo}" group-title="{group}",{display_name} [480p]')
-            m3u_content.append(f"http://{host}/stream/{cid}.m3u8?profile=480p")
+            m3u_content.append(f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-logo="{logo}" group-title="{group}",{display_name} [480p]')
+            m3u_content.append(f"http://{host}/stream/{cid}.m3u8?profile=480p{type_param}")
 
     except Exception as e:
         return str(e), 500
@@ -696,16 +868,19 @@ def get_playlist_all():
 def auto_start_manifest(ace_id):
     # Wrapper to auto-start stream and redirect to real HLS
     profile = _normalize_hls_profile(request.args.get('profile', 'original'))
-    upstream_kind = _probe_upstream_media(ace_id)
+    identifier_type = _normalize_identifier_type(request.args.get('identifier_type', 'id'))
+    upstream_kind = _probe_upstream_media(ace_id, identifier_type)
     if profile == 'original' and upstream_kind == 'hls':
-        return current_app.redirect(f"/proxy/hls/{ace_id}/index.m3u8")
+        suffix = '?identifier_type=infohash' if identifier_type == 'infohash' else ''
+        return current_app.redirect(f"/proxy/hls/{ace_id}/index.m3u8{suffix}")
 
     result = _start_hls_with_retries(
         ace_id,
         profile,
         attempts=3,
         wait_timeout=30,
-        upstream_ready=upstream_kind is not None
+        upstream_ready=upstream_kind is not None,
+        identifier_type=identifier_type,
     )
     if result["status"] == "ok":
         return current_app.redirect(result["url"])
@@ -713,5 +888,7 @@ def auto_start_manifest(ace_id):
 
 @main_bp.route('/api/hls/stop/<ace_id>')
 def stop_hls(ace_id):
-    hls_manager.stop_stream(ace_id)
+    identifier_type = _normalize_identifier_type(request.args.get('identifier_type', 'id'))
+    profile = _normalize_hls_profile(request.args.get('profile', 'original'))
+    hls_manager.stop_stream(hls_manager.playback_id(ace_id, identifier_type, profile))
     return jsonify({"status": "stopped"})

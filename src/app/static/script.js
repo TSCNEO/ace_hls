@@ -2,6 +2,7 @@ let allChannels = [];
 let categories = new Set();
 let currentStreamUrl = "";
 let currentAceId = null;
+let currentIdentifierType = 'id';
 let currentAbortController = null; // Phase 2: Stale Alert Fix
 let hlsInstance = null;
 let currentProfile = 'original';
@@ -14,6 +15,24 @@ function absolutizeUrl(url) {
     if (!url) return '';
     if (/^https?:\/\//i.test(url)) return url;
     return window.location.origin + url;
+}
+
+function safeLogoUrl(value) {
+    if (!value) return '';
+    try {
+        const parsed = new URL(value, window.location.origin);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.href;
+    } catch (_error) {
+        return '';
+    }
+    return '';
+}
+
+function element(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined && text !== null) node.textContent = String(text);
+    return node;
 }
 
 function isChromeBrowser() {
@@ -202,7 +221,10 @@ async function loadChannels() {
         filterChannels();
 
     } catch (e) {
-        document.getElementById('channel-grid').innerHTML = `<div style="text-align:center;color:red;">Error: ${e.message}</div>`;
+        const grid = document.getElementById('channel-grid');
+        const error = element('div', 'loading', `Error: ${e.message}`);
+        error.style.color = 'red';
+        grid.replaceChildren(error);
     }
 }
 
@@ -259,7 +281,6 @@ function playPrevChannel() {
 }
 
 function renderChannels(channelsToRender) {
-    // Sort: Favorites first, then alphabetical
     channelsToRender.sort((a, b) => {
         const favA = favorites.has(a.id);
         const favB = favorites.has(b.id);
@@ -269,10 +290,12 @@ function renderChannels(channelsToRender) {
     });
 
     const grid = document.getElementById('channel-grid');
-    grid.innerHTML = '';
+    grid.replaceChildren();
 
     if (channelsToRender.length === 0) {
-        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;">No hay resultados</div>';
+        const empty = element('div', 'loading', 'No hay resultados');
+        empty.style.gridColumn = '1 / -1';
+        grid.appendChild(empty);
         return;
     }
 
@@ -282,39 +305,35 @@ function renderChannels(channelsToRender) {
         card.onclick = () => playChannel(ch);
 
         const isFav = favorites.has(ch.id);
-        const starBtn = `<button class="star-btn ${isFav ? 'active' : ''}" onclick="toggleFavorite(event, '${ch.id}')">${isFav ? '★' : '☆'}</button>`;
+        const starBtn = element('button', `star-btn ${isFav ? 'active' : ''}`, isFav ? '★' : '☆');
+        starBtn.type = 'button';
+        starBtn.addEventListener('click', event => toggleFavorite(event, ch.id));
 
-        const FALLBACK_LOGO = '/placeholder.svg';
-
-        const logo = ch.logo ?
-            `<img src="${ch.logo}" class="channel-logo" loading="lazy" decoding="async" onerror="handleImageError(this, '${ch.id}')">`
-            : '<div style="font-size:2rem;">📺</div>';
-
-        // Stats Logic
-        let statusDot = '<span class="status-dot dot-grey" title="Nunca visto"></span>';
-        let techBadge = '';
+        const statusDot = element('span', 'status-dot dot-grey');
+        statusDot.title = 'Nunca visto';
+        let techBadgeText = '';
         let lastSeenText = '';
 
         if (ch.stats) {
             const now = Math.floor(Date.now() / 1000);
             const diff = now - ch.stats.last_ok;
 
-            // Status Dot Color
             if (ch.stats.diff_votes && ch.stats.diff_votes < 0) {
-                statusDot = '<span class="status-dot dot-red" title="Reportado: Mala Calidad"></span>';
-            } else if (diff < 86400) { // < 24h
-                statusDot = '<span class="status-dot dot-green" title="Visto recientemente"></span>';
-            } else if (diff < 604800) { // < 7 days
-                statusDot = '<span class="status-dot dot-yellow" title="Visto esta semana"></span>';
+                statusDot.className = 'status-dot dot-red';
+                statusDot.title = 'Reportado: mala calidad';
+            } else if (diff < 86400) {
+                statusDot.className = 'status-dot dot-green';
+                statusDot.title = 'Visto recientemente';
+            } else if (diff < 604800) {
+                statusDot.className = 'status-dot dot-yellow';
+                statusDot.title = 'Visto esta semana';
             }
 
-            // Relative Time
             if (diff < 60) lastSeenText = 'Hace instantes';
             else if (diff < 3600) lastSeenText = `Hace ${Math.floor(diff / 60)}m`;
             else if (diff < 86400) lastSeenText = `Hace ${Math.floor(diff / 3600)}h`;
             else lastSeenText = `Hace ${Math.floor(diff / 86400)}d`;
 
-            // Tech Badge
             if (ch.stats.tech_info) {
                 const t = ch.stats.tech_info;
                 let res = '';
@@ -326,25 +345,36 @@ function renderChannels(channelsToRender) {
                 else codec = '';
 
                 if (res || codec) {
-                    techBadge = `<div class="tech-badge">${res} ${codec}</div>`;
+                    techBadgeText = `${res} ${codec}`.trim();
                 }
             }
         }
 
-        // Dynamic Font Size for long names
         const nameLen = ch.name.length;
         let nameStyle = "";
         if (nameLen > 40) nameStyle = "font-size: 0.75rem;";
         else if (nameLen > 25) nameStyle = "font-size: 0.8rem;";
 
-        card.innerHTML = `
-            ${starBtn}
-            ${statusDot}
-            ${logo}
-            <div class="channel-name" style="${nameStyle}">${ch.name} <span style="font-size:0.8em; color:#888;">[${ch.id.slice(-4)}]</span></div>
-            ${techBadge}
-            ${lastSeenText ? `<div class="last-seen">${lastSeenText}</div>` : ''}
-        `;
+        card.append(starBtn, statusDot);
+        const logoUrl = safeLogoUrl(ch.logo);
+        if (logoUrl) {
+            const image = element('img', 'channel-logo');
+            image.src = logoUrl;
+            image.alt = '';
+            image.loading = 'lazy';
+            image.decoding = 'async';
+            image.addEventListener('error', () => handleImageError(image, ch.id), { once: true });
+            card.appendChild(image);
+        } else {
+            const fallback = element('div', '', '📺');
+            fallback.style.fontSize = '2rem';
+            card.appendChild(fallback);
+        }
+        const name = element('div', 'channel-name', `${ch.name} [${ch.id.slice(-4)}]`);
+        name.style.cssText = nameStyle;
+        card.appendChild(name);
+        if (techBadgeText) card.appendChild(element('div', 'tech-badge', techBadgeText));
+        if (lastSeenText) card.appendChild(element('div', 'last-seen', lastSeenText));
         grid.appendChild(card);
     });
 }
@@ -366,7 +396,10 @@ async function fetchEngineInfo(aceId, isUpdate = false) {
     if (!container) return;
 
     if (!isUpdate) {
-        container.innerHTML = '<span class="status-dot dot-grey" style="position:static; display:inline-block; margin-right:5px;"></span> Buscando info...';
+        container.replaceChildren();
+        const dot = element('span', 'status-dot dot-grey');
+        dot.style.cssText = 'position:static; display:inline-block; margin-right:5px;';
+        container.append(dot, document.createTextNode('Buscando info...'));
     }
     // console.log(`[EngineInfo] Fetching for ID: ${aceId} (Update: ${isUpdate})`);
 
@@ -379,7 +412,8 @@ async function fetchEngineInfo(aceId, isUpdate = false) {
         const engines = await engRes.json();
         const streams = await strRes.json();
 
-        let html = '';
+        container.replaceChildren();
+        let identified = false;
 
         const stream = Array.isArray(streams) ? streams.find(s =>
             [s.key, s.content_id, s.id].some(value =>
@@ -395,11 +429,11 @@ async function fetchEngineInfo(aceId, isUpdate = false) {
             );
             if (engine) {
                 const isHealthy = engine.health_status === 'healthy';
-                const color = isHealthy ? '#2ea043' : '#da3633';
-                html += `
-                    <span class="status-dot" style="position:static; display:inline-block; margin-right:5px; background:${color}"></span>
-                    Engine: <strong>${engine.container_name}</strong>
-                `;
+                const dot = element('span', 'status-dot');
+                dot.style.cssText = `position:static; display:inline-block; margin-right:5px; background:${isHealthy ? '#2ea043' : '#da3633'}`;
+                container.append(dot, document.createTextNode('Engine: '));
+                container.appendChild(element('strong', '', String(engine.container_name || 'sin nombre')));
+                identified = true;
             }
         }
 
@@ -407,18 +441,17 @@ async function fetchEngineInfo(aceId, isUpdate = false) {
         if (stream) {
             const peers = stream.peers !== undefined ? stream.peers : 0;
             const downVal = stream.speed_down ? stream.speed_down : 0;
-            html += ` <span style="margin-left:10px; opacity:0.8;">| 👤 ${peers} | ⬇️ ${downVal} KB/s</span>`;
+            const stats = element('span', '', `| 👤 ${peers} | ⬇️ ${downVal} KB/s`);
+            stats.style.cssText = 'margin-left:10px; opacity:0.8;';
+            container.appendChild(stats);
+            identified = true;
         }
 
-        if (html === '') {
-            container.innerHTML = 'Motor no identificado';
-        } else {
-            container.innerHTML = html;
-        }
+        if (!identified) container.textContent = 'Motor no identificado';
 
     } catch (e) {
         console.error("Engine info error", e);
-        container.innerHTML = '';
+        container.textContent = '';
     }
 }
 
@@ -436,8 +469,7 @@ async function playChannel(channel) {
     // ... rest of function continues ...
 
     // Append ID to title for visibility
-    const displayTitle = `${channel.name} <span style="font-size:0.8em; color:#ddd;">[${channel.id.slice(-4)}]</span>`;
-    document.getElementById('player-title').innerHTML = displayTitle;
+    document.getElementById('player-title').textContent = `${channel.name} [${channel.id.slice(-4)}]`;
 
     document.getElementById('player-tech-info').innerHTML = '';
 
@@ -476,6 +508,7 @@ async function playChannel(channel) {
 
     // Capture ID for feedback
     currentAceId = channel.id;
+    currentIdentifierType = channel.identifier_type || 'id';
 
     // Reset Feedback Buttons
     const likeBtn = document.getElementById('btn-like');
@@ -640,6 +673,7 @@ async function startPlayback(aceId, profile, options = {}) {
     try {
         // Phase 3: Configurable Quality Overrides (Now handled server-side)
         let url = `/api/hls/start/${aceId}?profile=${encodeURIComponent(currentProfile)}`;
+        if (currentIdentifierType === 'infohash') url += '&identifier_type=infohash';
         if (force) url += '&force=1';
 
         // No longer appending params here. Server reads settings.json directly.
@@ -771,6 +805,7 @@ function closePlayer(fromHistory = false) {
 
     currentStreamUrl = "";
     currentAceId = null;
+    currentIdentifierType = 'id';
     currentProfile = 'original';
     playbackGeneration++;
     resetPlayerEngine();
@@ -973,10 +1008,14 @@ window.onclick = function (event) {
     }
 }
 
-// Settings Logic
+// Sources 2.0 and custom channels
+let editingSourceId = null;
+let editingCustomId = null;
+
 function openSettings() {
     document.getElementById('settings-modal').style.display = 'flex';
     loadSources();
+    loadCustomChannels();
 }
 
 function closeSettings() {
@@ -987,76 +1026,186 @@ document.getElementById('settings-modal').addEventListener('click', (e) => {
     if (e.target.id === 'settings-modal') closeSettings();
 });
 
+function showInlineFeedback(targetId, message, type = '') {
+    const target = document.getElementById(targetId);
+    target.textContent = message || '';
+    target.className = `inline-feedback${message ? ' visible' : ''}${type ? ` ${type}` : ''}`;
+}
+
+async function responseJson(response) {
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        const error = new Error(data.error || `Error HTTP ${response.status}`);
+        error.status = response.status;
+        error.data = data;
+        throw error;
+    }
+    return data;
+}
+
+function formatTimestamp(value) {
+    if (!value) return 'sin datos';
+    return new Date(value * 1000).toLocaleString();
+}
+
+function actionButton(label, title, handler, className = '') {
+    const button = element('button', className, label);
+    button.type = 'button';
+    button.title = title;
+    button.addEventListener('click', handler);
+    return button;
+}
+
 async function loadSources() {
     const list = document.getElementById('sources-list');
-    list.innerHTML = '<li>Cargando...</li>';
+    list.replaceChildren(element('div', 'source-row', 'Cargando fuentes…'));
     try {
-        const res = await fetch('/api/sources');
-        const sources = await res.json();
+        const sources = await responseJson(await fetch('/api/sources'));
 
-        list.innerHTML = '';
+        list.replaceChildren();
         if (sources.length === 0) {
-            list.innerHTML = '<li style="justify-content:center;">No hay fuentes configuradas</li>';
+            list.appendChild(element('div', 'source-row', 'No hay fuentes configuradas'));
             return;
         }
 
         sources.forEach(src => {
-            const li = document.createElement('li');
-            li.innerHTML = `
-                <span class="source-url" title="${src.url}">${src.url}</span>
-                <button class="delete-btn" onclick="deleteSource('${src.url}')">🗑️</button>
-            `;
-            list.appendChild(li);
+            const row = element('div', 'source-row');
+            const toggle = element('input', 'source-toggle');
+            toggle.type = 'checkbox';
+            toggle.checked = src.enabled === true;
+            toggle.title = src.enabled ? 'Desactivar fuente' : 'Validar y activar fuente';
+            toggle.addEventListener('change', () => setSourceEnabled(src, toggle.checked));
+
+            const main = element('div', 'source-main');
+            const heading = element('div', 'source-heading');
+            heading.appendChild(element('span', '', src.name));
+            const validation = src.validation || {};
+            const status = src.enabled ? (validation.status || 'pending') : 'disabled';
+            heading.appendChild(element('span', `status-badge ${status}`, status));
+            const url = element('div', 'source-url', src.url);
+            url.title = src.url;
+            const refresh = src.refresh || {};
+            const meta = element(
+                'div',
+                'source-meta',
+                `${validation.channel_count || 0} canales · última comprobación ${formatTimestamp(validation.checked_at)}${refresh.using_cache ? ' · usando caché' : ''}`,
+            );
+            main.append(heading, url, meta);
+            const errorText = validation.error || refresh.last_error;
+            if (errorText) main.appendChild(element('div', 'source-error', errorText));
+
+            const actions = element('div', 'source-actions');
+            actions.append(
+                actionButton('Validar', 'Comprobar ahora', () => revalidateSource(src.id)),
+                actionButton('Editar', 'Editar fuente', () => editSource(src)),
+                actionButton('Eliminar', 'Eliminar fuente', () => deleteSourceById(src.id), 'delete-btn'),
+            );
+            row.append(toggle, main, actions);
+            list.appendChild(row);
         });
     } catch (e) {
-        list.innerHTML = '<li>Error cargando fuentes</li>';
-        console.error(e);
+        list.replaceChildren(element('div', 'source-row source-error', e.message));
     }
 }
 
-async function addSource() {
-    const input = document.getElementById('newSourceUrl');
-    const url = input.value.trim();
-    if (!url) return;
+function editSource(source) {
+    editingSourceId = source.id;
+    document.getElementById('sourceName').value = source.name;
+    document.getElementById('sourceUrl').value = source.url;
+    document.getElementById('sourceSaveButton').textContent = 'Validar y guardar';
+    document.getElementById('sourceCancelButton').hidden = false;
+    showInlineFeedback('source-feedback', `Editando ${source.name}`);
+}
+
+function cancelSourceEdit() {
+    editingSourceId = null;
+    document.getElementById('sourceName').value = '';
+    document.getElementById('sourceUrl').value = '';
+    document.getElementById('sourceSaveButton').textContent = 'Validar y añadir';
+    document.getElementById('sourceCancelButton').hidden = true;
+    showInlineFeedback('source-feedback', '');
+}
+
+async function saveSource() {
+    const name = document.getElementById('sourceName').value.trim();
+    const url = document.getElementById('sourceUrl').value.trim();
+    if (!name || !url) {
+        showInlineFeedback('source-feedback', 'Nombre y URL son obligatorios.', 'error');
+        return;
+    }
+
+    const endpoint = editingSourceId ? `/api/sources/${editingSourceId}` : '/api/sources';
+    const method = editingSourceId ? 'PATCH' : 'POST';
+    const payload = { name, url };
+    showInlineFeedback('source-feedback', 'Descargando y validando la fuente…');
 
     try {
-        const res = await fetch('/api/sources', {
+        let response = await fetch(endpoint, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (response.status === 422) {
+            const invalid = await response.json();
+            if (!confirm(`${invalid.error}\n\n¿Guardar la fuente desactivada para revalidarla más adelante?`)) {
+                throw Object.assign(new Error(invalid.error), { status: 422 });
+            }
+            payload.allow_invalid_disabled = true;
+            response = await fetch(endpoint, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+        }
+        await responseJson(response);
+        cancelSourceEdit();
+        showInlineFeedback('source-feedback', 'Fuente guardada correctamente.', 'success');
+        await Promise.all([loadSources(), loadChannels()]);
+    } catch (e) {
+        showInlineFeedback('source-feedback', e.message, 'error');
+    }
+}
+
+async function setSourceEnabled(source, enabled) {
+    try {
+        showInlineFeedback('source-feedback', enabled ? 'Validando antes de activar…' : 'Desactivando fuente…');
+        await responseJson(await fetch(`/api/sources/${source.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled }),
+        }));
+        showInlineFeedback('source-feedback', enabled ? 'Fuente activada.' : 'Fuente desactivada.', 'success');
+        await Promise.all([loadSources(), loadChannels()]);
+    } catch (e) {
+        showInlineFeedback('source-feedback', e.message, 'error');
+        await loadSources();
+    }
+}
+
+async function revalidateSource(sourceId) {
+    showInlineFeedback('source-feedback', 'Revalidando fuente…');
+    try {
+        await responseJson(await fetch(`/api/sources/${sourceId}/validate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url })
-        });
-
-        const data = await res.json();
-        if (res.ok) {
-            input.value = ''; // Clear
-            loadSources(); // Refresh list inside modal
-            loadChannels(); // Refresh main grid background
-        } else {
-            alert("Error: " + (data.error || 'Desconocido'));
-        }
+            body: '{}',
+        }));
+        showInlineFeedback('source-feedback', 'Fuente válida; caché actualizada.', 'success');
+        await Promise.all([loadSources(), loadChannels()]);
     } catch (e) {
-        alert("Error de conexión");
+        showInlineFeedback('source-feedback', e.message, 'error');
+        await loadSources();
     }
 }
 
-async function deleteSource(url) {
-    if (!confirm('¿Seguro que quieres eliminar esta fuente?')) return;
-
+async function deleteSourceById(sourceId) {
+    if (!confirm('¿Eliminar esta fuente y su caché?')) return;
     try {
-        const res = await fetch('/api/sources', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url })
-        });
-
-        if (res.ok) {
-            loadSources(); // Refresh list inside modal
-            loadChannels(); // Refresh main grid background
-        } else {
-            alert("Error al eliminar");
-        }
+        await responseJson(await fetch(`/api/sources/${sourceId}`, { method: 'DELETE' }));
+        showInlineFeedback('source-feedback', 'Fuente eliminada.', 'success');
+        await Promise.all([loadSources(), loadChannels()]);
     } catch (e) {
-        alert("Error de conexión");
+        showInlineFeedback('source-feedback', e.message, 'error');
     }
 }
 
@@ -1067,19 +1216,103 @@ async function refreshChannelsFromServer() {
     btn.disabled = true;
 
     try {
-        const res = await fetch('/api/sources/refresh', { method: 'POST' });
-        if (res.ok) {
-            alert("Canales actualizados correctamente");
-            loadChannels(); // Refresh main grid
-            closeSettings();
-        } else {
-            alert("Error actualizando canales");
-        }
+        await responseJson(await fetch('/api/sources/refresh', { method: 'POST' }));
+        showInlineFeedback('source-feedback', 'Canales actualizados correctamente.', 'success');
+        await Promise.all([loadSources(), loadChannels()]);
     } catch (e) {
-        alert("Error de conexión");
+        showInlineFeedback('source-feedback', e.message, 'error');
     } finally {
         btn.textContent = originalText;
         btn.disabled = false;
+    }
+}
+
+async function loadCustomChannels() {
+    const list = document.getElementById('custom-channels-list');
+    list.replaceChildren(element('div', 'source-row', 'Cargando canales…'));
+    try {
+        const channels = await responseJson(await fetch('/api/custom-channels'));
+        list.replaceChildren();
+        if (!channels.length) {
+            list.appendChild(element('div', 'source-row', 'No hay canales personalizados'));
+            return;
+        }
+        channels.forEach(channel => {
+            const row = element('div', 'source-row');
+            const main = element('div', 'source-main');
+            main.append(
+                element('div', 'source-heading', channel.name),
+                element('div', 'source-meta', `${channel.identifier_type} · ${channel.stream_id}`),
+                element('div', 'source-meta', `${channel.group || 'Personalizados'}${channel.tvg_id ? ` · tvg-id ${channel.tvg_id}` : ''}`),
+            );
+            const actions = element('div', 'source-actions');
+            actions.append(
+                actionButton('Editar', 'Editar canal', () => editCustomChannel(channel)),
+                actionButton('Eliminar', 'Eliminar canal', () => deleteCustomChannel(channel.id), 'delete-btn'),
+            );
+            row.append(main, actions);
+            list.appendChild(row);
+        });
+    } catch (e) {
+        list.replaceChildren(element('div', 'source-row source-error', e.message));
+    }
+}
+
+function editCustomChannel(channel) {
+    editingCustomId = channel.id;
+    document.getElementById('customName').value = channel.name;
+    document.getElementById('customStreamId').value = channel.stream_id;
+    document.getElementById('customGroup').value = channel.group || '';
+    document.getElementById('customLogo').value = channel.logo || '';
+    document.getElementById('customTvgId').value = channel.tvg_id || '';
+    document.getElementById('customSaveButton').textContent = 'Guardar canal';
+    document.getElementById('customCancelButton').hidden = false;
+}
+
+function cancelCustomEdit() {
+    editingCustomId = null;
+    ['customName', 'customStreamId', 'customGroup', 'customLogo', 'customTvgId'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
+    document.getElementById('customSaveButton').textContent = 'Añadir canal';
+    document.getElementById('customCancelButton').hidden = true;
+    showInlineFeedback('custom-feedback', '');
+}
+
+async function saveCustomChannel() {
+    const payload = {
+        name: document.getElementById('customName').value.trim(),
+        stream_id: document.getElementById('customStreamId').value.trim(),
+        group: document.getElementById('customGroup').value.trim() || 'Personalizados',
+        logo: document.getElementById('customLogo').value.trim(),
+        tvg_id: document.getElementById('customTvgId').value.trim(),
+    };
+    if (!payload.name || !payload.stream_id) {
+        showInlineFeedback('custom-feedback', 'Nombre e identificador son obligatorios.', 'error');
+        return;
+    }
+    try {
+        await responseJson(await fetch(editingCustomId ? `/api/custom-channels/${editingCustomId}` : '/api/custom-channels', {
+            method: editingCustomId ? 'PATCH' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        }));
+        cancelCustomEdit();
+        showInlineFeedback('custom-feedback', 'Canal guardado correctamente.', 'success');
+        await Promise.all([loadCustomChannels(), loadChannels()]);
+    } catch (e) {
+        showInlineFeedback('custom-feedback', e.message, 'error');
+    }
+}
+
+async function deleteCustomChannel(channelId) {
+    if (!confirm('¿Eliminar este canal personalizado?')) return;
+    try {
+        await responseJson(await fetch(`/api/custom-channels/${channelId}`, { method: 'DELETE' }));
+        showInlineFeedback('custom-feedback', 'Canal eliminado.', 'success');
+        await Promise.all([loadCustomChannels(), loadChannels()]);
+    } catch (e) {
+        showInlineFeedback('custom-feedback', e.message, 'error');
     }
 }
 
@@ -1133,6 +1366,7 @@ async function sendFeedback(vote) {
 
 function updatePlayerTechBadge(t) {
     const techDiv = document.getElementById('player-tech-info');
+    techDiv.replaceChildren();
     let res = '';
     if (t.height) res = t.height >= 720 ? `${t.height}p` : 'SD';
     if (t.fps) res += ` ${t.fps}fps`;
@@ -1142,7 +1376,9 @@ function updatePlayerTechBadge(t) {
     else codec = '';
 
     if (res || codec) {
-        techDiv.innerHTML = `<span class="tech-badge" style="font-size:0.9rem; padding:4px 8px;">${res} ${codec}</span>`;
+        const badge = element('span', 'tech-badge', `${res} ${codec}`.trim());
+        badge.style.cssText = 'font-size:0.9rem; padding:4px 8px;';
+        techDiv.appendChild(badge);
     }
 }
 
