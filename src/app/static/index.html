@@ -14,7 +14,7 @@
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="style.css?v=v2.4.2">
+    <link rel="stylesheet" href="style.css?v=v2.5.0-dev">
 </head>
 
 <body>
@@ -117,19 +117,41 @@
             <!-- Lists Management Section -->
             <details style="margin-bottom: 10px; border: 1px solid #444; padding: 5px;">
                 <summary style="cursor:pointer; color:#eee;">📂 Listas M3U</summary>
-                <div style="margin-top:10px;">
-                    <div class="source-input-group">
-                        <input type="text" id="newSourceUrl" placeholder="URL lista M3U (ej: https://...)"
-                            style="flex-grow:1; padding:8px;">
-                        <button onclick="addSource()">Añadir</button>
+                <div class="source-workspace">
+                    <div class="source-editor">
+                        <input type="text" id="sourceName" placeholder="Nombre de la fuente" autocomplete="off">
+                        <input type="url" id="sourceUrl" placeholder="https://servidor/lista.m3u" autocomplete="off">
+                        <div class="editor-actions">
+                            <button id="sourceSaveButton" onclick="saveSource()">Validar y añadir</button>
+                            <button id="sourceCancelButton" class="secondary-btn" onclick="cancelSourceEdit()" hidden>Cancelar</button>
+                        </div>
+                        <div id="source-feedback" class="inline-feedback" role="status" aria-live="polite"></div>
                     </div>
-                    <h4 style="margin:10px 0 5px 0; font-size:0.9em; color:#aaa;">Fuentes Activas</h4>
-                    <ul id="sources-list" class="source-list"></ul>
+                    <h4 class="section-label">Fuentes configuradas</h4>
+                    <div id="sources-list" class="source-list"></div>
                     <div class="modal-actions" style="margin-top: 10px; text-align: right;">
                         <button onclick="refreshChannelsFromServer()"
                             style="background: var(--primary-color); font-size:0.8em; padding:5px 10px;">Actualizar
                             Canales Ahora</button>
                     </div>
+
+                    <div class="custom-divider"></div>
+                    <h4 class="section-label">Canales personalizados</h4>
+                    <div class="custom-editor">
+                        <input type="text" id="customName" placeholder="Nombre del canal" autocomplete="off">
+                        <input type="text" id="customStreamId" placeholder="ID, acestream:// o infohash://" autocomplete="off">
+                        <div class="custom-meta-grid">
+                            <input type="text" id="customGroup" placeholder="Grupo (Personalizados)">
+                            <input type="url" id="customLogo" placeholder="URL del logo (opcional)">
+                            <input type="text" id="customTvgId" placeholder="tvg-id (opcional)">
+                        </div>
+                        <div class="editor-actions">
+                            <button id="customSaveButton" onclick="saveCustomChannel()">Añadir canal</button>
+                            <button id="customCancelButton" class="secondary-btn" onclick="cancelCustomEdit()" hidden>Cancelar</button>
+                        </div>
+                        <div id="custom-feedback" class="inline-feedback" role="status" aria-live="polite"></div>
+                    </div>
+                    <div id="custom-channels-list" class="source-list custom-list"></div>
                 </div>
             </details>
 
@@ -309,7 +331,7 @@
 
     <!-- Custom Scripts -->
     <script src="vendor/hls.min.js?v=1.5.18"></script>
-    <script src="script.js?v=v2.4.2"></script>
+    <script src="script.js?v=v2.5.0-dev"></script>
 </body>
 
 </html>
