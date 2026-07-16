@@ -123,5 +123,6 @@ validation:
 release:
   script: push_docker.sh
   development_image: tscneo/ace-hls-viewer:2.5.0-dev
+  platforms: [linux/amd64, linux/arm64]
   development_latest_forbidden: true
   compose_image_env: ACE_HLS_IMAGE

@@ -209,3 +209,5 @@ node --check src/app/static/script.js
 docker compose config -q
 docker build -t ace-hls-viewer:2.5.0-dev-test .
 ```
+
+`push_docker.sh` publica por defecto un manifiesto compatible con `linux/amd64` y `linux/arm64`. Puede limitarse mediante `DOCKER_PLATFORMS`; las versiones `-dev` bloquean siempre la etiqueta `latest`.

@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VERSION="$(tr -d '[:space:]' < "${ROOT_DIR}/src/app/version.txt")"
 TAG="${VERSION#v}"
 IMAGE="tscneo/ace-hls-viewer:${TAG}"
+PLATFORMS="${DOCKER_PLATFORMS:-linux/amd64,linux/arm64}"
 
 if [[ -z "${TAG}" ]]; then
   echo "No se pudo leer la versión" >&2
@@ -16,12 +17,17 @@ if [[ "${1:-}" == "--latest" && "${TAG}" == *-dev ]]; then
   exit 2
 fi
 
-docker build --tag "${IMAGE}" "${ROOT_DIR}"
-docker push "${IMAGE}"
+build_args=(
+  buildx build
+  --platform "${PLATFORMS}"
+  --tag "${IMAGE}"
+  --push
+)
 
 if [[ "${1:-}" == "--latest" ]]; then
-  docker tag "${IMAGE}" tscneo/ace-hls-viewer:latest
-  docker push tscneo/ace-hls-viewer:latest
+  build_args+=(--tag tscneo/ace-hls-viewer:latest)
 fi
 
-echo "Publicada ${IMAGE}"
+docker "${build_args[@]}" "${ROOT_DIR}"
+
+echo "Publicada ${IMAGE} para ${PLATFORMS}"

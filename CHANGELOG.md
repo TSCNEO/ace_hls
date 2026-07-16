@@ -8,3 +8,4 @@
 - Añadido CRUD de canales personalizados con precedencia de metadatos y reconstrucción sin red.
 - Endurecido el renderizado de datos remotos y la exportación M3U.
 - Parametrizada la imagen de Compose y protegida la publicación de `latest` para versiones `-dev`.
+- Publicación Docker multi-arquitectura para servidores AMD64/Intel y hosts ARM64.
