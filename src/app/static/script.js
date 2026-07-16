@@ -114,6 +114,10 @@ async function fetchSettings() {
             : '';
 
         document.getElementById('cfg-backend').textContent = backend.backend || 'desconocido';
+        document.getElementById('cfg-deployment').textContent = backend.backend === 'orchestrator'
+            ? (backend.deployment === 'remote' ? 'Orchestrator remoto' : 'Orchestrator local')
+            : 'AceXY legacy';
+        document.getElementById('cfg-management-endpoint').textContent = backend.base_url || 'no disponible';
         document.getElementById('cfg-effective-endpoint').textContent = backend.public_endpoint || 'no disponible';
         document.getElementById('cfg-token-row').hidden = backend.backend !== 'acexy';
 

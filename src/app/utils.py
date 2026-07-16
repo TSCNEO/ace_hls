@@ -6,6 +6,14 @@ from app.config import Config
 LOCAL_INDICATORS = {"127.0.0.1", "localhost", "0.0.0.0", "acexy", "acestream", "orchestrator"}
 
 
+def format_url_host(host: str) -> str:
+    """Format an IPv4, hostname or IPv6 literal for use in a URL."""
+    normalized = str(host or "").strip()
+    if normalized.startswith("[") and normalized.endswith("]"):
+        return normalized
+    return f"[{normalized}]" if ":" in normalized else normalized
+
+
 def normalize_public_endpoint(value):
     endpoint = str(value or "").strip().rstrip("/")
     if not endpoint:
@@ -35,8 +43,8 @@ def get_stream_public_base(request_host):
     target_host = Config.STREAM_PROXY_HOST
     if target_host.lower() in LOCAL_INDICATORS:
         target_host = _request_hostname(request_host)
-    elif ":" in target_host and not target_host.startswith("["):
-        target_host = f"[{target_host}]"
+    else:
+        target_host = format_url_host(target_host)
     return f"http://{target_host}:{Config.STREAM_PUBLIC_PORT}"
 
 
@@ -63,4 +71,4 @@ def get_stream_proxy_host_for_server():
     internal_host = Config.STREAM_PROXY_HOST
     if internal_host in ['127.0.0.1', 'localhost', '0.0.0.0']:
         internal_host = Config.STREAM_BACKEND
-    return internal_host
+    return format_url_host(internal_host)

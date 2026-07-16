@@ -27,9 +27,12 @@ class OrchestratorService:
         result = {
             "enabled": self.is_enabled(),
             "backend": Config.STREAM_BACKEND,
+            "deployment": Config.ORCHESTRATOR_MODE,
             "base_url": self.base_url,
+            "orchestrator_host": Config.ORCHESTRATOR_HOST,
+            "orchestrator_port": int(Config.ORCHESTRATOR_PORT),
             "stream_proxy_host": Config.STREAM_PROXY_HOST,
-            "stream_proxy_port": str(Config.STREAM_PROXY_PORT),
+            "stream_proxy_port": int(Config.STREAM_PROXY_PORT),
             "stream_public_port": Config.STREAM_PUBLIC_PORT,
             "api_prefix": self.api_prefix,
             "authenticated": bool(self.token),

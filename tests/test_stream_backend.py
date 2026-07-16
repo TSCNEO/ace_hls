@@ -5,7 +5,7 @@ import pytest
 from flask import Flask
 
 from app import routes
-from app.config import Config, _env_with_legacy
+from app.config import Config, _env_with_legacy, _stream_target_value, _url_host
 from app.services.orchestrator import OrchestratorService
 from app.services.settings_manager import SettingsManager
 from app.utils import (
@@ -27,6 +27,54 @@ def test_legacy_environment_name_remains_a_fallback(monkeypatch):
     monkeypatch.setenv("ACEXY_IP", "legacy-acexy")
 
     assert _env_with_legacy("STREAM_PROXY_HOST", "ACEXY_IP") == "legacy-acexy"
+
+
+def test_stream_proxy_override_precedes_orchestrator_and_legacy(monkeypatch):
+    monkeypatch.setenv("STREAM_PROXY_HOST", "stream-override")
+    monkeypatch.setenv("ORCHESTRATOR_HOST", "remote-orchestrator")
+    monkeypatch.setenv("ACEXY_IP", "legacy-acexy")
+
+    assert _stream_target_value(
+        "STREAM_PROXY_HOST",
+        "ORCHESTRATOR_HOST",
+        "ACEXY_IP",
+        "orchestrator",
+        "orchestrator",
+    ) == "stream-override"
+
+
+def test_orchestrator_target_precedes_legacy_alias(monkeypatch):
+    monkeypatch.delenv("STREAM_PROXY_HOST", raising=False)
+    monkeypatch.setenv("ORCHESTRATOR_HOST", "remote-orchestrator")
+    monkeypatch.setenv("ACEXY_IP", "legacy-acexy")
+
+    assert _stream_target_value(
+        "STREAM_PROXY_HOST",
+        "ORCHESTRATOR_HOST",
+        "ACEXY_IP",
+        "orchestrator",
+        "orchestrator",
+    ) == "remote-orchestrator"
+    assert _stream_target_value(
+        "STREAM_PROXY_HOST",
+        "ORCHESTRATOR_HOST",
+        "ACEXY_IP",
+        "acexy",
+        "127.0.0.1",
+    ) == "legacy-acexy"
+
+
+@pytest.mark.parametrize(
+    ("host", "expected"),
+    [
+        ("192.168.1.50", "192.168.1.50"),
+        ("orchestrator.lan", "orchestrator.lan"),
+        ("fd00::50", "[fd00::50]"),
+        ("[fd00::50]", "[fd00::50]"),
+    ],
+)
+def test_management_url_host_supports_ip_hostname_and_ipv6(host, expected):
+    assert _url_host(host) == expected
 
 
 @pytest.mark.parametrize(
@@ -69,6 +117,28 @@ def test_orchestrator_playback_url_never_contains_management_token():
 
     assert url == f"http://10.0.0.4:8000/ace/getstream?infohash={'a' * 40}"
     assert "must-not-leak" not in url
+
+
+@pytest.mark.parametrize(
+    ("host", "expected_base"),
+    [
+        ("192.168.1.50", "http://192.168.1.50:8000"),
+        ("orchestrator.lan", "http://orchestrator.lan:8000"),
+        ("fd00::50", "http://[fd00::50]:8000"),
+    ],
+)
+def test_remote_orchestrator_is_used_for_direct_playback(host, expected_base):
+    with patch.multiple(
+        Config,
+        STREAM_BACKEND="orchestrator",
+        STREAM_PROXY_HOST=host,
+        STREAM_PUBLIC_PORT=8000,
+        STREAM_PUBLIC_ENDPOINT="",
+    ):
+        with patch("app.services.settings_manager.settings_manager.get_all", return_value={}):
+            url = get_stream_url_for_client("ace-hls.lan:8088", "channel-id")
+
+    assert url == f"{expected_base}/ace/getstream?id=channel-id"
 
 
 def test_acexy_playback_keeps_legacy_query_token():
@@ -131,16 +201,22 @@ def test_connection_info_contains_no_token():
         Config,
         STREAM_BACKEND_CONFIGURED=True,
         STREAM_BACKEND="orchestrator",
-        STREAM_PROXY_HOST="orchestrator",
+        ORCHESTRATOR_MODE="remote",
+        ORCHESTRATOR_HOST="192.168.1.30",
+        ORCHESTRATOR_PORT="8000",
+        STREAM_PROXY_HOST="192.168.1.30",
         STREAM_PROXY_PORT="8000",
         STREAM_PUBLIC_PORT=8000,
         STREAM_PUBLIC_ENDPOINT="",
     ):
         with patch("app.services.settings_manager.settings_manager.get_all", return_value={}):
-            result = service.connection_info("192.168.1.30:8088")
+            result = service.connection_info("ace-hls.lan:8088")
 
     assert result["public_endpoint"] == "http://192.168.1.30:8000"
     assert result["panel_url"] == "http://192.168.1.30:8000/panel"
+    assert result["deployment"] == "remote"
+    assert result["orchestrator_host"] == "192.168.1.30"
+    assert result["orchestrator_port"] == 8000
     assert result["authenticated"] is True
     assert "super-secret" not in str(result)
 

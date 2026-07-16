@@ -6,6 +6,15 @@ ROOT = Path(__file__).resolve().parents[1]
 README = (ROOT / "README.md").read_text(encoding="utf-8")
 API_DOC = (ROOT / "docs/api.md").read_text(encoding="utf-8")
 CONFIG_DOC = (ROOT / "docs/configuration.md").read_text(encoding="utf-8")
+ENV_EXAMPLES = [ROOT / ".env.example", ROOT / ".env.orchestrator-remote.example"]
+COMPOSE_FILES = [
+    ROOT / "docker-compose.yml",
+    ROOT / "release/docker-compose.yml",
+    ROOT / "docker-compose.orchestrator-remote.yml",
+    ROOT / "release/docker-compose.orchestrator-remote.yml",
+    ROOT / "docker-compose.acexy.yml",
+    ROOT / "release/docker-compose.acexy.yml",
+]
 
 
 def test_documentation_links_resolve():
@@ -34,24 +43,22 @@ def test_all_application_environment_variables_are_documented():
 
 
 def test_env_example_variables_are_documented():
-    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
-    variables = set(re.findall(r"^([A-Z0-9_]+)=", env_example, re.MULTILINE))
+    variables = set()
+    for env_example in ENV_EXAMPLES:
+        variables.update(
+            re.findall(r"^([A-Z0-9_]+)=", env_example.read_text(encoding="utf-8"), re.MULTILINE)
+        )
     for variable in variables:
         assert f"`{variable}`" in CONFIG_DOC, f"Variable de .env.example sin documentar: {variable}"
 
 
 def test_env_example_variables_are_consumed_by_compose():
-    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
-    variables = set(re.findall(r"^([A-Z0-9_]+)=", env_example, re.MULTILINE))
-    compose = "\n".join(
-        (ROOT / path).read_text(encoding="utf-8")
-        for path in (
-            "docker-compose.yml",
-            "release/docker-compose.yml",
-            "docker-compose.acexy.yml",
-            "release/docker-compose.acexy.yml",
+    variables = set()
+    for env_example in ENV_EXAMPLES:
+        variables.update(
+            re.findall(r"^([A-Z0-9_]+)=", env_example.read_text(encoding="utf-8"), re.MULTILINE)
         )
-    )
+    compose = "\n".join(path.read_text(encoding="utf-8") for path in COMPOSE_FILES)
     for variable in variables:
         assert f"${{{variable}" in compose, f"Variable de .env.example no usada por Compose: {variable}"
 
@@ -73,3 +80,25 @@ def test_release_metadata_is_synchronized():
     assert "ghcr.io/javinator9889/acexy:0.2.2" in (ROOT / "docker-compose.acexy.yml").read_text(encoding="utf-8")
     assert "ghcr.io/javinator9889/acexy:0.2.2" in (ROOT / "release/docker-compose.acexy.yml").read_text(encoding="utf-8")
     assert not (ROOT / "project_context.txt").exists()
+
+
+def test_remote_orchestrator_composes_only_run_ace_hls():
+    for path in (
+        ROOT / "docker-compose.orchestrator-remote.yml",
+        ROOT / "release/docker-compose.orchestrator-remote.yml",
+    ):
+        compose = path.read_text(encoding="utf-8")
+        assert "ORCHESTRATOR_HOST:?Define ORCHESTRATOR_HOST" in compose
+        assert "  orchestrator:" not in compose
+        assert "/var/run/docker.sock" not in compose
+        assert "orchestrator_data" not in compose
+
+
+def test_remote_orchestrator_has_dedicated_example_and_guide():
+    remote_example = (ROOT / ".env.orchestrator-remote.example").read_text(encoding="utf-8")
+    guide = (ROOT / "docs/orchestrator-deployment.md").read_text(encoding="utf-8")
+
+    assert "ORCHESTRATOR_MODE=remote" in remote_example
+    assert "ORCHESTRATOR_HOST=192.168.1.50" in remote_example
+    assert "docker-compose.orchestrator-remote.yml" in guide
+    assert "STREAM_PUBLIC_ENDPOINT" in guide
