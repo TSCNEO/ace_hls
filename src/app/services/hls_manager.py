@@ -140,7 +140,12 @@ class HLSManager:
             if os.path.exists(stream_dir):
                 shutil.rmtree(stream_dir)
 
-    def start_stream(self, ace_id, profile=None, overrides=None, force=False):
+    @staticmethod
+    def playback_id(ace_id, identifier_type="id", profile=None):
+        base_id = ace_id if identifier_type == "id" else f"ih-{ace_id}"
+        return f"{base_id}_{profile}" if profile and profile != "original" else base_id
+
+    def start_stream(self, ace_id, profile=None, overrides=None, force=False, identifier_type="id"):
         """
         Starts the HLS stream. 
         profile: None (Original), '720p', '480p'
@@ -163,7 +168,7 @@ class HLSManager:
         deinterlace = settings.get('transcode_deinterlace', False)
 
         # If profile is original (or None), do NOT append suffix.
-        effective_id = f"{ace_id}_{profile}" if profile and profile != 'original' else ace_id
+        effective_id = self.playback_id(ace_id, identifier_type, profile)
 
         with self.lock:
             if force and effective_id in self.processes:
@@ -195,7 +200,8 @@ class HLSManager:
 
             # --- UNIFIED CONNECTION LOGIC ---
             internal_host = get_acexy_host_for_server()
-            start_url = f"http://{internal_host}:{Config.ACEXY_PORT}/ace/getstream?id={ace_id}"
+            query_key = "infohash" if identifier_type == "infohash" else "id"
+            start_url = f"http://{internal_host}:{Config.ACEXY_PORT}/ace/getstream?{query_key}={ace_id}"
             
             log_file = os.path.join(stream_dir, "ffmpeg.log")
             env = os.environ.copy()
@@ -315,11 +321,8 @@ class HLSManager:
             if effective_id in self.validated_sessions:
                 self.validated_sessions.remove(effective_id)
 
-            threading.Thread(
-                target=self._analyze_stream,
-                args=(effective_id,),
-                daemon=True,
-            ).start()
+            analyze_args = (effective_id,) if identifier_type == "id" else (effective_id, ace_id)
+            threading.Thread(target=self._analyze_stream, args=analyze_args, daemon=True).start()
 
             # Check dead-on-arrival
             time.sleep(1)
@@ -374,12 +377,12 @@ class HLSManager:
                 })
         return streams
 
-    def _analyze_stream(self, playback_id):
+    def _analyze_stream(self, playback_id, raw_id=None):
         """Probe generated HLS files without opening a second upstream client."""
         
         # Identify Raw ID (Source) from Playback ID (Process key)
         # Acestream IDs are 40 chars. playback_id might have suffixes.
-        raw_id = playback_id[:40]
+        raw_id = raw_id or playback_id[:40]
 
         # Check cache first to avoid redundant probes/timeouts
         # Cache expires after 24h (86400s) to refresh technical info
