@@ -19,7 +19,6 @@ class SettingsManager:
                 "transcode_compat_crf": Config.TRANSCODE_COMPAT_CRF,
                 "acexy_public_endpoint": Config.ACEXY_PUBLIC_ENDPOINT or "",
                 "acexy_public_token": Config.ACEXY_PUBLIC_TOKEN or "",
-                # v1.8.2 Advanced Transcoding
                 "transcode_video_codec": "h264", # h264, hevc
                 "transcode_audio_bitrate": "128k",
                 "transcode_preset": "veryfast", # ultrafast, superfast, veryfast, faster, fast, medium...

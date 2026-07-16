@@ -44,10 +44,8 @@ class HLSManager:
 
     def _detect_hw_accel(self):
         """Detects available HW acceleration (VAAPI/QSV)."""
-        # Simple check for /dev/dri
         if os.path.exists('/dev/dri/renderD128'):
-            # Ideally we'd probe ffmpeg, but assumption for now:
-            # If device exists, we try VAAPI as it's most generic for Intel/AMD on Linux
+            # VAAPI is the shared Intel/AMD interface used by the FFmpeg command.
             return 'vaapi'
         return None
 
@@ -145,23 +143,18 @@ class HLSManager:
         base_id = ace_id if identifier_type == "id" else f"ih-{ace_id}"
         return f"{base_id}_{profile}" if profile and profile != "original" else base_id
 
-    def start_stream(self, ace_id, profile=None, overrides=None, force=False, identifier_type="id"):
+    def start_stream(self, ace_id, profile=None, force=False, identifier_type="id"):
         """
-        Starts the HLS stream. 
-        profile: None (Original), '720p', '480p'
-        overrides: Dict (Deprecated, backward compat). Now uses SettingsManager.
-        force: Restart an existing stale stream; healthy/preparing sessions are reused.
+        Start an HLS session, reusing healthy or still-preparing processes.
         """
         from app.services.settings_manager import settings_manager
         settings = settings_manager.get_all()
 
-        # Determine params (Settings > Config Defaults)
-        # Determine params (Settings > Config Defaults)
+        # Persistent WebUI settings take precedence over environment defaults.
         bitrate_720p = settings.get('transcode_720p_bitrate', Config.TRANSCODE_720P_BITRATE)
         bitrate_480p = settings.get('transcode_480p_bitrate', Config.TRANSCODE_480P_BITRATE)
         crf_compat = settings.get('transcode_compat_crf', Config.TRANSCODE_COMPAT_CRF)
         
-        # v1.8.2 Advanced Settings
         video_codec = settings.get('transcode_video_codec', 'h264') # h264, hevc
         audio_bitrate = settings.get('transcode_audio_bitrate', '128k')
         preset = settings.get('transcode_preset', 'veryfast')
@@ -198,7 +191,6 @@ class HLSManager:
                 os.makedirs(Config.HLS_DIR)
             os.makedirs(stream_dir)
 
-            # --- UNIFIED CONNECTION LOGIC ---
             internal_host = get_acexy_host_for_server()
             query_key = "infohash" if identifier_type == "infohash" else "id"
             start_url = f"http://{internal_host}:{Config.ACEXY_PORT}/ace/getstream?{query_key}={ace_id}"
@@ -210,15 +202,13 @@ class HLSManager:
             client_id = uuid.uuid4().hex
             user_agent = f"AceHLS-FFmpeg/{effective_id}/{client_id}"
 
-            # --- BUILD COMMAND ---
-            # Added resilience flags for slow streams (v2.2.2)
+            # Generous probing handles slow AceStream startup.
             cmd = ["ffmpeg", 
                    "-analyzeduration", "10000000", "-probesize", "10000000", # 10s buffer for analysis
                    "-rw_timeout", str(Config.FFMPEG_RW_TIMEOUT * 1_000_000),
                    "-user_agent", user_agent,
                    "-fflags", "+genpts+igndts", "-i", start_url]
             
-            # Transcoding Logic
             is_recode_profile = Config.ENABLE_TRANSCODE and profile and profile != 'original'
 
             if not Config.ENABLE_TRANSCODE or not profile or profile == 'original':

@@ -68,7 +68,7 @@ class OrchestratorService:
     def _headers(self):
         headers = {
             "Accept": "application/json",
-            "User-Agent": "AceHLS-Viewer/2.4",
+            "User-Agent": "AceHLS-Viewer/2.5",
             "DNT": "1",
         }
         if self.token:

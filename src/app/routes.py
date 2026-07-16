@@ -69,8 +69,6 @@ def system_logs():
         return "No logs found.", 200
     
     try:
-        # Read last 50 lines
-        # Simple implementation for now
         with open(log_file, 'r') as f:
             lines = f.readlines()
             last_lines = lines[-50:]
@@ -168,10 +166,7 @@ from app.utils import get_acexy_url_for_client
 
 @main_bp.route('/api/channels')
 def get_channels():
-    # If cache is very old or missing, force update? 
-    # With APScheduler, this should presumably be up to date.
-    # But if it's the very first run, we might want to check.
-    # Check if cache exists and is valid
+    # Refresh on demand when the scheduler cache is missing or stale.
     should_update = True
     if os.path.exists(Config.JSON_FILE):
         mtime = os.path.getmtime(Config.JSON_FILE)

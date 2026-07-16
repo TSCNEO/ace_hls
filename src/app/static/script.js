@@ -3,7 +3,7 @@ let categories = new Set();
 let currentStreamUrl = "";
 let currentAceId = null;
 let currentIdentifierType = 'id';
-let currentAbortController = null; // Phase 2: Stale Alert Fix
+let currentAbortController = null;
 let hlsInstance = null;
 let currentProfile = 'original';
 let playbackGeneration = 0;
@@ -48,8 +48,8 @@ function getInitialPlaybackProfile() {
 
 document.addEventListener('DOMContentLoaded', () => {
     loadChannels();
-    loadSettings(); // Phase 2: Persistence
-    loadTranscodeCfg(); // Phase 3: Transcode Config
+    loadSettings();
+    loadTranscodeCfg();
 
     const player = getPlayerElement();
     if (player) {
@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Phase 2: History API for Back Button
+    // Keep browser back navigation in sync with the player modal.
     window.addEventListener('popstate', (event) => {
         const modal = document.getElementById('player-modal');
         if (modal && modal.style.display === 'flex') {
@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// Phase 2: Settings Logic
+// Local browser preferences
 function loadSettings() {
     const defaultQ = localStorage.getItem('ace_default_quality') || 'original';
     const sel = document.getElementById('default-quality');
@@ -84,7 +84,7 @@ function saveDefaultQuality() {
     }
 }
 
-// Phase 3: Server-Side Persistence
+// Persistent server settings
 async function fetchSettings() {
     try {
         const res = await fetch('/api/settings');
@@ -98,7 +98,6 @@ async function fetchSettings() {
         document.getElementById('cfg-endpoint').value = settings.acexy_public_endpoint || '';
         document.getElementById('cfg-token').value = settings.acexy_public_token || '';
 
-        // v1.8.2 Advanced
         document.getElementById('cfg-vcodec').value = settings.transcode_video_codec || 'h264';
         document.getElementById('cfg-preset').value = settings.transcode_preset || 'veryfast';
         document.getElementById('cfg-abitrate').value = settings.transcode_audio_bitrate || '128k';
@@ -124,7 +123,6 @@ async function saveSettings() {
         transcode_compat_crf: document.getElementById('cfg-crf').value,
         acexy_public_endpoint: document.getElementById('cfg-endpoint').value,
         acexy_public_token: document.getElementById('cfg-token').value,
-        // v1.8.2
         transcode_video_codec: document.getElementById('cfg-vcodec').value,
         transcode_preset: document.getElementById('cfg-preset').value,
         transcode_audio_bitrate: document.getElementById('cfg-abitrate').value,
@@ -144,7 +142,7 @@ async function saveSettings() {
     }
 }
 
-// Map old function names just in case HTML still references them
+// Names used by the settings form in index.html.
 const loadTranscodeCfg = fetchSettings;
 const saveTranscodeCfg = saveSettings;
 
@@ -390,7 +388,7 @@ let loadTimeout;
 let statsInterval;
 let engineInfoInterval;
 
-// Phase 5: Engine Info Logic
+// Orchestrator engine information
 async function fetchEngineInfo(aceId, isUpdate = false) {
     const container = document.getElementById('player-engine-info');
     if (!container) return;
@@ -671,12 +669,9 @@ async function startPlayback(aceId, profile, options = {}) {
     showPlayerStatus('Preparando stream', force ? 'Reiniciando AceStream y esperando segmentos...' : 'Conectando con AceStream...');
 
     try {
-        // Phase 3: Configurable Quality Overrides (Now handled server-side)
         let url = `/api/hls/start/${aceId}?profile=${encodeURIComponent(currentProfile)}`;
         if (currentIdentifierType === 'infohash') url += '&identifier_type=infohash';
         if (force) url += '&force=1';
-
-        // No longer appending params here. Server reads settings.json directly.
 
         const res = await fetch(url, { signal });
         const data = await res.json().catch(() => ({ status: 'error', message: 'Respuesta inválida del servidor' }));

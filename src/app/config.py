@@ -15,7 +15,7 @@ class Config:
     DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
     
     # External Resources
-    URL_ORIGEN = os.environ.get("URL_ORIGEN", "https://ipfs.io/ipns/k2k4r8oqlcjxsritt5mczkcn4mmvcmymbqw7113fz2flkrerfwfps004/data/listas/lista_iptv.m3u")
+    URL_ORIGEN = os.environ.get("URL_ORIGEN", "")
     
     # AceXY Connection
     ACEXY_IP = os.environ.get("ACEXY_IP", "127.0.0.1")
@@ -40,9 +40,9 @@ class Config:
     TRANSCODE_480P_BITRATE = os.environ.get("TRANSCODE_480P_BITRATE", "1000k")
     TRANSCODE_COMPAT_CRF = os.environ.get("TRANSCODE_COMPAT_CRF", "23")
 
-    # Public Endpoint (Phase 3)
-    ACEXY_PUBLIC_ENDPOINT = os.environ.get("ACEXY_PUBLIC_ENDPOINT", None) # e.g. https://ace.mydomain.com
-    ACEXY_PUBLIC_TOKEN = os.environ.get("ACEXY_PUBLIC_TOKEN", None) # e.g. secret-token
+    # Optional endpoint used in playlists consumed outside the Docker network.
+    ACEXY_PUBLIC_ENDPOINT = os.environ.get("ACEXY_PUBLIC_ENDPOINT", None)
+    ACEXY_PUBLIC_TOKEN = os.environ.get("ACEXY_PUBLIC_TOKEN", None)
 
     # Paths
     JSON_FILE = os.path.join(DATA_DIR, "channels.json")

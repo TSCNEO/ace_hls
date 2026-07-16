@@ -1,5 +1,11 @@
 # Sources 2.0
 
+## Persistencia
+
+`sources.json` usa `schema_version: 2`. Cada elemento de `sources` contiene `id`, `name`, `url`, `kind`, `enabled`, `created_at`, `updated_at`, el último resultado `validation` y el estado `refresh`. Los IDs `src-…` son estables durante una edición; en la migración se derivan de la URL.
+
+`custom_channels.json` usa `schema_version: 1`. Cada canal contiene `id`, `name`, `stream_id`, `identifier_type`, `group`, `logo`, `tvg_id`, `created_at` y `updated_at`. La pareja `identifier_type + stream_id` es única.
+
 ## Migración
 
 Al leer por primera vez un `sources.json` v1 (array de `{url, added_at}`), AceHLS toma un bloqueo de proceso, crea una sola copia `sources.v1.backup.json` y reemplaza el registro de forma atómica por el esquema 2. Los IDs se derivan de la URL, por lo que repetir la operación no crea fuentes nuevas. La migración no accede a la red.
@@ -24,3 +30,5 @@ La descarga tiene límite de 10 MiB, timeout de conexión de 8 s y lectura de 30
 - `PATCH/DELETE /api/custom-channels/{channel_id}`
 
 Durante v2.5.x se mantienen el alta `{url}` y el borrado por URL. Los canales personalizados se almacenan en `custom_channels.json`, se mezclan antes que las fuentes remotas y sus metadatos prevalecen cuando el identificador coincide.
+
+El alta de fuente acepta `name`, `url` y, solo para conservarla desactivada tras un error, `allow_invalid_disabled`. La edición admite `name`, `url` y `enabled`. Un canal personalizado exige `name` y `stream_id`; `group`, `logo` y `tvg_id` son opcionales.

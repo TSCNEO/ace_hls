@@ -60,9 +60,16 @@ components:
     dashboard: src/app/static/dashboard.html
     service_worker: src/app/static/sw.js
     hls_library: src/app/static/vendor/hls.min.js
+documentation:
+  overview: README.md
+  configuration: docs/configuration.md
+  api: docs/api.md
+  sources_v2: docs/sources-v2.md
+  releases: CHANGELOG.md
 external_services:
   acexy_or_orchestrator_proxy:
     config: [ACEXY_IP, ACEXY_PORT]
+    compose_image: ghcr.io/javinator9889/acexy:0.2.2
     stream_endpoint: /ace/getstream?id={id_or_content_id}|infohash={infohash}
     payloads: [video/mp2t_continuous, hls_manifest]
   orchestrator_management:
@@ -89,10 +96,13 @@ persistence:
     hls/: ephemeral_manifests_segments_ffmpeg_logs
 http_api:
   channels: /api/channels
+  settings: /api/settings
+  system: [/health, /api/version, /api/system/stats, /api/system/logs]
   playlists: [/playlist.m3u, /api/playlist/all.m3u]
   sources: [/api/sources, /api/sources/{source_id}, /api/sources/{source_id}/validate, /api/sources/refresh, /api/sources/refresh/status]
   custom_channels: [/api/custom-channels, /api/custom-channels/{channel_id}]
   hls_start: /api/hls/start/{ace_id}
+  hls_stop: /api/hls/stop/{ace_id}
   hls_files: /hls/{stream_id}/{filename}
   orchestrator: [/api/orchestrator/status, /api/orchestrator/streams, /api/orchestrator/overview, /api/orchestrator/metrics, /api/orchestrator/config]
   health: /health
@@ -119,10 +129,11 @@ validation:
   unit: PYTHONPATH=src .venv/bin/python -m pytest -q
   syntax_python: .venv/bin/python -m compileall -q src tests
   syntax_javascript: node --check src/app/static/script.js
-  docker: docker build -t ace-hls-viewer:2.5.0-test .
+  documentation: PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_documentation.py
+  docker: docker build -t ace-hls-viewer:test .
 release:
   script: push_docker.sh
-  versioned_image: tscneo/ace-hls-viewer:2.5.0
+  versioned_image: tscneo/ace-hls-viewer:{version_without_v}
   platforms: [linux/amd64, linux/arm64]
   latest_allowed_for_release: true
   compose_image_env: ACE_HLS_IMAGE

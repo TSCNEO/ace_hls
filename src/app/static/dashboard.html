@@ -388,10 +388,6 @@ Cargando logs del sistema...
                     }
                 } else if (engines.error) {
                     if (engines.error.includes("disabled")) {
-                        // Hide the whole card if disabled
-                        document.querySelector('h3:contains("Orchestrator")').parentElement.style.display = 'none';
-                        // Actually simpler selector: the card wrapper. But we don't have ID on card.
-                        // Let's rely on empty state for now or add ID to card.
                         empty.textContent = 'Integración Desactivada';
                     } else {
                         empty.textContent = 'Error: ' + engines.error;

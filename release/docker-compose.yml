@@ -9,12 +9,13 @@ services:
       - ace_hls_data:/app/data
     networks:
       - ace_hls_stream
-    #Uncomment if you have a GPU with VAAPI support
+    # Descomentar si el host expone VAAPI.
     # devices:
     #   - /dev/dri:/dev/dri
     environment:
       - ACEXY_IP=${ACEXY_IP}
       - ACEXY_PORT=${ACEXY_PORT}
+      - ACEXY_API_TOKEN=${ACEXY_API_TOKEN:-defaultpassword}
       - CACHE_DURATION=${CACHE_DURATION}
       - PLAYLIST_REFRESH_INTERVAL=${PLAYLIST_REFRESH_INTERVAL:-900}
       - SOURCE_CONNECT_TIMEOUT=${SOURCE_CONNECT_TIMEOUT:-8}
@@ -25,6 +26,11 @@ services:
       - HLS_IDLE_TIMEOUT=${HLS_IDLE_TIMEOUT:-120}
       - URL_ORIGEN=${URL_ORIGEN}
       - ENABLE_TRANSCODE=${ENABLE_TRANSCODE:-false}
+      - TRANSCODE_720P_BITRATE=${TRANSCODE_720P_BITRATE:-2500k}
+      - TRANSCODE_480P_BITRATE=${TRANSCODE_480P_BITRATE:-1000k}
+      - TRANSCODE_COMPAT_CRF=${TRANSCODE_COMPAT_CRF:-23}
+      - ACEXY_PUBLIC_ENDPOINT=${ACEXY_PUBLIC_ENDPOINT:-}
+      - ACEXY_PUBLIC_TOKEN=${ACEXY_PUBLIC_TOKEN:-}
       - ORCHESTRATOR_URL=${ORCHESTRATOR_URL:-}
       - ORCHESTRATOR_API_PREFIX=${ORCHESTRATOR_API_PREFIX:-/api/v1}
       - ORCHESTRATOR_API_TOKEN=${ORCHESTRATOR_API_TOKEN:-defaultpassword}
@@ -38,7 +44,7 @@ services:
       - ace_hls_stream
 
   acexy:
-    image: ghcr.io/javinator9889/acexy:0.2.0
+    image: ghcr.io/javinator9889/acexy:0.2.2
     container_name: acexy
     restart: unless-stopped
     ports:

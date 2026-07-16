@@ -1,213 +1,116 @@
 # AceHLS Web Viewer
 
-Interfaz web autogestionada para descubrir, reproducir y exportar canales AceStream. Convierte streams AceStream en HLS compatible con navegadores, iPhone/iPad y clientes IPTV, y puede integrarse con AceStream Orchestrator para mostrar el estado de motores y streams.
+AceHLS es una aplicación Flask para descubrir canales AceStream, reproducirlos en el navegador y exportarlos como listas IPTV. Está pensada para una red interna, LAN o VPN; no incorpora autenticación ni protecciones para exponerla directamente a Internet.
 
-Versión actual: `v2.5.0`.
+La versión de la aplicación se define únicamente en [`src/app/version.txt`](src/app/version.txt). Los cambios publicados están en [`CHANGELOG.md`](CHANGELOG.md).
 
-## Características
+## Qué incluye
 
-- Interfaz responsive con búsqueda, categorías, favoritos, zapping y reproducción manual por AceStream ID.
-- Reproducción web mediante HLS.js y HLS nativo cuando el navegador lo soporta.
-- Detección automática del tipo de respuesta de AceXY:
-  - Un manifiesto HLS real se sirve mediante proxy y reescritura de segmentos.
-  - Un stream continuo `video/mp2t` se remultiplexa a HLS con FFmpeg.
-- Compatibilidad con extensiones de navegador problemáticas: el worker de HLS.js está desactivado para evitar errores relacionados con `MediaKeyMessageEvent`.
-- Sources 2.0: fuentes con nombre, estado, activación, validación y migración automática desde v2.4.x.
-- Fuentes M3U y JSON de AceStream; admite `id`, `infohash`, URI AceStream y parámetros de URL.
-- Canales personalizados gestionables desde la WebUI y con prioridad sobre metadatos remotos.
-- Deduplicación global por tipo de identificador e identificador.
-- Actualización autónoma de fuentes cada 15 minutos, sin depender de visitas a la WebUI.
-- Caché persistente por fuente: una lista caída reutiliza su última copia válida sin eliminar sus canales.
-- Listas M3U para VLC, TiviMate, IPTV Smarters y otros clientes.
-- Perfiles opcionales `original`, `max_compat`, `720p` y `480p`.
-- Transcodificación opcional por CPU o VAAPI cuando `/dev/dri/renderD128` está disponible en el contenedor.
-- Cierre automático configurable de procesos FFmpeg sin peticiones HLS; el valor predeterminado es 120 segundos.
-- Dashboard de CPU, RAM, disco, procesos FFmpeg, logs y motores del Orchestrator.
-- Estadísticas persistentes de funcionamiento y datos técnicos obtenidos mediante FFprobe.
-- Configuración persistente en el volumen de datos.
-
-## Cambios recientes
-
-Consulta [`CHANGELOG.md`](CHANGELOG.md) y la guía de migración [`docs/sources-v2.md`](docs/sources-v2.md).
+- Webplayer responsive con búsqueda, categorías, favoritos, zapping y reproducción manual.
+- Fuentes M3U y respuestas JSON de `api.acestream.me/all` o `/search`.
+- Identificadores `id` e `infohash`, URI `acestream://` e `infohash://` y hashes de 40 caracteres.
+- Sources 2.0: alta, edición, validación, activación, caché por fuente y migración desde v2.4.x.
+- Canales personalizados con prioridad sobre los metadatos de fuentes remotas.
+- Exportación M3U para clientes IPTV y reproducción directa mediante AceXY.
+- Detección de HLS real; los streams MPEG-TS continuos se remultiplexan con FFmpeg.
+- Perfiles `original`, `max_compat`, `720p` y `480p`; los tres últimos requieren transcodificación.
+- Dashboard local, estadísticas persistentes e integración opcional con AceStream Orchestrator.
 
 ## Arquitectura
 
 ```text
-Fuente M3U ──► scheduler/cache por fuente ──► channels.json ──► WebUI/listas exportadas
-                                                        │
-Navegador/cliente ──► AceHLS ──► AceXY/Orchestrator ──► motor AceStream
-                         │
-                         ├─ HLS real: proxy de manifiesto y segmentos
-                         └─ MPEG-TS continuo: FFmpeg ──► HLS
+Fuentes remotas ─► validador ─► caché por fuente ─┐
+Canales propios ──────────────────────────────────┼─► channels.json ─► WebUI / M3U
+                                                  │
+Navegador o IPTV ─► AceHLS ─► AceXY ─► AceStream ┘
+                       ├─ HLS real: proxy
+                       └─ MPEG-TS: FFmpeg a HLS
 ```
 
-El `docker-compose.yml` de desarrollo incluye:
-
-1. `ace-hls`: aplicación Flask servida por Gunicorn.
-2. `acexy`: proxy HTTP de AceStream.
-3. `acestream`: motor AceStream.
-
-También puede usarse un AceStream Orchestrator externo que exponga el proxy de streams y su API de gestión.
+El Compose incluido ejecuta `ace-hls`, AceXY `0.2.2` y un motor AceStream. También puede apuntarse a servicios ya existentes mediante `ACEXY_IP`, `ACEXY_PORT` y las variables del Orchestrator.
 
 ## Instalación
 
-### Configuración
-
 ```bash
 cp .env.example .env
+docker compose up -d --build
 ```
 
-Edita `.env`. `URL_ORIGEN` puede quedar vacío; las fuentes también pueden añadirse desde el botón de configuración de la WebUI.
+La WebUI queda disponible en `http://IP_DEL_HOST:8088` con la configuración predeterminada. Las fuentes se administran desde Ajustes; `URL_ORIGEN` es opcional.
 
-| Variable | Descripción | Defecto |
-|---|---|---|
-| `ACE_HLS_PORT` | Puerto publicado de la WebUI | `8088` |
-| `ACEXY_IP` | Host de AceXY o del proxy unificado del Orchestrator | `acexy` |
-| `ACEXY_PORT` | Puerto HTTP del proxy de streams | `8080` |
-| `URL_ORIGEN` | Fuente M3U inicial opcional | vacío/reemplazar |
-| `CACHE_DURATION` | Antigüedad para el refresh solicitado por la WebUI | `300` |
-| `PLAYLIST_REFRESH_INTERVAL` | Intervalo del refresh autónomo, en segundos | `900` |
-| `SOURCE_CONNECT_TIMEOUT` | Timeout de conexión de fuentes | `8` |
-| `SOURCE_READ_TIMEOUT` | Timeout de lectura de fuentes | `30` |
-| `SOURCE_MAX_BYTES` | Tamaño máximo de una respuesta | `10485760` |
-| `SOURCE_TLS_VERIFY` | Verificación TLS; `false` conserva fuentes LAN/VPN con certificados propios | `false` |
-| `FFMPEG_RW_TIMEOUT` | Timeout de lectura del proxy upstream, en segundos | `60` |
-| `HLS_IDLE_TIMEOUT` | Tiempo sin peticiones HLS antes de cerrar FFmpeg | `120` |
-| `ENABLE_TRANSCODE` | Habilita perfiles con recodificación | `false` |
-| `ORCHESTRATOR_URL` | URL base de la API; vacío reutiliza `ACEXY_IP:ACEXY_PORT` | vacío |
-| `ORCHESTRATOR_API_PREFIX` | Prefijo de la API unificada actual | `/api/v1` |
-| `ORCHESTRATOR_API_TOKEN` | Bearer token; puede quedar vacío si no hay autenticación | `defaultpassword` |
-| `ORCHESTRATOR_TIMEOUT` | Timeout de la API de gestión, en segundos | `5` |
+Para usar la imagen publicada:
 
-`ACEXY_API_TOKEN` se mantiene únicamente como fallback de compatibilidad para `ORCHESTRATOR_API_TOKEN`.
+```bash
+docker compose -f release/docker-compose.yml pull
+docker compose -f release/docker-compose.yml up -d
+```
 
-### Desarrollo o build local
+El Compose de release usa `tscneo/ace-hls-viewer:latest`. Para fijar una versión:
+
+```bash
+ACE_HLS_IMAGE=tscneo/ace-hls-viewer:2.5.1 \
+docker compose -f release/docker-compose.yml up -d
+```
+
+La configuración completa está en [`docs/configuration.md`](docs/configuration.md).
+
+## Fuentes y persistencia
+
+El volumen `ace_hls_data` se monta en `/app/data`. No debe eliminarse durante una actualización.
+
+| Ruta | Contenido |
+|---|---|
+| `sources.json` | Registro Sources 2.0 |
+| `sources.v1.backup.json` | Backup único creado al migrar desde v2.4.x |
+| `custom_channels.json` | Canales personalizados |
+| `source_cache/` | Último snapshot válido de cada fuente |
+| `channels.json` | Salida normalizada y deduplicada |
+| `ace_hls.m3u` | Lista directa generada |
+| `settings.json` | Ajustes de la WebUI |
+| `stats.json` | Salud y metadatos técnicos |
+| `app.log` | Log de aplicación |
+| `hls/` | Manifiestos y segmentos temporales |
+
+La migración del registro es atómica y no accede a la red. Después del arranque, el scheduler actualiza en segundo plano las fuentes habilitadas. Si una fuente falla se usa su snapshot válido; si fallan todas se conserva `channels.json`. Un esquema futuro desconocido nunca se sobrescribe.
+
+Detalles del formato y compatibilidad: [`docs/sources-v2.md`](docs/sources-v2.md).
+
+## Reproducción y listas
+
+| Modalidad | URL |
+|---|---|
+| HLS original | `/playlist.m3u?profile=original` |
+| AceXY directo | `/playlist.m3u?profile=direct` |
+| H.264 compatible | `/playlist.m3u?profile=max_compat` |
+| 720p | `/playlist.m3u?profile=720p` |
+| 480p | `/playlist.m3u?profile=480p` |
+| Todas las variantes | `/api/playlist/all.m3u` |
+
+`direct` requiere que el cliente pueda alcanzar el endpoint de AceXY. `max_compat`, `720p` y `480p` requieren `ENABLE_TRANSCODE=true`. Si se habilita VAAPI, debe montarse `/dev/dri` en el contenedor.
+
+La referencia completa de endpoints está en [`docs/api.md`](docs/api.md).
+
+## Actualización
+
+```bash
+docker compose pull
+docker compose up -d --force-recreate
+```
+
+Una actualización desde v2.4.x reutiliza el mismo volumen y migra automáticamente fuentes y cachés. Conviene conservar `sources.v1.backup.json` hasta comprobar la instalación.
+
+## Desarrollo y validación
+
+Las pruebas y servidores locales se ejecutan con Python 3.11 dentro de `.venv`:
 
 ```bash
 python3.11 -m venv .venv
 .venv/bin/python -m pip install -r src/requirements.txt -r requirements-dev.txt
 PYTHONPATH=src .venv/bin/python -m pytest -q
-```
-
-### Imagen publicada
-
-```bash
-docker compose -f release/docker-compose.yml pull ace-hls
-docker compose -f release/docker-compose.yml up -d ace-hls
-```
-
-Acceso: `http://TU_IP:8088`.
-
-## Fuentes y caché
-
-Las fuentes se guardan en el esquema versionado de `sources.json`. Una instalación v2.4.x se migra de forma atómica al arrancar, conserva una única copia `sources.v1.backup.json` y no descarga fuentes durante la migración. Un esquema futuro desconocido se sirve desde caché y bloquea las mutaciones.
-
-Cada fuente tiene un snapshot independiente dentro de `source_cache/`:
-
-- Si responde correctamente, solo se reemplaza su propio snapshot.
-- Si falla la descarga, devuelve contenido no M3U o intenta sustituir una caché no vacía por una lista vacía, se reutiliza su último snapshot válido.
-- Los snapshots disponibles se combinan y deduplican para generar `channels.json` y `ace_hls.m3u` mediante reemplazo atómico.
-- Al actualizar desde versiones anteriores, las cachés por hash de URL se migran a snapshots por ID estable de fuente.
-- Si todas las fuentes fallan, se conserva la caché global y el scheduler reintenta después de 60 segundos.
-
-Limitación inevitable: una instalación con volumen completamente nuevo no puede recuperar los canales de una fuente que nunca haya respondido correctamente.
-
-El intervalo se configura con `PLAYLIST_REFRESH_INTERVAL`; el mínimo admitido es 60 segundos.
-
-## Reproducción y listas M3U
-
-### Navegador
-
-Abre `http://TU_IP:8088` y selecciona un canal. AceHLS decide automáticamente si puede proxificar HLS real o si necesita generar HLS mediante FFmpeg.
-
-### Clientes IPTV
-
-| Modalidad | URL |
-|---|---|
-| HLS original | `http://TU_IP:8088/playlist.m3u?profile=original` |
-| Enlace directo a AceXY | `http://TU_IP:8088/playlist.m3u?profile=direct` |
-| Máxima compatibilidad H.264 | `http://TU_IP:8088/playlist.m3u?profile=max_compat` |
-| 720p | `http://TU_IP:8088/playlist.m3u?profile=720p` |
-| 480p | `http://TU_IP:8088/playlist.m3u?profile=480p` |
-| Todas las variantes | `http://TU_IP:8088/api/playlist/all.m3u` |
-
-Los perfiles `max_compat`, `720p` y `480p` requieren `ENABLE_TRANSCODE=true`. La modalidad `direct` evita AceHLS durante la reproducción; el dispositivo cliente debe poder acceder al endpoint público de AceXY configurado.
-
-## AceStream Orchestrator
-
-La integración se activa desde la configuración de la WebUI. La implementación actual usa el prefijo `/api/v1` de la API unificada y admite autenticación Bearer.
-
-Endpoints upstream utilizados:
-
-- `/api/v1/engines`
-- `/api/v1/streams?status=started`
-- `/api/v1/orchestrator/status`
-- `/api/v1/metrics/dashboard?window_seconds=900`
-
-Endpoints expuestos por AceHLS:
-
-- `/api/orchestrator/status`
-- `/api/orchestrator/streams`
-- `/api/orchestrator/overview`
-- `/api/orchestrator/metrics`
-- `/api/orchestrator/config` — no expone el token.
-
-Referencia: [API de AceStream Orchestrator](https://github.com/krinkuto11/acestream-orchestrator/blob/main/docs/API.md).
-
-## Persistencia
-
-El volumen `ace_hls_data` se monta en `/app/data` y contiene:
-
-| Ruta | Contenido |
-|---|---|
-| `sources.json` | Registro de fuentes M3U |
-| `sources.v1.backup.json` | Copia única del registro anterior a Sources 2.0 |
-| `custom_channels.json` | Canales personalizados |
-| `source_cache/` | Último snapshot válido de cada fuente |
-| `channels.json` | Caché global deduplicada |
-| `ace_hls.m3u` | Lista directa generada |
-| `settings.json` | Configuración de la WebUI |
-| `stats.json` | Salud y metadatos técnicos de canales |
-| `app.log` | Log de aplicación |
-| `hls/` | Segmentos y manifiestos temporales |
-
-No elimines el volumen si quieres conservar fuentes, cachés, configuración y estadísticas.
-
-## API y diagnóstico
-
-| Endpoint | Función |
-|---|---|
-| `/health` | Disco, conexión AceXY, procesos FFmpeg y estado del scheduler |
-| `/api/version` | Versión y estado de transcodificación |
-| `/api/channels` | Canales normalizados |
-| `/api/sources` | Listado y alta de fuentes |
-| `/api/sources/{id}` | Edición y borrado de fuentes |
-| `/api/sources/{id}/validate` | Revalidación de una fuente |
-| `/api/sources/refresh` | Refresh manual |
-| `/api/sources/refresh/status` | Estado del scheduler |
-| `/api/custom-channels` | CRUD de canales personalizados |
-| `/api/hls/start/{ace_id}` | Inicio de reproducción HLS |
-| `/dashboard` | Dashboard de sistema |
-
-`/health` es un endpoint de diagnóstico. Los Compose incluidos actualmente no lo declaran como `healthcheck` de Docker; `restart: unless-stopped` solo reinicia el contenedor cuando el proceso termina.
-
-## Actualización de la imagen
-
-```bash
-docker compose pull ace-hls
-docker compose up -d --force-recreate ace-hls
-```
-
-Adapta `ace-hls` al nombre real del servicio definido en tu Compose.
-
-## Validación del proyecto
-
-```bash
-PYTHONPATH=src .venv/bin/python -m pytest -q
 .venv/bin/python -m compileall -q src tests
 node --check src/app/static/script.js
-docker compose config -q
-docker build -t ace-hls-viewer:2.5.0-test .
+docker compose --env-file .env.example config -q
+docker build -t ace-hls-viewer:test .
 ```
 
-`push_docker.sh` publica por defecto un manifiesto compatible con `linux/amd64` y `linux/arm64`. Puede limitarse mediante `DOCKER_PLATFORMS`; las versiones `-dev` bloquean siempre la etiqueta `latest`.
+`push_docker.sh` lee `src/app/version.txt` y publica `linux/amd64` y `linux/arm64`. `--latest` solo se admite para versiones sin sufijo `-dev`.

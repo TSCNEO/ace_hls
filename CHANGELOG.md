@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.5.1
+
+- Reorganizada y contrastada toda la documentación de instalación, configuración, API, persistencia y entrega.
+- Sincronizadas las variables de entorno entre `.env.example` y los Compose.
+- Actualizado AceXY a `0.2.2` también en el Compose de release.
+- Eliminadas referencias y comentarios obsoletos; añadidas pruebas de sincronización documental.
+
 ## v2.5.0
 
 - Añadido Sources 2.0 con esquema versionado, migración atómica, backup único y caché por ID estable.
