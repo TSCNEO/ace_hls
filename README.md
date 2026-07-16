@@ -2,7 +2,7 @@
 
 Interfaz web autogestionada para descubrir, reproducir y exportar canales AceStream. Convierte streams AceStream en HLS compatible con navegadores, iPhone/iPad y clientes IPTV, y puede integrarse con AceStream Orchestrator para mostrar el estado de motores y streams.
 
-Versión actual: `v2.5.0-dev`.
+Versión actual: `v2.5.0`.
 
 ## Características
 
@@ -207,7 +207,7 @@ PYTHONPATH=src .venv/bin/python -m pytest -q
 .venv/bin/python -m compileall -q src tests
 node --check src/app/static/script.js
 docker compose config -q
-docker build -t ace-hls-viewer:2.5.0-dev-test .
+docker build -t ace-hls-viewer:2.5.0-test .
 ```
 
 `push_docker.sh` publica por defecto un manifiesto compatible con `linux/amd64` y `linux/arm64`. Puede limitarse mediante `DOCKER_PLATFORMS`; las versiones `-dev` bloquean siempre la etiqueta `latest`.

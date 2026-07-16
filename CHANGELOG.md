@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.5.0-dev
+## v2.5.0
 
 - Añadido Sources 2.0 con esquema versionado, migración atómica, backup único y caché por ID estable.
 - Añadido parser compartido para M3U y respuestas JSON de AceStream, con soporte de `id` e `infohash`.

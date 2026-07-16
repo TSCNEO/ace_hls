@@ -1,4 +1,4 @@
-const CACHE_NAME = 'acehls-v2.5.0-dev';
+const CACHE_NAME = 'acehls-v2.5.0';
 const urlsToCache = [
     '/',
     '/index.html',

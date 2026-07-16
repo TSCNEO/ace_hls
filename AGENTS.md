@@ -119,10 +119,10 @@ validation:
   unit: PYTHONPATH=src .venv/bin/python -m pytest -q
   syntax_python: .venv/bin/python -m compileall -q src tests
   syntax_javascript: node --check src/app/static/script.js
-  docker: docker build -t ace-hls-viewer:2.5.0-dev-test .
+  docker: docker build -t ace-hls-viewer:2.5.0-test .
 release:
   script: push_docker.sh
-  development_image: tscneo/ace-hls-viewer:2.5.0-dev
+  versioned_image: tscneo/ace-hls-viewer:2.5.0
   platforms: [linux/amd64, linux/arm64]
-  development_latest_forbidden: true
+  latest_allowed_for_release: true
   compose_image_env: ACE_HLS_IMAGE
