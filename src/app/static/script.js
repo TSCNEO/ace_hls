@@ -87,25 +87,65 @@ function saveDefaultQuality() {
 // Persistent server settings
 async function fetchSettings() {
     try {
-        const res = await fetch('/api/settings');
+        const [res, backendRes] = await Promise.all([
+            fetch('/api/settings'),
+            fetch('/api/orchestrator/config')
+        ]);
         const settings = await res.json();
+        const backend = await backendRes.json();
 
         // Populate inputs
         // Strip 'k' for numeric inputs
         document.getElementById('cfg-bitrate-720').value = (settings.transcode_720p_bitrate || '').replace('k', '');
         document.getElementById('cfg-bitrate-480').value = (settings.transcode_480p_bitrate || '').replace('k', '');
         document.getElementById('cfg-crf').value = settings.transcode_compat_crf || '';
-        document.getElementById('cfg-endpoint').value = settings.acexy_public_endpoint || '';
-        document.getElementById('cfg-token').value = settings.acexy_public_token || '';
+        document.getElementById('cfg-endpoint').value = settings.stream_public_endpoint || '';
+        document.getElementById('cfg-token').value = settings.stream_public_token || '';
 
         document.getElementById('cfg-vcodec').value = settings.transcode_video_codec || 'h264';
         document.getElementById('cfg-preset').value = settings.transcode_preset || 'veryfast';
         document.getElementById('cfg-abitrate').value = settings.transcode_audio_bitrate || '128k';
         document.getElementById('cfg-deinterlace').checked = settings.transcode_deinterlace || false;
-        document.getElementById('cfg-orchestrator').checked = settings.orchestrator_enabled === true; // Default false if undefined
+        const orchestratorToggle = document.getElementById('cfg-orchestrator');
+        orchestratorToggle.checked = backend.enabled === true;
+        orchestratorToggle.disabled = backend.managed_by_environment === true;
+        document.getElementById('cfg-orchestrator-toggle').title = orchestratorToggle.disabled
+            ? 'El backend está definido por STREAM_BACKEND.'
+            : '';
+
+        document.getElementById('cfg-backend').textContent = backend.backend || 'desconocido';
+        document.getElementById('cfg-effective-endpoint').textContent = backend.public_endpoint || 'no disponible';
+        document.getElementById('cfg-token-row').hidden = backend.backend !== 'acexy';
+
+        const panelLink = document.getElementById('cfg-orchestrator-panel');
+        if (backend.panel_url) {
+            panelLink.href = backend.panel_url;
+            panelLink.hidden = false;
+            panelLink.style.display = 'inline-block';
+        } else {
+            panelLink.hidden = true;
+            panelLink.style.display = 'none';
+        }
+        await updateOrchestratorConnectionStatus(backend);
 
     } catch (e) {
         console.error("Failed to fetch settings:", e);
+        document.getElementById('cfg-orchestrator-status').textContent = 'No disponible';
+    }
+}
+
+async function updateOrchestratorConnectionStatus(backend) {
+    const status = document.getElementById('cfg-orchestrator-status');
+    if (!backend.enabled) {
+        status.textContent = 'Integración desactivada';
+        return;
+    }
+    try {
+        const response = await fetch('/api/orchestrator/overview');
+        const data = await response.json();
+        status.textContent = data.error ? `Error: ${data.error_code || 'conexión'}` : 'Conectado';
+    } catch (error) {
+        status.textContent = 'Error de conexión';
     }
 }
 
@@ -121,24 +161,34 @@ async function saveSettings() {
         transcode_720p_bitrate: b720,
         transcode_480p_bitrate: b480,
         transcode_compat_crf: document.getElementById('cfg-crf').value,
-        acexy_public_endpoint: document.getElementById('cfg-endpoint').value,
-        acexy_public_token: document.getElementById('cfg-token').value,
+        stream_public_endpoint: document.getElementById('cfg-endpoint').value,
+        stream_public_token: document.getElementById('cfg-token').value,
         transcode_video_codec: document.getElementById('cfg-vcodec').value,
         transcode_preset: document.getElementById('cfg-preset').value,
         transcode_audio_bitrate: document.getElementById('cfg-abitrate').value,
-        transcode_deinterlace: document.getElementById('cfg-deinterlace').checked,
-        orchestrator_enabled: document.getElementById('cfg-orchestrator').checked
+        transcode_deinterlace: document.getElementById('cfg-deinterlace').checked
     };
+    const orchestratorToggle = document.getElementById('cfg-orchestrator');
+    if (!orchestratorToggle.disabled) {
+        payload.orchestrator_enabled = orchestratorToggle.checked;
+    }
 
     try {
-        await fetch('/api/settings', {
+        const response = await fetch('/api/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        // Optional: Show saved toast?
+        const result = await response.json();
+        const feedback = document.getElementById('network-feedback');
+        feedback.textContent = response.ok ? 'Configuración guardada.' : (result.message || 'No se pudo guardar.');
+        feedback.className = `inline-feedback ${response.ok ? 'success' : 'error'}`;
+        if (response.ok) await fetchSettings();
     } catch (e) {
         console.error("Failed to save settings:", e);
+        const feedback = document.getElementById('network-feedback');
+        feedback.textContent = 'Error de red al guardar.';
+        feedback.className = 'inline-feedback error';
     }
 }
 

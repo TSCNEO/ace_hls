@@ -45,7 +45,12 @@ def test_env_example_variables_are_consumed_by_compose():
     variables = set(re.findall(r"^([A-Z0-9_]+)=", env_example, re.MULTILINE))
     compose = "\n".join(
         (ROOT / path).read_text(encoding="utf-8")
-        for path in ("docker-compose.yml", "release/docker-compose.yml")
+        for path in (
+            "docker-compose.yml",
+            "release/docker-compose.yml",
+            "docker-compose.acexy.yml",
+            "release/docker-compose.acexy.yml",
+        )
     )
     for variable in variables:
         assert f"${{{variable}" in compose, f"Variable de .env.example no usada por Compose: {variable}"
@@ -59,7 +64,12 @@ def test_release_metadata_is_synchronized():
 
     assert f"## {version}" in changelog
     assert f"tscneo/ace-hls-viewer:{version.removeprefix('v')}" in README
-    assert "ghcr.io/javinator9889/acexy:0.2.2" in development_compose
-    assert "ghcr.io/javinator9889/acexy:0.2.2" in release_compose
+    assert "ghcr.io/krinkuto11/acestream-orchestrator:v2.1.0.3" in development_compose
+    assert "ghcr.io/krinkuto11/acestream-orchestrator:v2.1.0.3" in release_compose
+    assert "${STREAM_PUBLIC_PORT:-8000}:8000" in development_compose
+    assert "API_KEY=${ORCHESTRATOR_API_TOKEN:-change-this-local-token}" in development_compose
+    assert "ORCHESTRATOR_API_TOKEN=${ORCHESTRATOR_API_TOKEN:-change-this-local-token}" in development_compose
     assert "${ACE_HLS_IMAGE:-tscneo/ace-hls-viewer:latest}" in release_compose
+    assert "ghcr.io/javinator9889/acexy:0.2.2" in (ROOT / "docker-compose.acexy.yml").read_text(encoding="utf-8")
+    assert "ghcr.io/javinator9889/acexy:0.2.2" in (ROOT / "release/docker-compose.acexy.yml").read_text(encoding="utf-8")
     assert not (ROOT / "project_context.txt").exists()

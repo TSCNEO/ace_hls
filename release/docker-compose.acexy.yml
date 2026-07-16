@@ -4,22 +4,20 @@ services:
     container_name: ace_hls_viewer
     restart: unless-stopped
     depends_on:
-      - orchestrator
+      - acexy
     ports:
       - "${ACE_HLS_PORT:-8088}:5000"
     volumes:
       - ace_hls_data:/app/data
     networks:
       - ace_hls_stream
-    # Descomentar si el host expone VAAPI.
-    # devices:
-    #   - /dev/dri:/dev/dri
     environment:
-      - STREAM_BACKEND=${STREAM_BACKEND:-orchestrator}
-      - STREAM_PROXY_HOST=${STREAM_PROXY_HOST:-orchestrator}
-      - STREAM_PROXY_PORT=${STREAM_PROXY_PORT:-8000}
-      - STREAM_PUBLIC_PORT=${STREAM_PUBLIC_PORT:-8000}
-      - STREAM_PUBLIC_ENDPOINT=${STREAM_PUBLIC_ENDPOINT:-}
+      - STREAM_BACKEND=acexy
+      - STREAM_PROXY_HOST=acexy
+      - STREAM_PROXY_PORT=${ACEXY_PORT:-8080}
+      - STREAM_PUBLIC_PORT=${ACEXY_PORT:-8080}
+      - STREAM_PUBLIC_ENDPOINT=${STREAM_PUBLIC_ENDPOINT:-${ACEXY_PUBLIC_ENDPOINT:-}}
+      - ACEXY_PUBLIC_TOKEN=${ACEXY_PUBLIC_TOKEN:-}
       - CACHE_DURATION=${CACHE_DURATION:-300}
       - PLAYLIST_REFRESH_INTERVAL=${PLAYLIST_REFRESH_INTERVAL:-900}
       - SOURCE_CONNECT_TIMEOUT=${SOURCE_CONNECT_TIMEOUT:-8}
@@ -33,31 +31,39 @@ services:
       - TRANSCODE_720P_BITRATE=${TRANSCODE_720P_BITRATE:-2500k}
       - TRANSCODE_480P_BITRATE=${TRANSCODE_480P_BITRATE:-1000k}
       - TRANSCODE_COMPAT_CRF=${TRANSCODE_COMPAT_CRF:-23}
-      - ORCHESTRATOR_URL=${ORCHESTRATOR_URL:-http://orchestrator:8000}
-      - ORCHESTRATOR_API_PREFIX=${ORCHESTRATOR_API_PREFIX:-/api/v1}
-      - ORCHESTRATOR_API_TOKEN=${ORCHESTRATOR_API_TOKEN:-change-this-local-token}
-      - ORCHESTRATOR_TIMEOUT=${ORCHESTRATOR_TIMEOUT:-5}
 
-  orchestrator:
-    image: ${ORCHESTRATOR_IMAGE:-ghcr.io/krinkuto11/acestream-orchestrator:v2.1.0.3}
-    container_name: orchestrator
+  acestream:
+    image: martinbjeldbak/acestream-http-proxy:latest
+    container_name: acestream
+    restart: unless-stopped
+    networks:
+      - ace_hls_stream
+
+  acexy:
+    image: ghcr.io/javinator9889/acexy:0.2.2
+    container_name: acexy
     restart: unless-stopped
     ports:
-      - "${STREAM_PUBLIC_PORT:-8000}:8000"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - orchestrator_data:/app/app/config
+      - "${ACEXY_PORT:-8080}:${ACEXY_PORT:-8080}"
     environment:
-      - API_KEY=${ORCHESTRATOR_API_TOKEN:-change-this-local-token}
-      - DOCKER_NETWORK=ace_hls_stream
-      - VPN_ENABLED=${ORCHESTRATOR_VPN_ENABLED:-false}
+      ACEXY_LISTEN_ADDR: ":${ACEXY_PORT:-8080}"
+      ACEXY_SCHEME: "${ACEXY_SCHEME:-http}"
+      ACEXY_HOST: "${ACEXY_HOST:-acestream}"
+      ACEXY_PORT: "${ACESTREAM_PORT:-6878}"
+      ACEXY_M3U8_STREAM_TIMEOUT: "${ACEXY_M3U8_STREAM_TIMEOUT:-60s}"
+      ACEXY_M3U8: "${ACEXY_M3U8:-false}"
+      ACEXY_EMPTY_TIMEOUT: "${ACEXY_EMPTY_TIMEOUT:-60s}"
+      ACEXY_BUFFER_SIZE: "${ACEXY_BUFFER_SIZE:-4MB}"
+      ACEXY_NO_RESPONSE_TIMEOUT: "${ACEXY_NO_RESPONSE_TIMEOUT:-10s}"
+    depends_on:
+      - acestream
     networks:
       - ace_hls_stream
 
 volumes:
   ace_hls_data:
-  orchestrator_data:
 
 networks:
   ace_hls_stream:
     name: ace_hls_stream
+

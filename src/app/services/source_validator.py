@@ -148,7 +148,7 @@ def parse_m3u(body: str, source_url: str, source_name: str) -> list[dict[str, An
         if media_urls:
             raise SourceValidationError(
                 "unsupported_acexy_reference",
-                "La lista contiene recursos AceStream por archivo que AceXY no puede normalizar a id/infohash.",
+                "La lista contiene recursos por archivo que el backend no puede normalizar a id/infohash.",
             )
         raise SourceValidationError("no_acestream_channels", "La fuente no contiene canales AceStream compatibles.")
     return channels

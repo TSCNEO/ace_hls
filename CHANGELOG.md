@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.6.0-dev
+
+- Convertido AceStream Orchestrator en el backend predeterminado de los Compose, fijado inicialmente en `v2.1.0.3`.
+- Añadida configuración neutral `STREAM_*`, conservando aliases `ACEXY_*` durante v2.x.
+- Añadida detección automática del endpoint directo LAN/VPN y override compatible con HTTP/HTTPS e IPv6.
+- Compartido el Bearer token de gestión sin incluirlo en URLs de reproducción, respuestas ni logs.
+- Conservado el stack AceXY anterior en Compose legacy y migrados sus ajustes persistentes.
+- Ampliadas la WebUI, la API de configuración y la salud para mostrar el backend efectivo.
+
 ## v2.5.1
 
 - Reorganizada y contrastada toda la documentación de instalación, configuración, API, persistencia y entrega.

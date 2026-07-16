@@ -11,10 +11,10 @@ La versión de la aplicación se define únicamente en [`src/app/version.txt`](s
 - Identificadores `id` e `infohash`, URI `acestream://` e `infohash://` y hashes de 40 caracteres.
 - Sources 2.0: alta, edición, validación, activación, caché por fuente y migración desde v2.4.x.
 - Canales personalizados con prioridad sobre los metadatos de fuentes remotas.
-- Exportación M3U para clientes IPTV y reproducción directa mediante AceXY.
+- Exportación M3U para clientes IPTV y reproducción directa mediante Orchestrator o AceXY legacy.
 - Detección de HLS real; los streams MPEG-TS continuos se remultiplexan con FFmpeg.
 - Perfiles `original`, `max_compat`, `720p` y `480p`; los tres últimos requieren transcodificación.
-- Dashboard local, estadísticas persistentes e integración opcional con AceStream Orchestrator.
+- Dashboard local, estadísticas persistentes e integración con AceStream Orchestrator.
 
 ## Arquitectura
 
@@ -22,12 +22,12 @@ La versión de la aplicación se define únicamente en [`src/app/version.txt`](s
 Fuentes remotas ─► validador ─► caché por fuente ─┐
 Canales propios ──────────────────────────────────┼─► channels.json ─► WebUI / M3U
                                                   │
-Navegador o IPTV ─► AceHLS ─► AceXY ─► AceStream ┘
+Navegador o IPTV ─► AceHLS ─► Orchestrator ─► motores AceStream ┘
                        ├─ HLS real: proxy
                        └─ MPEG-TS: FFmpeg a HLS
 ```
 
-El Compose incluido ejecuta `ace-hls`, AceXY `0.2.2` y un motor AceStream. También puede apuntarse a servicios ya existentes mediante `ACEXY_IP`, `ACEXY_PORT` y las variables del Orchestrator.
+El Compose predeterminado ejecuta `ace-hls` y AceStream Orchestrator `v2.1.0.3`. El Orchestrator crea y administra los motores bajo demanda. El stack simple AceXY continúa disponible en `docker-compose.acexy.yml`.
 
 ## Instalación
 
@@ -36,7 +36,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-La WebUI queda disponible en `http://IP_DEL_HOST:8088` con la configuración predeterminada. Las fuentes se administran desde Ajustes; `URL_ORIGEN` es opcional.
+La WebUI queda en `http://IP_DEL_HOST:8088`, el panel del Orchestrator en `http://IP_DEL_HOST:8000/panel` y la reproducción directa usa el mismo puerto `8000`. Cambia `ORCHESTRATOR_API_TOKEN` antes de usar el stack fuera de una red de confianza.
 
 Para usar la imagen publicada:
 
@@ -48,7 +48,7 @@ docker compose -f release/docker-compose.yml up -d
 El Compose de release usa `tscneo/ace-hls-viewer:latest`. Para fijar una versión:
 
 ```bash
-ACE_HLS_IMAGE=tscneo/ace-hls-viewer:2.5.1 \
+ACE_HLS_IMAGE=tscneo/ace-hls-viewer:2.6.0-dev \
 docker compose -f release/docker-compose.yml up -d
 ```
 
@@ -80,13 +80,13 @@ Detalles del formato y compatibilidad: [`docs/sources-v2.md`](docs/sources-v2.md
 | Modalidad | URL |
 |---|---|
 | HLS original | `/playlist.m3u?profile=original` |
-| AceXY directo | `/playlist.m3u?profile=direct` |
+| Backend directo | `/playlist.m3u?profile=direct` |
 | H.264 compatible | `/playlist.m3u?profile=max_compat` |
 | 720p | `/playlist.m3u?profile=720p` |
 | 480p | `/playlist.m3u?profile=480p` |
 | Todas las variantes | `/api/playlist/all.m3u` |
 
-`direct` requiere que el cliente pueda alcanzar el endpoint de AceXY. `max_compat`, `720p` y `480p` requieren `ENABLE_TRANSCODE=true`. Si se habilita VAAPI, debe montarse `/dev/dri` en el contenedor.
+`direct` genera automáticamente `http://IP_DEL_HOST:8000/ace/getstream`; `STREAM_PUBLIC_ENDPOINT` permite sobrescribirlo. `max_compat`, `720p` y `480p` requieren `ENABLE_TRANSCODE=true`. Si se habilita VAAPI, debe montarse `/dev/dri` en el contenedor.
 
 La referencia completa de endpoints está en [`docs/api.md`](docs/api.md).
 
@@ -94,10 +94,16 @@ La referencia completa de endpoints está en [`docs/api.md`](docs/api.md).
 
 ```bash
 docker compose pull
-docker compose up -d --force-recreate
+docker compose up -d --force-recreate --remove-orphans
 ```
 
 Una actualización desde v2.4.x reutiliza el mismo volumen y migra automáticamente fuentes y cachés. Conviene conservar `sources.v1.backup.json` hasta comprobar la instalación.
+
+Para conservar el modo simple anterior:
+
+```bash
+docker compose -f release/docker-compose.acexy.yml up -d --remove-orphans
+```
 
 ## Desarrollo y validación
 
@@ -110,6 +116,7 @@ PYTHONPATH=src .venv/bin/python -m pytest -q
 .venv/bin/python -m compileall -q src tests
 node --check src/app/static/script.js
 docker compose --env-file .env.example config -q
+docker compose -f docker-compose.acexy.yml --env-file .env.example config -q
 docker build -t ace-hls-viewer:test .
 ```
 

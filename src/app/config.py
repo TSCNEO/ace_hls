@@ -1,5 +1,13 @@
 import os
 
+
+def _env_with_legacy(primary, legacy, default=None):
+    value = os.environ.get(primary)
+    if value is not None:
+        return value
+    return os.environ.get(legacy, default)
+
+
 class Config:
     # AceHLS Settings
     ACE_HLS_PORT = int(os.environ.get("ACE_HLS_PORT", 8088))
@@ -17,15 +25,28 @@ class Config:
     # External Resources
     URL_ORIGEN = os.environ.get("URL_ORIGEN", "")
     
-    # AceXY Connection
-    ACEXY_IP = os.environ.get("ACEXY_IP", "127.0.0.1")
-    ACEXY_PORT = os.environ.get("ACEXY_PORT", "8080")
+    # Streaming proxy. ACEXY_* remain aliases throughout the v2.x series.
+    STREAM_BACKEND_CONFIGURED = "STREAM_BACKEND" in os.environ
+    STREAM_BACKEND = os.environ.get("STREAM_BACKEND", "acexy").strip().lower()
+    if STREAM_BACKEND not in {"acexy", "orchestrator"}:
+        raise ValueError("STREAM_BACKEND must be 'acexy' or 'orchestrator'")
+    STREAM_PROXY_HOST = _env_with_legacy("STREAM_PROXY_HOST", "ACEXY_IP", "127.0.0.1")
+    STREAM_PROXY_PORT = _env_with_legacy("STREAM_PROXY_PORT", "ACEXY_PORT", "8080")
+    STREAM_PUBLIC_PORT = int(os.environ.get("STREAM_PUBLIC_PORT", STREAM_PROXY_PORT))
+    STREAM_PUBLIC_ENDPOINT = _env_with_legacy(
+        "STREAM_PUBLIC_ENDPOINT",
+        "ACEXY_PUBLIC_ENDPOINT",
+        "",
+    )
+
+    ACEXY_IP = STREAM_PROXY_HOST
+    ACEXY_PORT = STREAM_PROXY_PORT
     ACEXY_API_TOKEN = os.environ.get("ACEXY_API_TOKEN", "defaultpassword")
 
     # AceStream Orchestrator management API (Go unified API uses /api/v1).
     ORCHESTRATOR_URL = (
         os.environ.get("ORCHESTRATOR_URL")
-        or f"http://{ACEXY_IP}:{ACEXY_PORT}"
+        or f"http://{STREAM_PROXY_HOST}:{STREAM_PROXY_PORT}"
     ).rstrip('/')
     ORCHESTRATOR_API_PREFIX = os.environ.get("ORCHESTRATOR_API_PREFIX", "/api/v1").strip()
     if ORCHESTRATOR_API_PREFIX and not ORCHESTRATOR_API_PREFIX.startswith('/'):
@@ -41,7 +62,7 @@ class Config:
     TRANSCODE_COMPAT_CRF = os.environ.get("TRANSCODE_COMPAT_CRF", "23")
 
     # Optional endpoint used in playlists consumed outside the Docker network.
-    ACEXY_PUBLIC_ENDPOINT = os.environ.get("ACEXY_PUBLIC_ENDPOINT", None)
+    ACEXY_PUBLIC_ENDPOINT = STREAM_PUBLIC_ENDPOINT or None
     ACEXY_PUBLIC_TOKEN = os.environ.get("ACEXY_PUBLIC_TOKEN", None)
 
     # Paths

@@ -1,77 +1,77 @@
 # Configuración
 
-La configuración de infraestructura se carga desde variables de entorno. Los ajustes modificables en la WebUI se guardan en `settings.json` y prevalecen para las opciones que gestiona la interfaz.
+La infraestructura se configura mediante entorno. La WebUI guarda sus ajustes en `settings.json`. El despliegue predeterminado está pensado para LAN/VPN y usa AceStream Orchestrator.
 
-## Aplicación AceHLS
+## Backend de streaming
 
-| Variable | Predeterminado | Uso |
+| Variable | Predeterminado en Compose | Uso |
 |---|---:|---|
-| `ACE_HLS_PORT` | `8088` | Puerto publicado por Docker Compose. |
-| `DATA_DIR` | `/app/data` | Directorio persistente dentro del contenedor. |
-| `ACEXY_IP` | `acexy` en Compose | Host interno de AceXY o del proxy de streams. |
-| `ACEXY_PORT` | `8080` | Puerto HTTP de AceXY. |
-| `URL_ORIGEN` | vacío en `.env.example` | Fuente inicial opcional, creada solo si no existe `sources.json`. |
-| `CACHE_DURATION` | `300` | Antigüedad máxima de `channels.json` antes de refrescar al consultar canales. |
-| `PLAYLIST_REFRESH_INTERVAL` | `900` | Intervalo del scheduler; mínimo efectivo 60 segundos. |
-| `SOURCE_CONNECT_TIMEOUT` | `8` | Timeout de conexión de una fuente, en segundos. |
-| `SOURCE_READ_TIMEOUT` | `30` | Timeout de lectura de una fuente, en segundos. |
-| `SOURCE_MAX_BYTES` | `10485760` | Tamaño máximo descargado por validación, en bytes. |
-| `SOURCE_TLS_VERIFY` | `false` | Verificación TLS. Se mantiene desactivada para certificados internos/LAN/VPN. |
-| `FFMPEG_RW_TIMEOUT` | `60` | Timeout de lectura upstream de FFmpeg, en segundos. |
-| `HLS_IDLE_TIMEOUT` | `120` | Inactividad antes de detener una sesión FFmpeg; mínimo efectivo 60 segundos. |
-| `ENABLE_TRANSCODE` | `false` | Habilita `max_compat`, `720p` y `480p`. |
-| `TRANSCODE_720P_BITRATE` | `2500k` | Bitrate inicial del perfil 720p. |
-| `TRANSCODE_480P_BITRATE` | `1000k` | Bitrate inicial del perfil 480p. |
-| `TRANSCODE_COMPAT_CRF` | `23` | CRF inicial del perfil compatible. |
-| `ACEXY_PUBLIC_ENDPOINT` | vacío | Base pública de AceXY usada por listas `direct`. |
-| `ACEXY_PUBLIC_TOKEN` | vacío | Token añadido al endpoint público de AceXY. |
+| `STREAM_BACKEND` | `orchestrator` | `orchestrator` o `acexy`; selecciona el backend y la integración de gestión. |
+| `STREAM_PROXY_HOST` | `orchestrator` | Host interno usado por AceHLS y FFmpeg. |
+| `STREAM_PROXY_PORT` | `8000` | Puerto interno del proxy. |
+| `STREAM_PUBLIC_PORT` | `8000` | Puerto publicado y usado al calcular listas directas. |
+| `STREAM_PUBLIC_ENDPOINT` | vacío | Override HTTP/HTTPS completo; admite dominio, IPv6, ruta y puerto propios. |
 
-Los valores de transcodificación y endpoint público se copian a `settings.json` al crearlo. Después se administran desde la WebUI; cambiar solo el entorno no reemplaza un `settings.json` existente.
+Sin override, una petición a `http://192.168.1.20:8088` produce enlaces directos `http://192.168.1.20:8000/ace/getstream`. El host se deriva de cada petición, por lo que funciona desde LAN o VPN sin fijar una IP.
 
-| Ajuste en `settings.json` | Predeterminado | Uso |
-|---|---:|---|
-| `transcode_720p_bitrate` | `2500k` | Bitrate del perfil 720p. |
-| `transcode_480p_bitrate` | `1000k` | Bitrate del perfil 480p. |
-| `transcode_compat_crf` | `23` | Calidad del perfil compatible. |
-| `transcode_video_codec` | `h264` | Códec solicitado: `h264` o `hevc`; los perfiles escalados usan H.264 actualmente. |
-| `transcode_audio_bitrate` | `128k` | Bitrate de audio al recodificar. |
-| `transcode_preset` | `veryfast` | Preset de codificación por CPU. |
-| `transcode_deinterlace` | `false` | Activa desentrelazado. |
-| `acexy_public_endpoint` | vacío | Base de AceXY para listas directas. |
-| `acexy_public_token` | vacío | Token del endpoint público. |
-| `orchestrator_enabled` | `false` | Activa las consultas de gestión al Orchestrator. |
+Durante v2.x, `ACEXY_IP`, `ACEXY_PORT` y `ACEXY_PUBLIC_ENDPOINT` son aliases de `STREAM_PROXY_HOST`, `STREAM_PROXY_PORT` y `STREAM_PUBLIC_ENDPOINT`. Las variables nuevas tienen prioridad. `ACEXY_PUBLIC_TOKEN` se conserva solo para AceXY y nunca recibe el token de gestión del Orchestrator.
 
 ## AceStream Orchestrator
 
 | Variable | Predeterminado | Uso |
 |---|---:|---|
-| `ORCHESTRATOR_URL` | `http://ACEXY_IP:ACEXY_PORT` | URL base de la API de gestión. |
-| `ORCHESTRATOR_API_PREFIX` | `/api/v1` | Prefijo de la API. |
-| `ORCHESTRATOR_API_TOKEN` | valor de `ACEXY_API_TOKEN` | Bearer token; puede quedar vacío. |
-| `ORCHESTRATOR_TIMEOUT` | `5` | Timeout de gestión, en segundos. |
-| `ACEXY_API_TOKEN` | `defaultpassword` | Fallback de compatibilidad para el token del Orchestrator. |
+| `ORCHESTRATOR_IMAGE` | `ghcr.io/krinkuto11/acestream-orchestrator:v2.1.0.3` | Imagen fijada, reemplazable al probar otra versión. |
+| `ORCHESTRATOR_URL` | `http://orchestrator:8000` en Compose | Base interna de proxy y API. |
+| `ORCHESTRATOR_API_PREFIX` | `/api/v1` | Prefijo de gestión. |
+| `ORCHESTRATOR_API_TOKEN` | `change-this-local-token` | Se pasa como `API_KEY` y como Bearer token de AceHLS. |
+| `ORCHESTRATOR_TIMEOUT` | `5` | Timeout de gestión en segundos. |
+| `ORCHESTRATOR_VPN_ENABLED` | `false` | Activa la VPN administrada; requiere configurarla después en el panel. |
 
-La integración no realiza peticiones hasta activarla en Ajustes. La API consulta `/engines`, `/streams?status=started`, `/orchestrator/status` y `/metrics/dashboard` bajo el prefijo configurado.
+El panel está en `http://HOST:8000/panel` y la salud del proxy en `/proxy/health`. El Compose monta `/var/run/docker.sock`, persiste `/app/app/config` en `orchestrator_data` y establece `DOCKER_NETWORK=ace_hls_stream`. El token protege operaciones de gestión; el endpoint `/ace/getstream` permanece accesible sin añadir secretos a la URL.
 
-## Stack AceXY/AceStream
+`ACEXY_API_TOKEN` sigue siendo fallback de `ORCHESTRATOR_API_TOKEN` para despliegues antiguos que no usen los Compose suministrados.
 
-Estas variables pertenecen a los servicios del Compose, no al proceso Flask:
+## Aplicación AceHLS
 
-| Variable | Predeterminado |
-|---|---:|
-| `ACEXY_SCHEME` | `http` |
-| `ACEXY_HOST` | `acestream` |
-| `ACESTREAM_PORT` | `6878` |
-| `ACEXY_M3U8_STREAM_TIMEOUT` | `60s` |
-| `ACEXY_M3U8` | `false` |
-| `ACEXY_EMPTY_TIMEOUT` | `60s` |
-| `ACEXY_BUFFER_SIZE` | `4MB` |
-| `ACEXY_NO_RESPONSE_TIMEOUT` | `10s` |
+| Variable | Predeterminado | Uso |
+|---|---:|---|
+| `ACE_HLS_PORT` | `8088` | Puerto publicado de la WebUI. |
+| `DATA_DIR` | `/app/data` | Directorio persistente interno. |
+| `URL_ORIGEN` | vacío | Fuente inicial opcional. |
+| `CACHE_DURATION` | `300` | Antigüedad de `channels.json` antes del refresh bajo demanda. |
+| `PLAYLIST_REFRESH_INTERVAL` | `900` | Intervalo autónomo; mínimo 60 segundos. |
+| `SOURCE_CONNECT_TIMEOUT` | `8` | Timeout de conexión de fuentes. |
+| `SOURCE_READ_TIMEOUT` | `30` | Timeout de lectura de fuentes. |
+| `SOURCE_MAX_BYTES` | `10485760` | Límite por respuesta. |
+| `SOURCE_TLS_VERIFY` | `false` | Verificación TLS; `false` mantiene certificados LAN/VPN propios. |
+| `FFMPEG_RW_TIMEOUT` | `60` | Timeout upstream de FFmpeg. |
+| `HLS_IDLE_TIMEOUT` | `120` | Inactividad antes de detener FFmpeg; mínimo 60 segundos. |
+| `ENABLE_TRANSCODE` | `false` | Habilita `max_compat`, `720p` y `480p`. |
+| `TRANSCODE_720P_BITRATE` | `2500k` | Bitrate inicial 720p. |
+| `TRANSCODE_480P_BITRATE` | `1000k` | Bitrate inicial 480p. |
+| `TRANSCODE_COMPAT_CRF` | `23` | CRF del perfil compatible. |
 
-## Imagen y hardware
+## Ajustes persistentes
 
-`ACE_HLS_IMAGE` selecciona la imagen en `release/docker-compose.yml`; si no se define usa `tscneo/ace-hls-viewer:latest`.
+| Clave | Predeterminado | Uso |
+|---|---:|---|
+| `stream_public_endpoint` | entorno o vacío | Override de la URL directa. |
+| `stream_public_token` | vacío | Token por query exclusivo de AceXY legacy. |
+| `orchestrator_enabled` | `false` | Compatibilidad cuando `STREAM_BACKEND` no está definido. |
+| `transcode_720p_bitrate` | `2500k` | Bitrate 720p. |
+| `transcode_480p_bitrate` | `1000k` | Bitrate 480p. |
+| `transcode_compat_crf` | `23` | Calidad compatible. |
+| `transcode_video_codec` | `h264` | Códec solicitado. |
+| `transcode_audio_bitrate` | `128k` | Bitrate de audio. |
+| `transcode_preset` | `veryfast` | Preset CPU. |
+| `transcode_deinterlace` | `false` | Desentrelazado. |
 
-Para VAAPI hay que descomentar el montaje de `/dev/dri` en el Compose. La aplicación usa `/dev/dri/renderD128` cuando existe; en otro caso transcodifica por CPU.
+Al abrir una instalación anterior, `acexy_public_endpoint` y `acexy_public_token` se migran atómicamente a las claves neutrales. Si `STREAM_BACKEND` está definido, el modo del entorno prevalece y el checkbox queda informativo.
 
-Este despliegue está diseñado para una red confiable. `SOURCE_TLS_VERIFY=false`, la ausencia de login/CSRF y el acceso permitido a IP privadas son decisiones de compatibilidad interna, no una configuración apta para Internet.
+## Compose legacy AceXY
+
+`docker-compose.acexy.yml` y `release/docker-compose.acexy.yml` conservan AceXY `0.2.2` más el motor estático. Usan `ACEXY_PORT`, `ACEXY_PUBLIC_ENDPOINT`, `ACEXY_PUBLIC_TOKEN`, `ACEXY_SCHEME`, `ACEXY_HOST`, `ACESTREAM_PORT`, `ACEXY_M3U8_STREAM_TIMEOUT`, `ACEXY_M3U8`, `ACEXY_EMPTY_TIMEOUT`, `ACEXY_BUFFER_SIZE` y `ACEXY_NO_RESPONSE_TIMEOUT`.
+
+`ACE_HLS_IMAGE` selecciona la imagen de AceHLS en los Compose de release. Para VAAPI hay que montar `/dev/dri`.
+
+No se incluyen login, CSRF ni restricciones de red. El puerto `8000`, el panel y el Docker socket asociado al Orchestrator deben permanecer en una red confiable.

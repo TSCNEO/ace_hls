@@ -14,7 +14,7 @@
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="style.css?v=v2.5.1">
+    <link rel="stylesheet" href="style.css?v=v2.6.0-dev">
 </head>
 
 <body>
@@ -160,18 +160,25 @@
                 <summary style="cursor:pointer; color:#eee;">🌐 General & Red</summary>
                 <div style="margin-top:10px; display:grid; grid-template-columns: 1fr; gap:10px;">
                     <div>
-                        <label style="font-size:0.8em; color:#888;">Endpoint Público (URL Base acestream
-                            directo)</label>
+                        <label style="font-size:0.8em; color:#888;">Endpoint público del backend (opcional)</label>
                         <input type="text" id="cfg-endpoint" placeholder="https://..." onchange="saveTranscodeCfg()"
                             style="width:100%; box-sizing:border-box; padding:5px; background:#222; border:1px solid #444; color:white;">
                     </div>
-                    <div>
-                        <label style="font-size:0.8em; color:#888;">Token de Seguridad opcional (próximamente)</label>
+                    <div id="cfg-token-row">
+                        <label style="font-size:0.8em; color:#888;">Token por query para AceXY legacy</label>
                         <input type="text" id="cfg-token" placeholder="" onchange="saveTranscodeCfg()"
                             style="width:100%; box-sizing:border-box; padding:5px; background:#222; border:1px solid #444; color:white;">
                     </div>
+                    <div style="padding:8px; background:#222; border:1px solid #444; border-radius:4px; font-size:0.85em; color:#ccc;">
+                        <div>Backend: <strong id="cfg-backend">Cargando…</strong></div>
+                        <div>Endpoint directo: <span id="cfg-effective-endpoint">—</span></div>
+                        <div>Estado: <span id="cfg-orchestrator-status">Comprobando…</span></div>
+                        <a id="cfg-orchestrator-panel" href="#" target="_blank" rel="noopener noreferrer" hidden
+                            style="display:inline-block; margin-top:6px; color:var(--primary-color);">Abrir panel del Orchestrator ↗</a>
+                    </div>
+                    <div id="network-feedback" class="inline-feedback" role="status" aria-live="polite"></div>
                 </div>
-                <div style="margin-top:10px; display:flex; align-items:center;">
+                <div id="cfg-orchestrator-toggle" style="margin-top:10px; display:flex; align-items:center;">
                     <label style="cursor:pointer; display:flex; align-items:center; height:30px;">
                         <input type="checkbox" id="cfg-orchestrator" onchange="saveTranscodeCfg()"
                             style="margin-right:8px;">
@@ -331,7 +338,7 @@
 
     <!-- Custom Scripts -->
     <script src="vendor/hls.min.js?v=1.5.18"></script>
-    <script src="script.js?v=v2.5.1"></script>
+    <script src="script.js?v=v2.6.0-dev"></script>
 </body>
 
 </html>

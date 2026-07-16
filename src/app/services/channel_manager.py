@@ -241,7 +241,8 @@ class ChannelManager:
                 channel["identifier_type"] = identifier_type
                 query_key = "infohash" if identifier_type == "infohash" else "id"
                 channel["url"] = (
-                    f"http://{Config.ACEXY_IP}:{Config.ACEXY_PORT}/ace/getstream?{query_key}={stream_id}"
+                    f"http://{Config.STREAM_PROXY_HOST}:{Config.STREAM_PROXY_PORT}"
+                    f"/ace/getstream?{query_key}={stream_id}"
                 )
                 channels.append(channel)
         return channels

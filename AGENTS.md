@@ -1,4 +1,4 @@
-schema_version: 2
+schema_version: 3
 document_type: llm_project_architecture
 project:
   name: ace-hls-viewer
@@ -67,11 +67,17 @@ documentation:
   sources_v2: docs/sources-v2.md
   releases: CHANGELOG.md
 external_services:
-  acexy_or_orchestrator_proxy:
-    config: [ACEXY_IP, ACEXY_PORT]
-    compose_image: ghcr.io/javinator9889/acexy:0.2.2
+  orchestrator_proxy:
+    config: [STREAM_BACKEND, STREAM_PROXY_HOST, STREAM_PROXY_PORT, STREAM_PUBLIC_PORT, STREAM_PUBLIC_ENDPOINT]
+    compose_image: ghcr.io/krinkuto11/acestream-orchestrator:v2.1.0.3
     stream_endpoint: /ace/getstream?id={id_or_content_id}|infohash={infohash}
     payloads: [video/mp2t_continuous, hls_manifest]
+    panel: /panel
+    persistent_volume: orchestrator_data:/app/app/config
+    docker_access: /var/run/docker.sock
+  acexy_legacy:
+    compose_files: [docker-compose.acexy.yml, release/docker-compose.acexy.yml]
+    image: ghcr.io/javinator9889/acexy:0.2.2
   orchestrator_management:
     config: [ORCHESTRATOR_URL, ORCHESTRATOR_API_PREFIX, ORCHESTRATOR_API_TOKEN, ORCHESTRATOR_TIMEOUT]
     default_prefix: /api/v1
@@ -125,6 +131,8 @@ invariants:
   - render remote metadata with DOM text properties, never HTML interpolation
   - orchestrator read failures return structured JSON and never raise Flask 500
   - orchestrator secrets never appear in API responses or logs
+  - management bearer tokens never appear in playback URLs
+  - STREAM_* takes precedence over ACEXY_* aliases
 validation:
   unit: PYTHONPATH=src .venv/bin/python -m pytest -q
   syntax_python: .venv/bin/python -m compileall -q src tests
@@ -137,3 +145,5 @@ release:
   platforms: [linux/amd64, linux/arm64]
   latest_allowed_for_release: true
   compose_image_env: ACE_HLS_IMAGE
+  development_branch: codex/v2.6.0-orchestrator
+  development_tag: tscneo/ace-hls-viewer:2.6.0-dev

@@ -7,7 +7,7 @@ import threading
 import time
 import uuid
 import logging
-from app.utils import get_acexy_host_for_server
+from app.utils import get_stream_proxy_host_for_server
 from app.config import Config
 
 logger = logging.getLogger(__name__)
@@ -191,9 +191,12 @@ class HLSManager:
                 os.makedirs(Config.HLS_DIR)
             os.makedirs(stream_dir)
 
-            internal_host = get_acexy_host_for_server()
+            internal_host = get_stream_proxy_host_for_server()
             query_key = "infohash" if identifier_type == "infohash" else "id"
-            start_url = f"http://{internal_host}:{Config.ACEXY_PORT}/ace/getstream?{query_key}={ace_id}"
+            start_url = (
+                f"http://{internal_host}:{Config.STREAM_PROXY_PORT}"
+                f"/ace/getstream?{query_key}={ace_id}"
+            )
             
             log_file = os.path.join(stream_dir, "ffmpeg.log")
             env = os.environ.copy()
