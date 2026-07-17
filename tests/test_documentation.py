@@ -6,7 +6,12 @@ ROOT = Path(__file__).resolve().parents[1]
 README = (ROOT / "README.md").read_text(encoding="utf-8")
 API_DOC = (ROOT / "docs/api.md").read_text(encoding="utf-8")
 CONFIG_DOC = (ROOT / "docs/configuration.md").read_text(encoding="utf-8")
-ENV_EXAMPLES = [ROOT / ".env.example", ROOT / ".env.orchestrator-remote.example"]
+ENV_EXAMPLES = [
+    ROOT / ".env.example",
+    ROOT / ".env.orchestrator-remote.example",
+    ROOT / "easy-deploy/orchestrator-local/.env.example",
+    ROOT / "easy-deploy/orchestrator-remote/.env.example",
+]
 COMPOSE_FILES = [
     ROOT / "docker-compose.yml",
     ROOT / "release/docker-compose.yml",
@@ -14,11 +19,18 @@ COMPOSE_FILES = [
     ROOT / "release/docker-compose.orchestrator-remote.yml",
     ROOT / "docker-compose.acexy.yml",
     ROOT / "release/docker-compose.acexy.yml",
+    ROOT / "easy-deploy/orchestrator-local/compose.yml",
+    ROOT / "easy-deploy/orchestrator-remote/compose.yml",
 ]
 
 
 def test_documentation_links_resolve():
-    for document in [ROOT / "README.md", *sorted((ROOT / "docs").glob("*.md"))]:
+    documents = [
+        ROOT / "README.md",
+        ROOT / "easy-deploy/README.md",
+        *sorted((ROOT / "docs").glob("*.md")),
+    ]
+    for document in documents:
         body = document.read_text(encoding="utf-8")
         for target in re.findall(r"\[[^]]+\]\(([^)]+)\)", body):
             if "://" in target or target.startswith("#"):

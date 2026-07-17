@@ -1,0 +1,69 @@
+name: ace-hls
+
+services:
+  ace-hls:
+    image: ${ACE_HLS_IMAGE:-tscneo/ace-hls-viewer:2.6.0-dev}
+    container_name: ace_hls_viewer
+    restart: unless-stopped
+    depends_on:
+      - orchestrator
+    ports:
+      - "${ACE_HLS_PORT:-8088}:5000"
+    volumes:
+      - ace_hls_data:/app/data
+    networks:
+      - ace_hls_stream
+    # Descomentar si el host expone VAAPI.
+    # devices:
+    #   - /dev/dri:/dev/dri
+    environment:
+      - STREAM_BACKEND=orchestrator
+      - STREAM_PROXY_HOST=orchestrator
+      - STREAM_PROXY_PORT=8000
+      - STREAM_PUBLIC_PORT=${STREAM_PUBLIC_PORT:-8000}
+      - STREAM_PUBLIC_ENDPOINT=${STREAM_PUBLIC_ENDPOINT:-}
+      - ORCHESTRATOR_MODE=local
+      - ORCHESTRATOR_HOST=orchestrator
+      - ORCHESTRATOR_PORT=8000
+      - CACHE_DURATION=${CACHE_DURATION:-300}
+      - PLAYLIST_REFRESH_INTERVAL=${PLAYLIST_REFRESH_INTERVAL:-900}
+      - SOURCE_CONNECT_TIMEOUT=${SOURCE_CONNECT_TIMEOUT:-8}
+      - SOURCE_READ_TIMEOUT=${SOURCE_READ_TIMEOUT:-30}
+      - SOURCE_MAX_BYTES=${SOURCE_MAX_BYTES:-10485760}
+      - SOURCE_TLS_VERIFY=${SOURCE_TLS_VERIFY:-false}
+      - FFMPEG_RW_TIMEOUT=${FFMPEG_RW_TIMEOUT:-60}
+      - HLS_IDLE_TIMEOUT=${HLS_IDLE_TIMEOUT:-120}
+      - URL_ORIGEN=${URL_ORIGEN:-}
+      - ENABLE_TRANSCODE=${ENABLE_TRANSCODE:-false}
+      - TRANSCODE_720P_BITRATE=${TRANSCODE_720P_BITRATE:-2500k}
+      - TRANSCODE_480P_BITRATE=${TRANSCODE_480P_BITRATE:-1000k}
+      - TRANSCODE_COMPAT_CRF=${TRANSCODE_COMPAT_CRF:-23}
+      - ORCHESTRATOR_API_PREFIX=${ORCHESTRATOR_API_PREFIX:-/api/v1}
+      - ORCHESTRATOR_API_TOKEN=${ORCHESTRATOR_API_TOKEN:?Define ORCHESTRATOR_API_TOKEN in .env}
+      - ORCHESTRATOR_TIMEOUT=${ORCHESTRATOR_TIMEOUT:-5}
+
+  orchestrator:
+    image: ${ORCHESTRATOR_IMAGE:-ghcr.io/krinkuto11/acestream-orchestrator:v2.1.0.3}
+    container_name: orchestrator
+    restart: unless-stopped
+    ports:
+      - "${STREAM_PUBLIC_PORT:-8000}:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - orchestrator_data:/app/app/config
+    environment:
+      - API_KEY=${ORCHESTRATOR_API_TOKEN:?Define ORCHESTRATOR_API_TOKEN in .env}
+      - DOCKER_NETWORK=ace_hls_stream
+      - VPN_ENABLED=${ORCHESTRATOR_VPN_ENABLED:-false}
+    networks:
+      - ace_hls_stream
+
+volumes:
+  ace_hls_data:
+    name: ${ACE_HLS_DATA_VOLUME:-ace_hls_data}
+  orchestrator_data:
+    name: ${ORCHESTRATOR_DATA_VOLUME:-ace_hls_orchestrator_data}
+
+networks:
+  ace_hls_stream:
+    name: ace_hls_stream

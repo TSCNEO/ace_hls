@@ -34,6 +34,9 @@ ENV/
 # React build output (will be generated during Docker build)
 app/static/panel/
 
+# Generated release bundles
+dist/
+
 # OS
 .DS_Store
 Thumbs.db
