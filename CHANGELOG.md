@@ -10,6 +10,8 @@
 - Ampliadas la WebUI, la API de configuración y la salud para mostrar el backend efectivo.
 - Añadido despliegue con Orchestrator externo mediante IP, hostname o IPv6, sin crear servicios ni montar Docker socket localmente.
 - Añadidos Compose y ejemplo de entorno remotos, junto con una guía completa de instalación, verificación, actualización y diagnóstico.
+- Añadido `easy-deploy` con variantes local y remota sin build, volúmenes estables y etiquetas de imagen versionadas.
+- Añadido empaquetado ZIP reproducible y publicación automática del asset al crear una etiqueta estable.
 
 ## v2.5.1
 

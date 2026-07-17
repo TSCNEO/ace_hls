@@ -62,6 +62,7 @@ components:
     hls_library: src/app/static/vendor/hls.min.js
 documentation:
   overview: README.md
+  easy_deploy: easy-deploy/README.md
   configuration: docs/configuration.md
   api: docs/api.md
   sources_v2: docs/sources-v2.md
@@ -73,6 +74,7 @@ external_services:
     compose_image: ghcr.io/krinkuto11/acestream-orchestrator:v2.1.0.3
     compose_local: [docker-compose.yml, release/docker-compose.yml]
     compose_remote: [docker-compose.orchestrator-remote.yml, release/docker-compose.orchestrator-remote.yml]
+    easy_deploy: [easy-deploy/orchestrator-local/compose.yml, easy-deploy/orchestrator-remote/compose.yml]
     stream_endpoint: /ace/getstream?id={id_or_content_id}|infohash={infohash}
     payloads: [video/mp2t_continuous, hls_manifest]
     panel: /panel
@@ -139,9 +141,10 @@ invariants:
   - remote orchestrator compose never mounts the Docker socket or starts local streaming services
 validation:
   unit: PYTHONPATH=src .venv/bin/python -m pytest -q
-  syntax_python: .venv/bin/python -m compileall -q src tests
+  syntax_python: .venv/bin/python -m compileall -q src tests scripts
   syntax_javascript: node --check src/app/static/script.js
   documentation: PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_documentation.py
+  easy_deploy_package: .venv/bin/python scripts/package_easy_deploy.py
   docker: docker build -t ace-hls-viewer:test .
 release:
   script: push_docker.sh
@@ -151,3 +154,5 @@ release:
   compose_image_env: ACE_HLS_IMAGE
   development_branch: codex/v2.6.0-orchestrator
   development_tag: tscneo/ace-hls-viewer:2.6.0-dev
+  easy_deploy_archive: dist/ace-hls-easy-deploy-{version}.zip
+  stable_release_workflow: .github/workflows/easy-deploy-release.yml

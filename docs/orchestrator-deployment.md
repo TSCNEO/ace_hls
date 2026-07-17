@@ -14,6 +14,10 @@ AceHLS puede usar AceStream Orchestrator de dos maneras: dentro del mismo Compos
 
 Los datos de AceHLS viven en el volumen `ace_hls_data`. Actualizar o cambiar de backend no requiere borrarlo.
 
+## Instalación recomendada sin build
+
+El paquete [`easy-deploy`](../easy-deploy/README.md) es la opción recomendada para usuarios finales. Incluye una carpeta para Orchestrator local y otra para remoto, usa imágenes versionadas y arranca con `docker compose up -d`. Los apartados siguientes describen también los Compose del repositorio, que se conservan para desarrollo y compatibilidad.
+
 ## Opción 1: Orchestrator local
 
 Es el modo recomendado para una instalación nueva. El Compose crea AceHLS, Orchestrator, la red `ace_hls_stream`, el volumen `orchestrator_data` y monta el Docker socket para que el Orchestrator pueda crear motores.
@@ -154,7 +158,7 @@ Detén el Compose utilizado, sin `-v`, para conservar los datos:
 docker compose -f release/docker-compose.orchestrator-remote.yml --env-file .env down
 ```
 
-Para pasar de local a remoto, crea el `.env` remoto y ejecuta el Compose remoto con `--remove-orphans`. Para volver al Orchestrator local, restaura `.env.example` como base y usa el Compose normal. Para AceXY legacy, usa `release/docker-compose.acexy.yml`. No ejecutes `docker compose down -v`, porque eliminaría los volúmenes del proyecto.
+En Easy Deploy, ambas variantes usan el volumen indicado por `ACE_HLS_DATA_VOLUME`; detén una sin `-v` y arranca la otra con el mismo nombre. En los Compose anteriores, crea el `.env` remoto y ejecuta el Compose remoto con `--remove-orphans`. Para AceXY legacy, usa `release/docker-compose.acexy.yml`. No ejecutes `docker compose down -v`, porque eliminaría los volúmenes del proyecto.
 
 ## Solución de problemas
 

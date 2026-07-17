@@ -16,6 +16,32 @@ La versión de la aplicación se define únicamente en [`src/app/version.txt`](s
 - Perfiles `original`, `max_compat`, `720p` y `480p`; los tres últimos requieren transcodificación.
 - Dashboard local, estadísticas persistentes e integración con AceStream Orchestrator.
 
+## Instalación recomendada: Easy Deploy
+
+[`easy-deploy/`](easy-deploy/) contiene dos paquetes autónomos que usan imágenes ya construidas: no necesitan el código fuente ni ejecutan `docker build`. Desde la versión estable `v2.6.0`, el mismo contenido se publicará como un único ZIP en [GitHub Releases](https://github.com/TSCNEO/ace_hls/releases).
+
+Orchestrator en el mismo host:
+
+```bash
+cd easy-deploy/orchestrator-local
+cp .env.example .env
+# Editar ORCHESTRATOR_API_TOKEN
+docker compose pull
+docker compose up -d --remove-orphans
+```
+
+Orchestrator en otra IP:
+
+```bash
+cd easy-deploy/orchestrator-remote
+cp .env.example .env
+# Editar ORCHESTRATOR_HOST y ORCHESTRATOR_API_TOKEN
+docker compose pull
+docker compose up -d --remove-orphans
+```
+
+Ambas variantes reutilizan el volumen configurable `ace_hls_data`. Consulta la [guía Easy Deploy](easy-deploy/README.md) para actualizar, cambiar de variante, reutilizar un volumen anterior o hacer rollback.
+
 ## Arquitectura
 
 ```text
@@ -29,7 +55,9 @@ Navegador o IPTV ─► AceHLS ─► Orchestrator ─► motores AceStream ┘
 
 El Compose predeterminado ejecuta `ace-hls` y AceStream Orchestrator `v2.1.0.3`. También existe un Compose que conecta AceHLS a un Orchestrator instalado en otra IP. El stack simple AceXY continúa disponible en `docker-compose.acexy.yml`.
 
-## Instalación con Orchestrator local
+## Instalación desde el repositorio
+
+Estos Compose se conservan para desarrollo y compatibilidad con instalaciones existentes. Para una instalación nueva se recomienda Easy Deploy.
 
 ```bash
 cp .env.example .env
@@ -126,12 +154,13 @@ Las pruebas y servidores locales se ejecutan con Python 3.11 dentro de `.venv`:
 python3.11 -m venv .venv
 .venv/bin/python -m pip install -r src/requirements.txt -r requirements-dev.txt
 PYTHONPATH=src .venv/bin/python -m pytest -q
-.venv/bin/python -m compileall -q src tests
+.venv/bin/python -m compileall -q src tests scripts
 node --check src/app/static/script.js
 docker compose --env-file .env.example config -q
 docker compose -f docker-compose.orchestrator-remote.yml --env-file .env.orchestrator-remote.example config -q
 docker compose -f docker-compose.acexy.yml --env-file .env.example config -q
+.venv/bin/python scripts/package_easy_deploy.py
 docker build -t ace-hls-viewer:test .
 ```
 
-`push_docker.sh` lee `src/app/version.txt` y publica `linux/amd64` y `linux/arm64`. `--latest` solo se admite para versiones sin sufijo `-dev`.
+`push_docker.sh` lee `src/app/version.txt` y publica `linux/amd64` y `linux/arm64`. `--latest` solo se admite para versiones sin sufijo `-dev`. Al publicar una etiqueta Git estable, el workflow verifica primero que exista esa imagen y adjunta `ace-hls-easy-deploy-vX.Y.Z.zip` a GitHub Releases.

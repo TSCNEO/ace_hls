@@ -38,6 +38,18 @@ El Compose remoto está en `docker-compose.orchestrator-remote.yml` y su variant
 
 `ACEXY_API_TOKEN` sigue siendo fallback de `ORCHESTRATOR_API_TOKEN` para despliegues antiguos que no usen los Compose suministrados.
 
+## Easy Deploy
+
+`easy-deploy/orchestrator-local` y `easy-deploy/orchestrator-remote` son los Compose recomendados para usuarios finales. Solo contienen referencias `image`, fijan la versión de AceHLS incluida en el paquete y no ejecutan builds.
+
+| Variable Compose | Predeterminado | Uso |
+|---|---:|---|
+| `ACE_HLS_IMAGE` | versión fija del paquete | Override excepcional de la imagen AceHLS. |
+| `ACE_HLS_DATA_VOLUME` | `ace_hls_data` | Nombre estable del volumen compartido por ambas variantes. |
+| `ORCHESTRATOR_DATA_VOLUME` | `ace_hls_orchestrator_data` | Persistencia del Orchestrator local. |
+
+Al migrar desde otro Compose, se puede asignar a `ACE_HLS_DATA_VOLUME` el nombre anterior mostrado por `docker volume ls`. Nunca se debe ejecutar `docker compose down -v` durante el cambio.
+
 ## Aplicación AceHLS
 
 | Variable | Predeterminado | Uso |
