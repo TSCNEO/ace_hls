@@ -13,6 +13,7 @@ from app.config import Config
 from app.services.custom_channel_manager import custom_channel_manager
 from app.services.source_validator import source_validator
 from app.services.storage import atomic_write_json, atomic_write_text
+from app.utils import format_url_host
 
 
 logger = logging.getLogger(__name__)
@@ -241,7 +242,8 @@ class ChannelManager:
                 channel["identifier_type"] = identifier_type
                 query_key = "infohash" if identifier_type == "infohash" else "id"
                 channel["url"] = (
-                    f"http://{Config.ACEXY_IP}:{Config.ACEXY_PORT}/ace/getstream?{query_key}={stream_id}"
+                    f"http://{format_url_host(Config.STREAM_PROXY_HOST)}:{Config.STREAM_PROXY_PORT}"
+                    f"/ace/getstream?{query_key}={stream_id}"
                 )
                 channels.append(channel)
         return channels

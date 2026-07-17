@@ -1,4 +1,4 @@
-schema_version: 2
+schema_version: 3
 document_type: llm_project_architecture
 project:
   name: ace-hls-viewer
@@ -62,18 +62,29 @@ components:
     hls_library: src/app/static/vendor/hls.min.js
 documentation:
   overview: README.md
+  easy_deploy: easy-deploy/README.md
   configuration: docs/configuration.md
   api: docs/api.md
   sources_v2: docs/sources-v2.md
+  orchestrator_deployment: docs/orchestrator-deployment.md
   releases: CHANGELOG.md
 external_services:
-  acexy_or_orchestrator_proxy:
-    config: [ACEXY_IP, ACEXY_PORT]
-    compose_image: ghcr.io/javinator9889/acexy:0.2.2
+  orchestrator_proxy:
+    config: [STREAM_BACKEND, ORCHESTRATOR_MODE, ORCHESTRATOR_HOST, ORCHESTRATOR_PORT, STREAM_PROXY_HOST, STREAM_PROXY_PORT, STREAM_PUBLIC_PORT, STREAM_PUBLIC_ENDPOINT]
+    compose_image: ghcr.io/krinkuto11/acestream-orchestrator:v2.1.0.3
+    compose_local: [docker-compose.yml, release/docker-compose.yml]
+    compose_remote: [docker-compose.orchestrator-remote.yml, release/docker-compose.orchestrator-remote.yml]
+    easy_deploy: [easy-deploy/orchestrator-local/compose.yml, easy-deploy/orchestrator-remote/compose.yml]
     stream_endpoint: /ace/getstream?id={id_or_content_id}|infohash={infohash}
     payloads: [video/mp2t_continuous, hls_manifest]
+    panel: /panel
+    persistent_volume: orchestrator_data:/app/app/config
+    docker_access: /var/run/docker.sock
+  acexy_legacy:
+    compose_files: [docker-compose.acexy.yml, release/docker-compose.acexy.yml]
+    image: ghcr.io/javinator9889/acexy:0.2.2
   orchestrator_management:
-    config: [ORCHESTRATOR_URL, ORCHESTRATOR_API_PREFIX, ORCHESTRATOR_API_TOKEN, ORCHESTRATOR_TIMEOUT]
+    config: [ORCHESTRATOR_HOST, ORCHESTRATOR_PORT, ORCHESTRATOR_URL, ORCHESTRATOR_API_PREFIX, ORCHESTRATOR_API_TOKEN, ORCHESTRATOR_TIMEOUT]
     default_prefix: /api/v1
     endpoints:
       engines: /engines
@@ -125,11 +136,15 @@ invariants:
   - render remote metadata with DOM text properties, never HTML interpolation
   - orchestrator read failures return structured JSON and never raise Flask 500
   - orchestrator secrets never appear in API responses or logs
+  - management bearer tokens never appear in playback URLs
+  - STREAM_* takes precedence over ACEXY_* aliases
+  - remote orchestrator compose never mounts the Docker socket or starts local streaming services
 validation:
   unit: PYTHONPATH=src .venv/bin/python -m pytest -q
-  syntax_python: .venv/bin/python -m compileall -q src tests
+  syntax_python: .venv/bin/python -m compileall -q src tests scripts
   syntax_javascript: node --check src/app/static/script.js
   documentation: PYTHONPATH=src .venv/bin/python -m pytest -q tests/test_documentation.py
+  easy_deploy_package: .venv/bin/python scripts/package_easy_deploy.py
   docker: docker build -t ace-hls-viewer:test .
 release:
   script: push_docker.sh
@@ -137,3 +152,8 @@ release:
   platforms: [linux/amd64, linux/arm64]
   latest_allowed_for_release: true
   compose_image_env: ACE_HLS_IMAGE
+  release_branch: codex/v2.6.0-orchestrator
+  stable_tag: tscneo/ace-hls-viewer:2.6.0
+  latest_tag: tscneo/ace-hls-viewer:latest
+  easy_deploy_archive: dist/ace-hls-easy-deploy-{version}.zip
+  stable_release_workflow: .github/workflows/easy-deploy-release.yml

@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.6.0
+
+- Convertido AceStream Orchestrator en el backend predeterminado de los Compose, fijado inicialmente en `v2.1.0.3`.
+- Añadida configuración neutral `STREAM_*`, conservando aliases `ACEXY_*` durante v2.x.
+- Añadida detección automática del endpoint directo LAN/VPN y override compatible con HTTP/HTTPS e IPv6.
+- Compartido el Bearer token de gestión sin incluirlo en URLs de reproducción, respuestas ni logs.
+- Conservado el stack AceXY anterior en Compose legacy y migrados sus ajustes persistentes.
+- Ampliadas la WebUI, la API de configuración y la salud para mostrar el backend efectivo.
+- Añadido despliegue con Orchestrator externo mediante IP, hostname o IPv6, sin crear servicios ni montar Docker socket localmente.
+- Añadidos Compose y ejemplo de entorno remotos, junto con una guía completa de instalación, verificación, actualización y diagnóstico.
+- Añadido `easy-deploy` con variantes local y remota sin build, volúmenes estables y etiquetas de imagen versionadas.
+- Añadido empaquetado ZIP reproducible y publicación automática del asset al crear una etiqueta estable.
+
 ## v2.5.1
 
 - Reorganizada y contrastada toda la documentación de instalación, configuración, API, persistencia y entrega.

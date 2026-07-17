@@ -34,7 +34,7 @@ def test_ffmpeg_uses_unique_upstream_identity(tmp_path):
             return_value={},
         ):
             with patch(
-                "app.services.hls_manager.get_acexy_host_for_server",
+                "app.services.hls_manager.get_stream_proxy_host_for_server",
                 return_value="orchestrator",
             ):
                 with patch("app.services.hls_manager.subprocess.Popen", return_value=process) as popen:
@@ -47,7 +47,7 @@ def test_ffmpeg_uses_unique_upstream_identity(tmp_path):
     assert user_agent.startswith(f"AceHLS-FFmpeg/{'a' * 40}/")
     assert command[command.index("-rw_timeout") + 1] == "60000000"
     assert command[command.index("-i") + 1] == (
-        f"http://orchestrator:{Config.ACEXY_PORT}/ace/getstream?id={'a' * 40}"
+        f"http://orchestrator:{Config.STREAM_PROXY_PORT}/ace/getstream?id={'a' * 40}"
     )
     assert thread.call_args.kwargs["target"] == manager._analyze_stream
     assert thread.call_args.kwargs["args"] == ("a" * 40,)

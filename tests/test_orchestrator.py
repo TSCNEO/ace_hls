@@ -32,7 +32,7 @@ def test_engines_use_current_api_prefix_and_bearer_auth():
         "http://orchestrator:8000/api/v1/engines",
         headers={
             "Accept": "application/json",
-                "User-Agent": "AceHLS-Viewer/2.5",
+                "User-Agent": "AceHLS-Viewer/2.6",
             "DNT": "1",
             "Authorization": "Bearer secret",
         },

@@ -88,12 +88,12 @@ def update_settings():
     if not new_settings:
         return jsonify({"status": "error", "message": "No data provided"}), 400
     
-    if settings_manager.save(new_settings):
-        # Update Config from persistence? 
-        # Actually Config class is static, but dynamic uses read directly from settings_manager.
-        return jsonify({"status": "ok", "settings": settings_manager.get_all()})
-    else:
-        return jsonify({"status": "error", "message": "Failed to save settings"}), 500
+    try:
+        if settings_manager.save(new_settings):
+            return jsonify({"status": "ok", "settings": settings_manager.get_all()})
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc), "code": "invalid_setting"}), 400
+    return jsonify({"status": "error", "message": "Failed to save settings"}), 500
 
 @main_bp.route('/')
 def index():
@@ -118,21 +118,29 @@ def health_check():
     except Exception as e:
          health["components"]["disk"] = {"status": "error", "error": str(e)}
 
-    # 2. AceXY Connection (Internal)
+    # 2. Streaming proxy connection (Orchestrator or legacy AceXY)
     try:
-        acexy_host = Config.ACEXY_IP
-        if acexy_host in ['127.0.0.1', 'localhost', '0.0.0.0']:
-            acexy_host = 'acexy' # Use docker service name if local
-            
-        acexy_url = f"http://{acexy_host}:{Config.ACEXY_PORT}/"
-        # We accept any response, even 404, as proof of life
-        resp = requests.get(acexy_url, timeout=2)
-        health["components"]["acexy"] = {"status": "ok", "code": resp.status_code}
+        stream_host = utils.get_stream_proxy_host_for_server()
+        probe_path = "/proxy/health" if Config.STREAM_BACKEND == "orchestrator" else "/"
+        stream_url = f"http://{stream_host}:{Config.STREAM_PROXY_PORT}{probe_path}"
+        resp = requests.get(stream_url, timeout=2)
+        if Config.STREAM_BACKEND == "orchestrator":
+            resp.raise_for_status()
+        stream_component = {
+            "status": "ok",
+            "code": resp.status_code,
+            "backend": Config.STREAM_BACKEND,
+        }
     except Exception as e:
-        health["components"]["acexy"] = {"status": "error", "error": str(e)}
-        # We don't mark global status as error because maybe acexy is just starting up? 
-        # But failing to connect is bad.
+        stream_component = {
+            "status": "error",
+            "error": str(e),
+            "backend": Config.STREAM_BACKEND,
+        }
         health["status"] = "degraded"
+    health["components"]["stream_proxy"] = stream_component
+    # Compatibility field retained throughout v2.x.
+    health["components"]["acexy"] = dict(stream_component)
 
     # 3. FFMPEG Processes
     health["components"]["ffmpeg"] = {
@@ -162,7 +170,7 @@ def add_header(response):
     response.headers["Expires"] = "0"
     return response
 
-from app.utils import get_acexy_url_for_client
+from app.utils import get_stream_url_for_client
 
 @main_bp.route('/api/channels')
 def get_channels():
@@ -193,13 +201,8 @@ def get_channels():
             if ch["id"] in stats:
                 ch["stats"] = stats[ch["id"]]
 
-            if "url" in ch and Config.ACEXY_IP in ch["url"]:
-                 # Just refresh the IP part if it's already a full URL matching our config
-                 target_url = get_acexy_url_for_client(request_host)
-                 ch["url"] = ch["url"].replace(f"http://{Config.ACEXY_IP}:{Config.ACEXY_PORT}/ace/getstream", target_url)
-            elif "url" in ch:
-                 # Re-generate it safely
-                ch["url"] = get_acexy_url_for_client(
+            if "url" in ch:
+                ch["url"] = get_stream_url_for_client(
                     request_host,
                     ch['id'],
                     ch.get('identifier_type', 'id'),
@@ -429,7 +432,7 @@ def orchestrator_config():
     from app.services.orchestrator import OrchestratorService
 
     service = OrchestratorService()
-    return jsonify(service.connection_info())
+    return jsonify(service.connection_info(request.host))
 
 def _normalize_hls_profile(profile):
     if Config.ENABLE_TRANSCODE and profile not in ['original', '720p', '480p', 'max_compat']:
@@ -501,11 +504,11 @@ def _request_identifier_type():
 
 
 def _probe_upstream_media(ace_id, identifier_type='id'):
-    """Return ``hls``, ``stream`` or ``None`` for the AceXY response."""
+    """Return ``hls``, ``stream`` or ``None`` for the streaming backend response."""
     resp = None
     try:
         resp = requests.get(
-            _internal_acexy_stream_url(ace_id, identifier_type),
+            _internal_stream_url(ace_id, identifier_type),
             timeout=(3, 5),
             stream=True
         )
@@ -536,14 +539,14 @@ def _wait_for_upstream_media(ace_id, timeout=30, identifier_type='id'):
         time.sleep(2)
     return False
 
-def _internal_acexy_stream_url(ace_id, identifier_type='id'):
-    internal_host = utils.get_acexy_host_for_server()
+def _internal_stream_url(ace_id, identifier_type='id'):
+    internal_host = utils.get_stream_proxy_host_for_server()
     query_key = 'infohash' if identifier_type == 'infohash' else 'id'
-    return f"http://{internal_host}:{Config.ACEXY_PORT}/ace/getstream?{query_key}={ace_id}"
+    return f"http://{internal_host}:{Config.STREAM_PROXY_PORT}/ace/getstream?{query_key}={ace_id}"
 
-def _internal_acexy_segment_url(ace_id, seq):
-    internal_host = utils.get_acexy_host_for_server()
-    return f"http://{internal_host}:{Config.ACEXY_PORT}/ace/hls/segment.ts?stream={ace_id}&seq={seq}"
+def _internal_stream_segment_url(ace_id, seq):
+    internal_host = utils.get_stream_proxy_host_for_server()
+    return f"http://{internal_host}:{Config.STREAM_PROXY_PORT}/ace/hls/segment.ts?stream={ace_id}&seq={seq}"
 
 def _rewrite_upstream_manifest(ace_id, manifest_text, identifier_type='id'):
     rewritten = []
@@ -656,7 +659,7 @@ def proxy_upstream_manifest(ace_id):
     resp = None
     try:
         resp = requests.get(
-            _internal_acexy_stream_url(ace_id, identifier_type),
+            _internal_stream_url(ace_id, identifier_type),
             timeout=(3, 10),
             stream=True
         )
@@ -669,7 +672,7 @@ def proxy_upstream_manifest(ace_id):
                 continue
 
             if not chunks and not _is_hls_response(resp.headers.get('content-type'), chunk):
-                return "AceXY returned a continuous stream instead of an HLS manifest", 502
+                return "Streaming backend returned a continuous stream instead of an HLS manifest", 502
 
             total_size += len(chunk)
             if total_size > MAX_UPSTREAM_MANIFEST_BYTES:
@@ -699,7 +702,7 @@ def proxy_upstream_segment(ace_id):
         return "Missing seq", 400
 
     try:
-        upstream = requests.get(_internal_acexy_segment_url(ace_id, seq), timeout=15, stream=True)
+        upstream = requests.get(_internal_stream_segment_url(ace_id, seq), timeout=15, stream=True)
         upstream.raise_for_status()
     except requests.RequestException as e:
         return str(e), 502
@@ -789,9 +792,7 @@ def get_playlist():
             # Helper to generate link
             def gen_link(p):
                 if p == 'direct':
-                    # Direct AceStream Link (HTTP to AceXY)
-                    # Use utils to determine correct public IP/Port based on request host
-                    return utils.get_acexy_url_for_client(host, ch['id'], identifier_type)
+                    return utils.get_stream_url_for_client(host, ch['id'], identifier_type)
                     
                 # HLS variants
                 suffix = f"?profile={p}{type_suffix}" if p and p != 'original' else (f"?identifier_type=infohash" if identifier_type == 'infohash' else "")

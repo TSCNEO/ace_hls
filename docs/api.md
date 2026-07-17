@@ -9,7 +9,7 @@ Todas las respuestas de gestión son JSON salvo las listas M3U, logs y archivos 
 | `GET` | `/` | WebUI. |
 | `GET` | `/dashboard` | Dashboard local. |
 | `GET` | `/api/version` | Versión y disponibilidad de transcodificación. |
-| `GET` | `/health` | Disco, AceXY, sesiones FFmpeg y scheduler; devuelve 500 si está degradado. |
+| `GET` | `/health` | Disco, backend de streaming, sesiones FFmpeg y scheduler; devuelve 500 si está degradado. Incluye `stream_proxy` y el alias `acexy` durante v2.x. |
 | `GET` | `/api/system/stats` | Métricas del host/contenedor y sesiones activas. |
 | `GET` | `/api/system/logs` | Últimas 50 líneas de `app.log`. |
 | `GET` | `/api/settings` | Ajustes persistentes de la WebUI. |
@@ -62,9 +62,9 @@ Un canal personalizado requiere `name` y `stream_id`; admite `group`, `logo` y `
 | `GET` | `/api/orchestrator/streams` | `/api/v1/streams?status=started` |
 | `GET` | `/api/orchestrator/overview` | `/api/v1/orchestrator/status` |
 | `GET` | `/api/orchestrator/metrics` | `/api/v1/metrics/dashboard`; query `window_seconds`. |
-| `GET` | `/api/orchestrator/config` | Configuración efectiva sin revelar el token. |
+| `GET` | `/api/orchestrator/config` | Backend, despliegue local/remoto, URL de gestión, hosts, puertos, endpoint público, panel y autenticación efectiva sin revelar el token. |
 
-Cuando la integración está desactivada o el upstream falla, estos endpoints devuelven errores JSON estructurados en lugar de propagar una excepción Flask.
+`STREAM_BACKEND=orchestrator` activa la integración automáticamente. Sin esa variable se conserva el ajuste `orchestrator_enabled`. Cuando está desactivada o el upstream falla, estos endpoints devuelven errores JSON estructurados en lugar de propagar una excepción Flask.
 
 ## Assets auxiliares
 

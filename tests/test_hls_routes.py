@@ -72,7 +72,7 @@ def test_original_mpegts_uses_ffmpeg_instead_of_manifest_proxy():
 
 
 def test_infohash_playback_uses_infohash_upstream_parameter():
-    assert routes._internal_acexy_stream_url("a" * 40, "infohash").endswith(
+    assert routes._internal_stream_url("a" * 40, "infohash").endswith(
         f"/ace/getstream?infohash={'a' * 40}"
     )
 
@@ -87,7 +87,7 @@ def test_proxy_rejects_continuous_stream_after_first_chunk():
     with patch.object(routes.requests, "get", return_value=response):
         result = routes.proxy_upstream_manifest("channel-id")
 
-    assert result == ("AceXY returned a continuous stream instead of an HLS manifest", 502)
+    assert result == ("Streaming backend returned a continuous stream instead of an HLS manifest", 502)
     assert response.closed
 
 

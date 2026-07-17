@@ -19,15 +19,33 @@ class OrchestratorService:
     def is_enabled(self):
         from app.services.settings_manager import settings_manager
 
+        if Config.STREAM_BACKEND_CONFIGURED:
+            return Config.STREAM_BACKEND == "orchestrator"
         return settings_manager.get("orchestrator_enabled", False)
 
-    def connection_info(self):
-        return {
+    def connection_info(self, request_host=None):
+        result = {
             "enabled": self.is_enabled(),
+            "backend": Config.STREAM_BACKEND,
+            "deployment": Config.ORCHESTRATOR_MODE,
             "base_url": self.base_url,
+            "orchestrator_host": Config.ORCHESTRATOR_HOST,
+            "orchestrator_port": int(Config.ORCHESTRATOR_PORT),
+            "stream_proxy_host": Config.STREAM_PROXY_HOST,
+            "stream_proxy_port": int(Config.STREAM_PROXY_PORT),
+            "stream_public_port": Config.STREAM_PUBLIC_PORT,
             "api_prefix": self.api_prefix,
             "authenticated": bool(self.token),
+            "managed_by_environment": Config.STREAM_BACKEND_CONFIGURED,
         }
+        if request_host:
+            from app.utils import get_stream_public_base
+
+            public_base = get_stream_public_base(request_host)
+            result["public_endpoint"] = public_base
+            if Config.STREAM_BACKEND == "orchestrator":
+                result["panel_url"] = f"{public_base}/panel"
+        return result
 
     def get_engines(self):
         if not self.is_enabled():
@@ -68,7 +86,7 @@ class OrchestratorService:
     def _headers(self):
         headers = {
             "Accept": "application/json",
-            "User-Agent": "AceHLS-Viewer/2.5",
+            "User-Agent": "AceHLS-Viewer/2.6",
             "DNT": "1",
         }
         if self.token:

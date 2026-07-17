@@ -1,0 +1,69 @@
+services:
+  ace-hls:
+    image: ${ACE_HLS_IMAGE:-tscneo/ace-hls-viewer:latest}
+    container_name: ace_hls_viewer
+    restart: unless-stopped
+    depends_on:
+      - acexy
+    ports:
+      - "${ACE_HLS_PORT:-8088}:5000"
+    volumes:
+      - ace_hls_data:/app/data
+    networks:
+      - ace_hls_stream
+    environment:
+      - STREAM_BACKEND=acexy
+      - STREAM_PROXY_HOST=acexy
+      - STREAM_PROXY_PORT=${ACEXY_PORT:-8080}
+      - STREAM_PUBLIC_PORT=${ACEXY_PORT:-8080}
+      - STREAM_PUBLIC_ENDPOINT=${STREAM_PUBLIC_ENDPOINT:-${ACEXY_PUBLIC_ENDPOINT:-}}
+      - ACEXY_PUBLIC_TOKEN=${ACEXY_PUBLIC_TOKEN:-}
+      - CACHE_DURATION=${CACHE_DURATION:-300}
+      - PLAYLIST_REFRESH_INTERVAL=${PLAYLIST_REFRESH_INTERVAL:-900}
+      - SOURCE_CONNECT_TIMEOUT=${SOURCE_CONNECT_TIMEOUT:-8}
+      - SOURCE_READ_TIMEOUT=${SOURCE_READ_TIMEOUT:-30}
+      - SOURCE_MAX_BYTES=${SOURCE_MAX_BYTES:-10485760}
+      - SOURCE_TLS_VERIFY=${SOURCE_TLS_VERIFY:-false}
+      - FFMPEG_RW_TIMEOUT=${FFMPEG_RW_TIMEOUT:-60}
+      - HLS_IDLE_TIMEOUT=${HLS_IDLE_TIMEOUT:-120}
+      - URL_ORIGEN=${URL_ORIGEN:-}
+      - ENABLE_TRANSCODE=${ENABLE_TRANSCODE:-false}
+      - TRANSCODE_720P_BITRATE=${TRANSCODE_720P_BITRATE:-2500k}
+      - TRANSCODE_480P_BITRATE=${TRANSCODE_480P_BITRATE:-1000k}
+      - TRANSCODE_COMPAT_CRF=${TRANSCODE_COMPAT_CRF:-23}
+
+  acestream:
+    image: martinbjeldbak/acestream-http-proxy:latest
+    container_name: acestream
+    restart: unless-stopped
+    networks:
+      - ace_hls_stream
+
+  acexy:
+    image: ghcr.io/javinator9889/acexy:0.2.2
+    container_name: acexy
+    restart: unless-stopped
+    ports:
+      - "${ACEXY_PORT:-8080}:${ACEXY_PORT:-8080}"
+    environment:
+      ACEXY_LISTEN_ADDR: ":${ACEXY_PORT:-8080}"
+      ACEXY_SCHEME: "${ACEXY_SCHEME:-http}"
+      ACEXY_HOST: "${ACEXY_HOST:-acestream}"
+      ACEXY_PORT: "${ACESTREAM_PORT:-6878}"
+      ACEXY_M3U8_STREAM_TIMEOUT: "${ACEXY_M3U8_STREAM_TIMEOUT:-60s}"
+      ACEXY_M3U8: "${ACEXY_M3U8:-false}"
+      ACEXY_EMPTY_TIMEOUT: "${ACEXY_EMPTY_TIMEOUT:-60s}"
+      ACEXY_BUFFER_SIZE: "${ACEXY_BUFFER_SIZE:-4MB}"
+      ACEXY_NO_RESPONSE_TIMEOUT: "${ACEXY_NO_RESPONSE_TIMEOUT:-10s}"
+    depends_on:
+      - acestream
+    networks:
+      - ace_hls_stream
+
+volumes:
+  ace_hls_data:
+
+networks:
+  ace_hls_stream:
+    name: ace_hls_stream
+

@@ -113,7 +113,7 @@ https://host/play?infohash={'a' * 40}
         "source": "https://source/list.m3u",
     }
 
-    with pytest.raises(ValueError, match="AceXY"):
+    with pytest.raises(ValueError, match="backend"):
         parse_m3u("#EXTM3U\n#EXTINF:-1,File\nhttps://host/file.torrent\n", "https://source", "Source")
 
 

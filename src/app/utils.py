@@ -1,50 +1,74 @@
+from urllib.parse import urlencode, urlsplit
+
 from app.config import Config
 
-LOCAL_INDICATORS = ['127.0.0.1', 'localhost', '0.0.0.0', 'acexy', 'acestream']
 
-def get_acexy_url_for_client(request_host, ace_id=None, identifier_type="id"):
-    """
-    Determines the URL the browser should use to reach AceXY.
-    """
+LOCAL_INDICATORS = {"127.0.0.1", "localhost", "0.0.0.0", "acexy", "acestream", "orchestrator"}
+
+
+def format_url_host(host: str) -> str:
+    """Format an IPv4, hostname or IPv6 literal for use in a URL."""
+    normalized = str(host or "").strip()
+    if normalized.startswith("[") and normalized.endswith("]"):
+        return normalized
+    return f"[{normalized}]" if ":" in normalized else normalized
+
+
+def normalize_public_endpoint(value):
+    endpoint = str(value or "").strip().rstrip("/")
+    if not endpoint:
+        return ""
+    parsed = urlsplit(endpoint)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("El endpoint público debe ser una URL HTTP o HTTPS válida.")
+    if parsed.query or parsed.fragment:
+        raise ValueError("El endpoint público no puede contener query ni fragmento.")
+    return endpoint
+
+
+def _request_hostname(request_host):
+    parsed = urlsplit(f"//{request_host}")
+    hostname = parsed.hostname or str(request_host).split(":", 1)[0]
+    return f"[{hostname}]" if ":" in hostname and not hostname.startswith("[") else hostname
+
+
+def get_stream_public_base(request_host):
     from app.services.settings_manager import settings_manager
+
     settings = settings_manager.get_all()
-    
-    public_endpoint = settings.get('acexy_public_endpoint')
-    public_token = settings.get('acexy_public_token')
+    configured = settings.get("stream_public_endpoint") or Config.STREAM_PUBLIC_ENDPOINT
+    if configured:
+        return normalize_public_endpoint(configured)
 
-    # Priority 1: Public Endpoint (External/Custom Domain)
-    if public_endpoint:
-        base_url = f"{public_endpoint}/ace/getstream"
-        
-        # Build Query Params
-        params = []
-        if ace_id:
-            query_key = "infohash" if identifier_type == "infohash" else "id"
-            params.append(f"{query_key}={ace_id}")
-        if public_token:
-            params.append(f"token={public_token}")
-            
-        if params:
-            return f"{base_url}?" + "&".join(params)
-        return base_url
+    target_host = Config.STREAM_PROXY_HOST
+    if target_host.lower() in LOCAL_INDICATORS:
+        target_host = _request_hostname(request_host)
+    else:
+        target_host = format_url_host(target_host)
+    return f"http://{target_host}:{Config.STREAM_PUBLIC_PORT}"
 
-    # Priority 2: Local Auto-Discovery (Docker network or same host)
-    target_ip = Config.ACEXY_IP
-    if Config.ACEXY_IP in LOCAL_INDICATORS:
-        target_ip = request_host.split(':')[0]
-        
-    base_url = f"http://{target_ip}:{Config.ACEXY_PORT}/ace/getstream"
+
+def get_stream_url_for_client(request_host, ace_id=None, identifier_type="id"):
+    from app.services.settings_manager import settings_manager
+
+    base_url = f"{get_stream_public_base(request_host)}/ace/getstream"
+    params = {}
     if ace_id:
         query_key = "infohash" if identifier_type == "infohash" else "id"
-        return f"{base_url}?{query_key}={ace_id}"
-    return base_url
+        params[query_key] = ace_id
 
-def get_acexy_host_for_server():
-    """
-    Determines the hostname the server (Python/FFmpeg) should use to reach AceXY.
-    If running in Docker and set to local, we use the container name 'acexy'.
-    """
-    internal_host = Config.ACEXY_IP
+    # Orchestrator management authentication is Bearer-only and must never be
+    # embedded in playback URLs. Query tokens remain an AceXY compatibility aid.
+    if Config.STREAM_BACKEND == "acexy":
+        public_token = settings_manager.get("stream_public_token", "")
+        if public_token:
+            params["token"] = public_token
+
+    return f"{base_url}?{urlencode(params)}" if params else base_url
+
+
+def get_stream_proxy_host_for_server():
+    internal_host = Config.STREAM_PROXY_HOST
     if internal_host in ['127.0.0.1', 'localhost', '0.0.0.0']:
-        internal_host = 'acexy'
-    return internal_host
+        internal_host = Config.STREAM_BACKEND
+    return format_url_host(internal_host)

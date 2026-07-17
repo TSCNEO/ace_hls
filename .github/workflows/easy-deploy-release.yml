@@ -1,0 +1,49 @@
+name: Publicar Easy Deploy
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Verificar etiqueta y versión
+        run: |
+          version="$(tr -d '[:space:]' < src/app/version.txt)"
+          test "${version}" = "${GITHUB_REF_NAME}"
+
+      - name: Verificar imagen Docker publicada
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          docker buildx imagetools inspect "tscneo/ace-hls-viewer:${tag}"
+
+      - name: Generar ZIP Easy Deploy
+        run: python scripts/package_easy_deploy.py
+
+      - name: Crear o actualizar GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          asset="dist/ace-hls-easy-deploy-${GITHUB_REF_NAME}.zip"
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" "${asset}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" "${asset}" \
+              --verify-tag \
+              --generate-notes \
+              --title "AceHLS ${GITHUB_REF_NAME}"
+          fi
