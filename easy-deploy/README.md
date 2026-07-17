@@ -2,6 +2,25 @@
 
 Este paquete instala AceHLS utilizando imágenes ya construidas. No necesita clonar el código, ejecutar `docker build` ni instalar Python. Está pensado para Docker Compose v2 en una red interna, LAN o VPN.
 
+## Obtener el paquete
+
+Desde Git:
+
+```bash
+git clone https://github.com/TSCNEO/ace_hls.git
+cd ace_hls/easy-deploy
+```
+
+O mediante el ZIP sin código fuente:
+
+```bash
+curl -LO https://github.com/TSCNEO/ace_hls/releases/download/v2.6.0/ace-hls-easy-deploy-v2.6.0.zip
+unzip ace-hls-easy-deploy-v2.6.0.zip
+cd ace-hls-easy-deploy-v2.6.0
+```
+
+En ambos casos, continúa con una de las variantes siguientes.
+
 ## Elegir variante
 
 | Carpeta | Servicios | Uso |

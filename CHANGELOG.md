@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.6.0-dev
+## v2.6.0
 
 - Convertido AceStream Orchestrator en el backend predeterminado de los Compose, fijado inicialmente en `v2.1.0.3`.
 - Añadida configuración neutral `STREAM_*`, conservando aliases `ACEXY_*` durante v2.x.

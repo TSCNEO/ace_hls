@@ -152,7 +152,8 @@ release:
   platforms: [linux/amd64, linux/arm64]
   latest_allowed_for_release: true
   compose_image_env: ACE_HLS_IMAGE
-  development_branch: codex/v2.6.0-orchestrator
-  development_tag: tscneo/ace-hls-viewer:2.6.0-dev
+  release_branch: codex/v2.6.0-orchestrator
+  stable_tag: tscneo/ace-hls-viewer:2.6.0
+  latest_tag: tscneo/ace-hls-viewer:latest
   easy_deploy_archive: dist/ace-hls-easy-deploy-{version}.zip
   stable_release_workflow: .github/workflows/easy-deploy-release.yml

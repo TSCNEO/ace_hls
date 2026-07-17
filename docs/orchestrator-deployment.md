@@ -42,7 +42,7 @@ Servicios disponibles:
 Para usar la imagen publicada en lugar de construir el repositorio:
 
 ```bash
-ACE_HLS_IMAGE=tscneo/ace-hls-viewer:2.6.0-dev \
+ACE_HLS_IMAGE=tscneo/ace-hls-viewer:2.6.0 \
 docker compose -f release/docker-compose.yml --env-file .env up -d --remove-orphans
 ```
 
@@ -75,7 +75,7 @@ docker compose -f docker-compose.orchestrator-remote.yml --env-file .env \
 Imagen publicada:
 
 ```bash
-ACE_HLS_IMAGE=tscneo/ace-hls-viewer:2.6.0-dev \
+ACE_HLS_IMAGE=tscneo/ace-hls-viewer:2.6.0 \
 docker compose -f release/docker-compose.orchestrator-remote.yml --env-file .env \
   up -d --remove-orphans
 ```
