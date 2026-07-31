@@ -14,7 +14,7 @@ Las cachés antiguas nombradas con el hash de la URL se trasladan al ID estable 
 
 ## Validación
 
-Se admiten M3U con BOM y respuestas JSON anidadas de `api.acestream.me/all` y `/search`. Los identificadores aceptados son URI `acestream://`, `infohash://`, hash hexadecimal de 40 caracteres y URLs con `id`, `content_id` o `infohash` (query decodificada y sin sensibilidad a mayúsculas).
+Las fuentes remotas admitidas son listas M3U, también cuando incluyen BOM. Cada entrada debe contener una URI `acestream://`, `infohash://`, un hash hexadecimal de 40 caracteres o una URL con `id`, `content_id` o `infohash` (query decodificada y sin sensibilidad a mayúsculas).
 
 Una fuente se valida antes de activarse. Una respuesta inválida solo puede guardarse enviando `allow_invalid_disabled=true`; el servidor fuerza `enabled=false`. Las fuentes desactivadas no se descargan ni aportan canales. Editar una URL conserva el ID y la caché anterior, aunque esa caché no se mezcla mientras la fuente siga desactivada.
 

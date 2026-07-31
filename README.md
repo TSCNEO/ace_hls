@@ -7,7 +7,7 @@ La versión de la aplicación se define únicamente en [`src/app/version.txt`](s
 ## Qué incluye
 
 - Webplayer responsive con búsqueda, categorías, favoritos, zapping y reproducción manual.
-- Fuentes M3U y respuestas JSON de `api.acestream.me/all` o `/search`.
+- Fuentes M3U con metadatos IPTV y referencias AceStream normalizadas.
 - Identificadores `id` e `infohash`, URI `acestream://` e `infohash://` y hashes de 40 caracteres.
 - Sources 2.0: alta, edición, validación, activación, caché por fuente y migración desde v2.4.x.
 - Canales personalizados con prioridad sobre los metadatos de fuentes remotas.

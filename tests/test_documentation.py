@@ -40,6 +40,13 @@ def test_documentation_links_resolve():
             )
 
 
+def test_documentation_does_not_advertise_unusable_acestream_api_sources():
+    sources_guide = (ROOT / "docs/sources-v2.md").read_text(encoding="utf-8")
+
+    assert "api.acestream.me" not in README
+    assert "api.acestream.me" not in sources_guide
+
+
 def test_all_flask_routes_are_listed_in_api_reference():
     routes = (ROOT / "src/app/routes.py").read_text(encoding="utf-8")
     documented_text = API_DOC.replace("{", "<").replace("}", ">")
