@@ -15,6 +15,7 @@ VERSION_FILE = ROOT / "src/app/version.txt"
 VERSION_PATTERN = re.compile(r"^v\d+\.\d+\.\d+(?:-[a-z0-9][a-z0-9.-]*)?$")
 PACKAGE_FILES = (
     Path("README.md"),
+    Path("AGENTS.md"),
     Path("orchestrator-local/compose.yml"),
     Path("orchestrator-local/.env.example"),
     Path("orchestrator-remote/compose.yml"),
