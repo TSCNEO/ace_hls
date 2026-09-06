@@ -19,7 +19,7 @@ Todas las respuestas de gestión son JSON salvo las listas M3U, logs y archivos 
 
 | Método | Ruta | Resultado |
 |---|---|---|
-| `GET` | `/api/channels` | Canales normalizados con URL reproducible. |
+| `GET` | `/api/channels` | Canales normalizados con URL reproducible. Query opcional: `source` (`all`, ID de fuente o `custom`). Si se omite o es `all`, devuelve el mix global deduplicado; si se especifica una fuente, devuelve los canales crudos de esa fuente sin deduplicar. |
 | `GET` | `/api/sources` | Fuentes registradas y estado de validación/refresh. |
 | `POST` | `/api/sources` | Valida y crea una fuente; devuelve 201. |
 | `DELETE` | `/api/sources` | Compatibilidad v2.5.x: elimina por cuerpo `{"url":"…"}`. |

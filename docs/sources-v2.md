@@ -24,6 +24,10 @@ Cada entrada de canal debe contener una URI `acestream://`, `infohash://`, un ha
 - **Refresco Paralelo:** El scheduler y los refrescos manuales procesan las fuentes activas en paralelo mediante hilos de trabajo configurables (`SOURCE_REFRESH_WORKERS=4`), evitando cuellos de botella ante fuentes con latencia.
 - **Verificación de Hash:** Cada snapshot de fuente almacena un `content_hash` (SHA-256). Si al consultar la raíz el contenido no ha variado, el resolver marca la fuente como no modificada (`not_modified`) y reutiliza la caché de inmediato sin descargas ni resoluciones redundantes.
 
+### Filtro por Fuente y Vista Cruda (v2.9.0)
+- **Mix Global (`/api/channels`):** Mezcla todas las fuentes activas y canales personalizados, deduplicando por identificador (`stream_id` / hash). Cada tarjeta de canal muestra la etiqueta compacta `[hash] · Fuente` en la WebUI.
+- **Vista por Fuente (`/api/channels?source=<id>`):** Permite inspeccionar los canales crudos de un snapshot individual sin cross-deduplication. Si una misma lista incluye múltiples enlaces para el mismo canal o con el mismo hash, todos se muestran de forma independiente con su ID intacto.
+
 Una fuente se valida antes de activarse. Una respuesta inválida solo puede guardarse enviando `allow_invalid_disabled=true`; el servidor fuerza `enabled=false`. Las fuentes desactivadas no se descargan ni aportan canales. Editar una URL conserva el ID y la caché anterior, aunque esa caché no se mezcla mientras la fuente siga desactivada.
 
 La descarga tiene límite de 10 MiB, timeout de conexión de 8 s y lectura de 30 s. Por compatibilidad con instalaciones internas, LAN y VPN, `SOURCE_TLS_VERIFY=false` es el valor predeterminado. Esta versión no incorpora login, CSRF, rate limiting ni restricciones SSRF y no debe exponerse directamente a Internet.
