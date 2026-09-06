@@ -488,11 +488,6 @@ function renderChannels(channelsToRender) {
         else if (nameLen > 25) nameStyle = "font-size: 0.8rem;";
 
         card.append(starBtn, statusDot);
-        // Source identity pill (compact)
-        if (ch.source && ch.source !== 'unknown') {
-            const sourcePill = element('div', 'channel-meta-pill', `· ${ch.source}`);
-            card.appendChild(sourcePill);
-        }
         const logoUrl = safeLogoUrl(ch.logo);
         if (logoUrl) {
             const image = element('img', 'channel-logo');
@@ -507,9 +502,14 @@ function renderChannels(channelsToRender) {
             fallback.style.fontSize = '2rem';
             card.appendChild(fallback);
         }
-        const name = element('div', 'channel-name', `${ch.name} [${ch.id.slice(-4)}]`);
+        const name = element('div', 'channel-name', ch.name);
         name.style.cssText = nameStyle;
         card.appendChild(name);
+
+        const sourceLabel = ch.source_name ? ` · ${ch.source_name}` : '';
+        const idSource = element('div', 'channel-meta-pill', `[${ch.id.slice(-4)}]${sourceLabel}`);
+        card.appendChild(idSource);
+
         if (techBadgeText) card.appendChild(element('div', 'tech-badge', techBadgeText));
         if (lastSeenText) card.appendChild(element('div', 'last-seen', lastSeenText));
         grid.appendChild(card);

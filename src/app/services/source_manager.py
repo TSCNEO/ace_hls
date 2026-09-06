@@ -165,10 +165,14 @@ class SourceManager:
     @staticmethod
     def apply_validation(source: dict, validation) -> None:
         source["kind"] = validation.kind if validation.kind != "unknown" else source.get("kind", "m3u")
+        prev_count = source.get("validation", {}).get("channel_count", 0)
+        channel_count = validation.channel_count
+        if getattr(validation, "not_modified", False) and channel_count == 0:
+            channel_count = prev_count
         source["validation"] = {
             "status": validation.status,
             "checked_at": time.time(),
-            "channel_count": validation.channel_count,
+            "channel_count": channel_count,
             "error": validation.error,
         }
 

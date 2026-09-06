@@ -233,7 +233,15 @@ def get_channels():
 @main_bp.route('/api/sources', methods=['GET'])
 def get_sources():
     try:
-        return jsonify(source_manager.get_sources())
+        sources = source_manager.get_sources()
+        for src in sources:
+            val = src.get("validation") or {}
+            if not val.get("channel_count"):
+                cached = channel_manager._load_source_cache(src)
+                if cached:
+                    val["channel_count"] = len(cached)
+                    src["validation"] = val
+        return jsonify(sources)
     except SourceRegistryError as exc:
         return jsonify({"error": str(exc), "code": exc.code}), 409
 

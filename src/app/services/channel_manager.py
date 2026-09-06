@@ -105,6 +105,7 @@ class ChannelManager:
                     # Content verified unchanged: reuse cached channels immediately
                     snapshots.append(cached_channels)
                     successful_sources += 1
+                    validation.channels = cached_channels
                     source_manager.record_refresh(source["id"], validation=validation, success=True)
                     continue
 
