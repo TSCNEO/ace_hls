@@ -145,10 +145,12 @@ class ChannelManager:
     @staticmethod
     def _with_source_identity(channels: list[dict], source: dict) -> list[dict]:
         normalized = []
+        source_name = source.get("name") or source.get("id") or ""
         for original in channels:
             channel = deepcopy(original)
-            channel["source"] = source["url"]
-            channel["source_id"] = source["id"]
+            channel["source"] = source.get("url", "")
+            channel["source_id"] = source.get("id", "")
+            channel["source_name"] = source_name
             normalized.append(channel)
         return normalized
 

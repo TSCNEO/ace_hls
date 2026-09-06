@@ -242,6 +242,69 @@ function toggleFavorite(e, id) {
     }
 }
 
+let activeSources = [];
+
+async function loadSourcesDropdown() {
+    try {
+        const resp = await fetch('/api/sources');
+        if (resp.ok) {
+            activeSources = await resp.json();
+            populateSourceDropdown();
+        }
+    } catch (e) {
+        console.warn('Error loading sources for dropdown:', e);
+    }
+}
+
+function populateSourceDropdown() {
+    const select = document.getElementById('sourceSelect');
+    if (!select) return;
+    const current = select.value;
+    select.replaceChildren();
+
+    const allOpt = document.createElement('option');
+    allOpt.value = 'all';
+    allOpt.textContent = '📡 Todas las fuentes (Mix)';
+    select.appendChild(allOpt);
+
+    const enabledSources = (activeSources || []).filter(s => s.enabled !== false);
+    enabledSources.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        const countStr = (s.validation && typeof s.validation.channel_count === 'number')
+            ? ` (${s.validation.channel_count})`
+            : '';
+        opt.textContent = `${s.name}${countStr}`;
+        select.appendChild(opt);
+    });
+
+    if (current && (current === 'all' || enabledSources.some(s => s.id === current))) {
+        select.value = current;
+    }
+}
+
+async function onSourceChange() {
+    const sourceVal = document.getElementById('sourceSelect').value;
+    const grid = document.getElementById('channel-grid');
+    grid.innerHTML = '<div class="loading" style="text-align:center;">Cargando canales…</div>';
+
+    try {
+        const url = sourceVal === 'all' ? '/api/channels' : `/api/channels?source=${encodeURIComponent(sourceVal)}`;
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('Error al cargar la fuente');
+        allChannels = await resp.json();
+
+        categories.clear();
+        allChannels.forEach(ch => { if (ch.group) categories.add(ch.group); });
+        populateCategoryDropdown();
+        filterChannels();
+    } catch (e) {
+        const error = element('div', 'loading', `Error: ${e.message}`);
+        error.style.color = 'red';
+        grid.replaceChildren(error);
+    }
+}
+
 async function loadChannels(silent = false) {
     try {
         // Version & Config Check
@@ -260,12 +323,18 @@ async function loadChannels(silent = false) {
 
         }).catch(e => { });
 
+        loadSourcesDropdown();
+
+        const sourceVal = document.getElementById('sourceSelect') ? document.getElementById('sourceSelect').value : 'all';
         const grid = document.getElementById('channel-grid');
         if (!silent && allChannels.length === 0) {
             grid.innerHTML = '<div class="loading" style="text-align:center;">Cargando canales…</div>';
         }
 
-        const response = await fetch('/api/channels');
+        const url = (sourceVal && sourceVal !== 'all')
+            ? `/api/channels?source=${encodeURIComponent(sourceVal)}`
+            : '/api/channels';
+        const response = await fetch(url);
         if (!response.ok) throw new Error('Error de red');
         const freshChannels = await response.json();
 
@@ -419,6 +488,11 @@ function renderChannels(channelsToRender) {
         else if (nameLen > 25) nameStyle = "font-size: 0.8rem;";
 
         card.append(starBtn, statusDot);
+        // Source identity pill (compact)
+        if (ch.source && ch.source !== 'unknown') {
+            const sourcePill = element('div', 'channel-meta-pill', `· ${ch.source}`);
+            card.appendChild(sourcePill);
+        }
         const logoUrl = safeLogoUrl(ch.logo);
         if (logoUrl) {
             const image = element('img', 'channel-logo');

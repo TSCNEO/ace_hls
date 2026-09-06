@@ -24,6 +24,9 @@
         <div class="controls">
             <div class="filter-container">
                 <input type="text" id="searchInput" placeholder="Buscar canal..." oninput="filterChannels()">
+                <select id="sourceSelect" onchange="onSourceChange()">
+                    <option value="all">📡 Todas las fuentes (Mix)</option>
+                </select>
                 <select id="categorySelect" onchange="filterChannels()">
                     <option value="all">Todas las categorías</option>
                     <option value="favorites">⭐ Favoritos</option>

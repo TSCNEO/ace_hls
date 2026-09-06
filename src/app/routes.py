@@ -175,47 +175,60 @@ from app.utils import get_stream_url_for_client
 
 @main_bp.route('/api/channels')
 def get_channels():
-    # If cache exists, serve it immediately without blocking the client.
-    # If stale, trigger background refresh asynchronously.
-    has_cache = os.path.exists(Config.JSON_FILE)
-    if has_cache:
-        mtime = os.path.getmtime(Config.JSON_FILE)
-        if (time.time() - mtime) >= Config.CACHE_DURATION:
-            threading.Thread(
-                target=channel_manager.update_channels,
-                name="async-refresh-channels",
-                daemon=True,
-            ).start()
+    source_param = request.args.get('source') or request.args.get('source_id')
+
+    if source_param and source_param != 'all':
+        if source_param == 'custom':
+            data = custom_channel_manager.normalized_channels()
+        else:
+            try:
+                source = source_manager.get_source(source_param)
+                data = channel_manager._load_source_cache(source)
+            except SourceNotFound as exc:
+                return jsonify({"error": str(exc), "code": "source_not_found"}), 404
     else:
-        # Cold boot with no cache file at all
-        try:
-            channel_manager.update_channels()
-        except Exception as exc:
-            current_app.logger.warning("Cold boot channel update failed: %s", exc)
+        # If cache exists, serve it immediately without blocking the client.
+        # If stale, trigger background refresh asynchronously.
+        has_cache = os.path.exists(Config.JSON_FILE)
+        if has_cache:
+            mtime = os.path.getmtime(Config.JSON_FILE)
+            if (time.time() - mtime) >= Config.CACHE_DURATION:
+                threading.Thread(
+                    target=channel_manager.update_channels,
+                    name="async-refresh-channels",
+                    daemon=True,
+                ).start()
+        else:
+            # Cold boot with no cache file at all
+            try:
+                channel_manager.update_channels()
+            except Exception as exc:
+                current_app.logger.warning("Cold boot channel update failed: %s", exc)
 
-    if os.path.exists(Config.JSON_FILE):
-        with open(Config.JSON_FILE, 'r') as f:
-            data = json.load(f)
-            
-        request_host = request.host
-        
-        # Load stats once
-        stats = stats_manager.get_stats()
-        
-        for ch in data:
-            # Inject stats if avail
-            if ch["id"] in stats:
-                ch["stats"] = stats[ch["id"]]
+        if os.path.exists(Config.JSON_FILE):
+            with open(Config.JSON_FILE, 'r') as f:
+                data = json.load(f)
+        else:
+            data = []
 
-            if "url" in ch:
-                ch["url"] = get_stream_url_for_client(
-                    request_host,
-                    ch['id'],
-                    ch.get('identifier_type', 'id'),
-                )
+    request_host = request.host
+    stats = stats_manager.get_stats() or {}
+    for ch in data:
+        ch_id = ch.get("id")
+        if ch_id and ch_id in stats:
+            ch["stats"] = stats[ch_id]
 
-        return jsonify(data)
-    return jsonify([]), 500
+        ch["url"] = get_stream_url_for_client(
+            request_host,
+            ch['id'],
+            ch.get('identifier_type', 'id'),
+        )
+
+    response = jsonify(data)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 @main_bp.route('/api/sources', methods=['GET'])
 def get_sources():

@@ -170,12 +170,20 @@ button:hover {
     font-weight: 500;
     overflow: hidden;
     display: -webkit-box;
-    -webkit-line-clamp: 3;
-    /* Allow more lines */
-    line-clamp: 3;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     word-break: break-word;
-    /* Ensure long IDs break if needed */
+}
+
+.channel-meta-pill {
+    font-size: 0.75rem;
+    color: #9aa0a6;
+    margin-top: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
 }
 
 /* Star Button */
