@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.9.0
+
+- Añadido desplegable de filtro por fuente (`#sourceSelect`) en la cabecera: «Todas las fuentes (Mix)» o una fuente concreta.
+- Al elegir una fuente concreta, `/api/channels?source=<id>` devuelve los canales **crudos de esa fuente sin deduplicar** (se ven los duplicados reales de cada lista).
+- Añadida píldora compacta `· <fuente>` en cada tarjeta de canal para identificar el origen sin saturar pantallas pequeñas.
+- El mix global (`/api/channels` sin parámetro) sigue deduplicando por identificador como antes.
+
 ## v2.8.0
 
 - Añadido refresco concurrente de fuentes con `ThreadPoolExecutor` y parámetro configurable `SOURCE_REFRESH_WORKERS`.

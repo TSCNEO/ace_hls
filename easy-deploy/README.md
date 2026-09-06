@@ -14,9 +14,9 @@ cd ace_hls/easy-deploy
 O mediante el ZIP sin código fuente:
 
 ```bash
-curl -LO https://github.com/TSCNEO/ace_hls/releases/download/v2.8.0/ace-hls-easy-deploy-v2.8.0.zip
-unzip ace-hls-easy-deploy-v2.8.0.zip
-cd ace-hls-easy-deploy-v2.8.0
+curl -LO https://github.com/TSCNEO/ace_hls/releases/download/v2.9.0/ace-hls-easy-deploy-v2.9.0.zip
+unzip ace-hls-easy-deploy-v2.9.0.zip
+cd ace-hls-easy-deploy-v2.9.0
 ```
 
 En ambos casos, continúa con una de las variantes siguientes.
