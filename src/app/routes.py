@@ -2,6 +2,7 @@ import os
 import time
 import json
 import shutil
+import threading
 import requests
 import psutil
 from urllib.parse import parse_qs, urlparse
@@ -174,18 +175,23 @@ from app.utils import get_stream_url_for_client
 
 @main_bp.route('/api/channels')
 def get_channels():
-    # Refresh on demand when the scheduler cache is missing or stale.
-    should_update = True
-    if os.path.exists(Config.JSON_FILE):
+    # If cache exists, serve it immediately without blocking the client.
+    # If stale, trigger background refresh asynchronously.
+    has_cache = os.path.exists(Config.JSON_FILE)
+    if has_cache:
         mtime = os.path.getmtime(Config.JSON_FILE)
-        if (time.time() - mtime) < Config.CACHE_DURATION:
-            should_update = False
-
-    if should_update:
+        if (time.time() - mtime) >= Config.CACHE_DURATION:
+            threading.Thread(
+                target=channel_manager.update_channels,
+                name="async-refresh-channels",
+                daemon=True,
+            ).start()
+    else:
+        # Cold boot with no cache file at all
         try:
             channel_manager.update_channels()
-        except SourceRegistryError as exc:
-            current_app.logger.warning("Serving cached channels: %s", exc)
+        except Exception as exc:
+            current_app.logger.warning("Cold boot channel update failed: %s", exc)
 
     if os.path.exists(Config.JSON_FILE):
         with open(Config.JSON_FILE, 'r') as f:
@@ -223,8 +229,14 @@ def add_source():
     data = request.get_json(silent=True) or {}
     url = str(data.get('url') or '').strip()
     if not url:
-        return jsonify({"error": "La URL es obligatoria.", "code": "missing_url"}), 400
-    name = str(data.get('name') or urlparse(url).hostname or 'Fuente').strip()
+        return jsonify({"error": "La URL o ID es obligatorio.", "code": "missing_url"}), 400
+    name = str(data.get('name') or '').strip()
+    if not name:
+        if url.lower().startswith('mylinkpaste://') or (not url.startswith('http://') and not url.startswith('https://')):
+            raw_id = url.replace('mylinkpaste://', '').strip()
+            name = f"MylinkPaste ({raw_id[:8]})"
+        else:
+            name = str(urlparse(url).hostname or 'Fuente').strip() or 'Fuente'
     validation = source_validator.validate(url, name)
     allow_invalid = data.get('allow_invalid_disabled') is True
     if not validation.valid and not allow_invalid:

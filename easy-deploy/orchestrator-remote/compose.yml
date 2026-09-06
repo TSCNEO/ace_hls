@@ -2,7 +2,7 @@ name: ace-hls
 
 services:
   ace-hls:
-    image: ${ACE_HLS_IMAGE:-tscneo/ace-hls-viewer:2.6.0}
+    image: ${ACE_HLS_IMAGE:-tscneo/ace-hls-viewer:2.7.0}
     container_name: ace_hls_viewer
     restart: unless-stopped
     ports:

@@ -12,9 +12,23 @@ Al leer por primera vez un `sources.json` v1 (array de `{url, added_at}`), AceHL
 
 Las cachés antiguas nombradas con el hash de la URL se trasladan al ID estable de la fuente cuando se reconstruyen los canales. `channels.json` nunca se vacía si todas las fuentes fallan. Los esquemas futuros desconocidos no se modifican: las mutaciones devuelven un error estructurado y la aplicación conserva las salidas ya generadas.
 
-## Validación
+## Validación y Tipos de Fuentes
 
-Las fuentes remotas admitidas son listas M3U, también cuando incluyen BOM. Cada entrada debe contener una URI `acestream://`, `infohash://`, un hash hexadecimal de 40 caracteres o una URL con `id`, `content_id` o `infohash` (query decodificada y sin sensibilidad a mayúsculas).
+AceHLS admite los siguientes tipos de fuentes (`kind`):
+1. **Listas M3U (`m3u`)**: URLs HTTP(S) con cabecera `#EXTM3U` (incluyendo BOM UTF-8).
+2. **IDs y Enlaces MylinkPaste (`mylinkpaste`)**: Códigos alfanuméricos directos o esquemas `mylinkpaste://<ID>` resueltos dinámicamente mediante DNS TXT sobre DoH.
+
+Cada entrada de canal debe contener una URI `acestream://`, `infohash://`, un hash hexadecimal de 40 caracteres o una URL con `id`, `content_id` o `infohash` (query decodificada y sin sensibilidad a mayúsculas).
+
+### Resolución de Fuentes MylinkPaste
+Para fuentes de tipo MylinkPaste:
+- Se realiza una consulta DNS TXT (Tipo 16) vía DNS over HTTPS (DoH) hacia `<code_o_ref>.elcano.top` utilizando Google DNS DoH (`https://dns.google/resolve`) con fallback automático a Cloudflare DoH (`https://cloudflare-dns.com/dns-query`).
+- El registro TXT se desfragmenta, decodifica desde Base64 y se descomprime mediante GZIP si contiene la firma `\x1f\x8b`.
+- El JSON resultante se parsea recursivamente:
+  - Objetos con `type: "category"` y `ref: "<hash>"` se resuelven recursivamente heredando el nombre de grupo/categoría.
+  - Objetos con `subLinks` se expanden para extraer los canales con esquemas `acestream://<HASH>`.
+  - El resolver incorpora detección de referencias circulares (ciclos) y límite de profundidad (`max_depth = 10`).
+- Las fuentes pueden añadirse mediante su identificador directo o formato URI `mylinkpaste://<ID>`.
 
 Una fuente se valida antes de activarse. Una respuesta inválida solo puede guardarse enviando `allow_invalid_disabled=true`; el servidor fuerza `enabled=false`. Las fuentes desactivadas no se descargan ni aportan canales. Editar una URL conserva el ID y la caché anterior, aunque esa caché no se mezcla mientras la fuente siga desactivada.
 

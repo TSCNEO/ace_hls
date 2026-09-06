@@ -242,7 +242,7 @@ function toggleFavorite(e, id) {
     }
 }
 
-async function loadChannels() {
+async function loadChannels(silent = false) {
     try {
         // Version & Config Check
         fetch('/api/version').then(r => r.json()).then(d => {
@@ -261,22 +261,33 @@ async function loadChannels() {
         }).catch(e => { });
 
         const grid = document.getElementById('channel-grid');
-        grid.innerHTML = '<div style="text-align:center;">Actualizando canales...</div>';
+        if (!silent && allChannels.length === 0) {
+            grid.innerHTML = '<div class="loading" style="text-align:center;">Cargando canales…</div>';
+        }
 
         const response = await fetch('/api/channels');
         if (!response.ok) throw new Error('Error de red');
-        allChannels = await response.json();
+        const freshChannels = await response.json();
 
-        categories.clear();
-        allChannels.forEach(ch => { if (ch.group) categories.add(ch.group); });
-        populateCategoryDropdown();
-        filterChannels();
+        // Update when initial or channels changed
+        const countChanged = freshChannels.length !== allChannels.length;
+        if (countChanged || allChannels.length === 0) {
+            allChannels = freshChannels;
+            categories.clear();
+            allChannels.forEach(ch => { if (ch.group) categories.add(ch.group); });
+            populateCategoryDropdown();
+            filterChannels();
+        } else {
+            allChannels = freshChannels;
+        }
 
     } catch (e) {
-        const grid = document.getElementById('channel-grid');
-        const error = element('div', 'loading', `Error: ${e.message}`);
-        error.style.color = 'red';
-        grid.replaceChildren(error);
+        if (allChannels.length === 0) {
+            const grid = document.getElementById('channel-grid');
+            const error = element('div', 'loading', `Error: ${e.message}`);
+            error.style.color = 'red';
+            grid.replaceChildren(error);
+        }
     }
 }
 
@@ -1128,6 +1139,9 @@ async function loadSources() {
             const main = element('div', 'source-main');
             const heading = element('div', 'source-heading');
             heading.appendChild(element('span', '', src.name));
+            if (src.kind === 'mylinkpaste') {
+                heading.appendChild(element('span', 'status-badge mylinkpaste', 'MylinkPaste'));
+            }
             const validation = src.validation || {};
             const status = src.enabled ? (validation.status || 'pending') : 'disabled';
             heading.appendChild(element('span', `status-badge ${status}`, status));
@@ -1176,11 +1190,21 @@ function cancelSourceEdit() {
 }
 
 async function saveSource() {
-    const name = document.getElementById('sourceName').value.trim();
+    let name = document.getElementById('sourceName').value.trim();
     const url = document.getElementById('sourceUrl').value.trim();
-    if (!name || !url) {
-        showInlineFeedback('source-feedback', 'Nombre y URL son obligatorios.', 'error');
+    if (!url) {
+        showInlineFeedback('source-feedback', 'La URL o ID es obligatorio.', 'error');
         return;
+    }
+    if (!name) {
+        if (url.toLowerCase().startsWith('mylinkpaste://') || (!url.startsWith('http://') && !url.startsWith('https://'))) {
+            const raw = url.replace('mylinkpaste://', '').trim();
+            name = `MylinkPaste (${raw.slice(0, 8)})`;
+            document.getElementById('sourceName').value = name;
+        } else {
+            showInlineFeedback('source-feedback', 'Nombre y URL son obligatorios.', 'error');
+            return;
+        }
     }
 
     const endpoint = editingSourceId ? `/api/sources/${editingSourceId}` : '/api/sources';

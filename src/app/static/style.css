@@ -520,6 +520,7 @@ button:hover {
 .status-badge.invalid,
 .status-badge.unreachable { background: #64251f; color: #ffaaa2; }
 .status-badge.disabled { background: #3b3b3b; color: #aaa; }
+.status-badge.mylinkpaste { background: #1e3a8a; color: #93c5fd; border: 1px solid #3b82f6; }
 
 .source-toggle {
     flex: 0 0 auto;

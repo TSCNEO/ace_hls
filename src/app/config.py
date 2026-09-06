@@ -137,3 +137,8 @@ class Config:
     CUSTOM_CHANNELS_FILE = os.path.join(DATA_DIR, "custom_channels.json")
     M3U_FILE = os.path.join(DATA_DIR, "ace_hls.m3u")
     HLS_DIR = os.path.join(DATA_DIR, "hls")
+
+    # MylinkPaste DoH resolver settings
+    MYLINKPASTE_DOMAIN_SUFFIX = os.environ.get("MYLINKPASTE_DOMAIN_SUFFIX", "elcano.top").strip().lstrip(".")
+    MYLINKPASTE_DOH_PRIMARY = os.environ.get("MYLINKPASTE_DOH_PRIMARY", "https://dns.google/resolve").strip()
+    MYLINKPASTE_DOH_BACKUP = os.environ.get("MYLINKPASTE_DOH_BACKUP", "https://cloudflare-dns.com/dns-query").strip()

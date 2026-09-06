@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import gzip
 import json
 import re
 from dataclasses import dataclass, field
@@ -12,6 +14,7 @@ from app.config import Config
 
 
 HASH_RE = re.compile(r"^[a-f0-9]{40}$", re.IGNORECASE)
+MYLINKPASTE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{10,}$")
 EXTINF_ATTR_RE = re.compile(r'([A-Za-z0-9_-]+)="([^"]*)"')
 UNSUPPORTED_MEDIA_SUFFIXES = (".torrent", ".acelive", ".acestream", ".acemedia")
 
@@ -56,10 +59,30 @@ class ValidationResult:
 
 def normalize_source_url(value: str) -> str:
     normalized = str(value or "").strip()
+    if not normalized:
+        raise SourceValidationError("invalid_url", "La fuente debe usar una URL HTTP/HTTPS o un ID MylinkPaste válido.")
+
+    if normalized.lower().startswith("mylinkpaste://"):
+        raw_ref = normalized[len("mylinkpaste://"):].strip().strip("/")
+        if not MYLINKPASTE_ID_RE.fullmatch(raw_ref):
+            raise SourceValidationError("invalid_mylinkpaste_id", "El identificador MylinkPaste no tiene un formato válido.")
+        return f"mylinkpaste://{raw_ref}"
+
     parsed = urlparse(normalized)
-    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
-        raise SourceValidationError("invalid_url", "La fuente debe usar una URL HTTP o HTTPS válida.")
-    return normalized
+    if parsed.scheme.lower() in {"http", "https"}:
+        hostname = (parsed.hostname or "").lower()
+        if hostname.endswith("elcano.top"):
+            ref = hostname.split(".")[0]
+            if MYLINKPASTE_ID_RE.fullmatch(ref):
+                return f"mylinkpaste://{ref}"
+        if not parsed.hostname:
+            raise SourceValidationError("invalid_url", "La fuente debe usar una URL HTTP o HTTPS válida.")
+        return normalized
+
+    if MYLINKPASTE_ID_RE.fullmatch(normalized):
+        return f"mylinkpaste://{normalized}"
+
+    raise SourceValidationError("invalid_url", "La fuente debe usar una URL HTTP o HTTPS válida o un ID MylinkPaste válido.")
 
 
 def is_acestream_api_url(value: str) -> bool:
@@ -69,6 +92,14 @@ def is_acestream_api_url(value: str) -> bool:
         and (parsed.hostname or "").lower() == "api.acestream.me"
         and parsed.path.rstrip("/").lower() in {"/all", "/search"}
     )
+
+
+def detect_source_kind(normalized_url: str) -> str:
+    if normalized_url.lower().startswith("mylinkpaste://"):
+        return "mylinkpaste"
+    if is_acestream_api_url(normalized_url):
+        return "acestream_api"
+    return "m3u"
 
 
 def extract_stream_reference(value: str) -> StreamReference | None:
@@ -202,6 +233,171 @@ def parse_acestream_api(body: str, source_url: str, source_name: str) -> list[di
     return channels
 
 
+def fetch_dns_txt_record(ref: str, session=requests) -> str | None:
+    domain = f"{ref}.{Config.MYLINKPASTE_DOMAIN_SUFFIX}"
+    endpoints = []
+    if Config.MYLINKPASTE_DOH_PRIMARY:
+        endpoints.append((Config.MYLINKPASTE_DOH_PRIMARY, {"name": domain, "type": "TXT", "do": "1"}))
+    if Config.MYLINKPASTE_DOH_BACKUP:
+        endpoints.append((Config.MYLINKPASTE_DOH_BACKUP, {"name": domain, "type": "TXT"}))
+
+    last_error = None
+    for base_url, params in endpoints:
+        try:
+            headers = {"Accept": "application/dns-json", "User-Agent": "AceHLS-MylinkPaste/2.7"}
+            resp = session.get(
+                base_url,
+                params=params,
+                headers=headers,
+                timeout=(Config.SOURCE_CONNECT_TIMEOUT, Config.SOURCE_READ_TIMEOUT),
+                verify=True if base_url.startswith("https://") else Config.SOURCE_TLS_VERIFY,
+            )
+            if resp.status_code != 200:
+                continue
+            data = resp.json()
+            answers = [x["data"] for x in data.get("Answer", []) if x.get("type") == 16]
+            if answers:
+                return answers[0]
+            # If Status == 0 or 3 and no answers, it means NXDOMAIN or NOERROR with 0 answers
+            return None
+        except Exception as exc:
+            last_error = exc
+            continue
+
+    if last_error is not None:
+        raise SourceValidationError(
+            "doh_query_failed",
+            f"No se pudo consultar el registro DNS DoH para {domain}: {last_error}",
+            unreachable=True,
+        )
+    return None
+
+
+def decode_dns_payload(raw_txt: str) -> Any:
+    parts = re.findall(r'"([^"]*)"', raw_txt)
+    b64_str = "".join(parts) if parts else raw_txt.strip('"')
+    try:
+        raw_bytes = base64.b64decode(b64_str)
+    except Exception as exc:
+        raise SourceValidationError("invalid_base64", "Error al decodificar Base64 del registro DNS.") from exc
+
+    if len(raw_bytes) >= 2 and raw_bytes[:2] == b"\x1f\x8b":
+        try:
+            raw_bytes = gzip.decompress(raw_bytes)
+        except Exception as exc:
+            raise SourceValidationError("invalid_gzip", "Error al descomprimir GZIP del registro DNS.") from exc
+
+    try:
+        text = raw_bytes.decode("utf-8", errors="replace")
+        return json.loads(text)
+    except Exception as exc:
+        raise SourceValidationError("invalid_json", "El contenido decodificado de DNS no es un JSON válido.") from exc
+
+
+def parse_mylinkpaste(
+    ref: str,
+    source_url: str,
+    source_name: str,
+    session=requests,
+    visited: set[str] | None = None,
+    depth: int = 0,
+    parent_group: str = "",
+) -> list[dict[str, Any]]:
+    if visited is None:
+        visited = set()
+    if ref in visited or depth > 10:
+        return []
+    visited.add(ref)
+
+    raw_txt = fetch_dns_txt_record(ref, session=session)
+    if not raw_txt:
+        if depth == 0:
+            raise SourceValidationError("no_dns_txt_record", f"No se encontró registro TXT para {ref}.{Config.MYLINKPASTE_DOMAIN_SUFFIX}.")
+        return []
+    payload = decode_dns_payload(raw_txt)
+
+    channels: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+
+    if isinstance(payload, dict):
+        payload = [payload]
+    elif not isinstance(payload, list):
+        return []
+
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        item_type = str(item.get("type") or "").strip().lower()
+        ref_id = str(item.get("ref") or "").strip()
+        sub_links = item.get("subLinks")
+
+        group = name if (item_type == "category" or sub_links) else parent_group
+        if not group:
+            group = parent_group or source_name or "MylinkPaste"
+
+        if item_type == "category" and ref_id:
+            sub_channels = parse_mylinkpaste(
+                ref_id,
+                source_url=source_url,
+                source_name=source_name,
+                session=session,
+                visited=visited,
+                depth=depth + 1,
+                parent_group=name or parent_group,
+            )
+            for ch in sub_channels:
+                identity = (ch["identifier_type"], ch["id"])
+                if identity not in seen:
+                    seen.add(identity)
+                    channels.append(ch)
+        elif isinstance(sub_links, list) and sub_links:
+            for sub in sub_links:
+                if not isinstance(sub, dict):
+                    continue
+                sub_name = str(sub.get("name") or "").strip()
+                sub_url = str(sub.get("url") or "").strip()
+                reference = extract_stream_reference(sub_url)
+                if reference is None:
+                    continue
+                identity = (reference.identifier_type, reference.stream_id)
+                if identity in seen:
+                    continue
+                seen.add(identity)
+                channels.append({
+                    "id": reference.stream_id,
+                    "identifier_type": reference.identifier_type,
+                    "name": sub_name or reference.stream_id,
+                    "logo": str(sub.get("logo") or ""),
+                    "group": group,
+                    "tvg_id": str(sub.get("tvg_id") or sub.get("tvg-id") or ""),
+                    "source": source_url,
+                })
+        elif item.get("url"):
+            stream_url = str(item["url"]).strip()
+            reference = extract_stream_reference(stream_url)
+            if reference is None:
+                continue
+            identity = (reference.identifier_type, reference.stream_id)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            channels.append({
+                "id": reference.stream_id,
+                "identifier_type": reference.identifier_type,
+                "name": name or reference.stream_id,
+                "logo": str(item.get("logo") or ""),
+                "group": group,
+                "tvg_id": str(item.get("tvg_id") or item.get("tvg-id") or ""),
+                "source": source_url,
+            })
+
+    if depth == 0 and not channels:
+        raise SourceValidationError("no_acestream_channels", "El ID de MylinkPaste no devolvió ningún canal AceStream compatible.")
+
+    return channels
+
+
 class SourceValidator:
     def __init__(self, session=requests):
         self.session = session
@@ -210,13 +406,16 @@ class SourceValidator:
         kind = "unknown"
         try:
             normalized_url = normalize_source_url(url)
-            kind = "acestream_api" if is_acestream_api_url(normalized_url) else "m3u"
-            body = self._fetch(normalized_url)
-            channels = (
-                parse_acestream_api(body, normalized_url, source_name)
-                if kind == "acestream_api"
-                else parse_m3u(body, normalized_url, source_name)
-            )
+            kind = detect_source_kind(normalized_url)
+            if kind == "mylinkpaste":
+                ref = normalized_url.replace("mylinkpaste://", "").strip()
+                channels = parse_mylinkpaste(ref, normalized_url, source_name, session=self.session)
+            elif kind == "acestream_api":
+                body = self._fetch(normalized_url)
+                channels = parse_acestream_api(body, normalized_url, source_name)
+            else:
+                body = self._fetch(normalized_url)
+                channels = parse_m3u(body, normalized_url, source_name)
             return ValidationResult(True, "valid", kind, normalized_url, channels)
         except SourceValidationError as exc:
             return ValidationResult(

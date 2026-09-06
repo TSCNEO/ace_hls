@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.7.0
+
+- Añadido soporte nativo para fuentes e identificadores **MylinkPaste** resueltos mediante DoH (DNS over HTTPS).
+- Implementado parser recursivo con descompresión GZIP y decodificación Base64 desde registros DNS TXT (`<ref>.elcano.top`).
+- Añadida protección de ciclos en referencias circulares y límite de profundidad configurable.
+- Soporte para DoH primario (Google DNS) y DoH de respaldo (Cloudflare).
+- Añadido badge distintivo `MylinkPaste` en la lista de fuentes activas y persistencia automática en el esquema Sources 2.0.
+- Optimización de carga asíncrona de canales con entrega inmediata desde caché.
+
 ## v2.6.0
 
 - Convertido AceStream Orchestrator en el backend predeterminado de los Compose, fijado inicialmente en `v2.1.0.3`.

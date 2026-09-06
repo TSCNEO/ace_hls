@@ -56,11 +56,12 @@ class SourceManager:
     def _new_source(self, url: str, name: str, now: float | None = None, *, deterministic: bool = False) -> dict:
         timestamp = time.time() if now is None else now
         source_uuid = uuid.uuid5(uuid.NAMESPACE_URL, url).hex if deterministic else uuid.uuid4().hex
+        kind = "mylinkpaste" if url.lower().startswith("mylinkpaste://") else "m3u"
         return {
             "id": f"src-{source_uuid}",
             "name": name.strip(),
             "url": url.strip(),
-            "kind": "m3u",
+            "kind": kind,
             "enabled": True,
             "created_at": timestamp,
             "updated_at": timestamp,
@@ -78,7 +79,11 @@ class SourceManager:
         }
 
     def _name_for_url(self, url: str, existing_names: list[str]) -> str:
-        host = (urlparse(url).hostname or "Fuente").strip() or "Fuente"
+        if url.lower().startswith("mylinkpaste://"):
+            ref = url[len("mylinkpaste://"):].strip()
+            host = f"MylinkPaste ({ref[:8]})"
+        else:
+            host = (urlparse(url).hostname or "Fuente").strip() or "Fuente"
         base = host
         suffix = 2
         lowered = {name.lower() for name in existing_names}

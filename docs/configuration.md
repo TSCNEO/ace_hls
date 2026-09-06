@@ -69,6 +69,9 @@ Al migrar desde otro Compose, se puede asignar a `ACE_HLS_DATA_VOLUME` el nombre
 | `TRANSCODE_720P_BITRATE` | `2500k` | Bitrate inicial 720p. |
 | `TRANSCODE_480P_BITRATE` | `1000k` | Bitrate inicial 480p. |
 | `TRANSCODE_COMPAT_CRF` | `23` | CRF del perfil compatible. |
+| `MYLINKPASTE_DOMAIN_SUFFIX` | `elcano.top` | Sufijo de dominio DNS para resolver referencias MylinkPaste. |
+| `MYLINKPASTE_DOH_PRIMARY` | `https://dns.google/resolve` | Endpoint primario DoH (DNS over HTTPS) para registros TXT. |
+| `MYLINKPASTE_DOH_BACKUP` | `https://cloudflare-dns.com/dns-query` | Endpoint secundario DoH de respaldo. |
 
 ## Ajustes persistentes
 
