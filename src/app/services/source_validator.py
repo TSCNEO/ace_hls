@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import gzip
+import hashlib
 import json
 import re
 from dataclasses import dataclass, field
@@ -41,6 +42,8 @@ class ValidationResult:
     channels: list[dict[str, Any]] = field(default_factory=list)
     error_code: str | None = None
     error: str | None = None
+    content_hash: str | None = None
+    not_modified: bool = False
 
     @property
     def channel_count(self) -> int:
@@ -302,6 +305,7 @@ def parse_mylinkpaste(
     visited: set[str] | None = None,
     depth: int = 0,
     parent_group: str = "",
+    root_raw_txt: str | None = None,
 ) -> list[dict[str, Any]]:
     if visited is None:
         visited = set()
@@ -309,7 +313,11 @@ def parse_mylinkpaste(
         return []
     visited.add(ref)
 
-    raw_txt = fetch_dns_txt_record(ref, session=session)
+    if depth == 0 and root_raw_txt is not None:
+        raw_txt = root_raw_txt
+    else:
+        raw_txt = fetch_dns_txt_record(ref, session=session)
+
     if not raw_txt:
         if depth == 0:
             raise SourceValidationError("no_dns_txt_record", f"No se encontró registro TXT para {ref}.{Config.MYLINKPASTE_DOMAIN_SUFFIX}.")
@@ -402,21 +410,92 @@ class SourceValidator:
     def __init__(self, session=requests):
         self.session = session
 
-    def validate(self, url: str, source_name: str = "") -> ValidationResult:
+    def validate(self, url: str, source_name: str = "", *, cached_hash: str | None = None) -> ValidationResult:
         kind = "unknown"
         try:
             normalized_url = normalize_source_url(url)
             kind = detect_source_kind(normalized_url)
             if kind == "mylinkpaste":
                 ref = normalized_url.replace("mylinkpaste://", "").strip()
-                channels = parse_mylinkpaste(ref, normalized_url, source_name, session=self.session)
+                raw_txt = fetch_dns_txt_record(ref, session=self.session)
+                if not raw_txt:
+                    raise SourceValidationError(
+                        "no_dns_txt_record",
+                        f"No se encontró registro TXT para {ref}.{Config.MYLINKPASTE_DOMAIN_SUFFIX}.",
+                    )
+                content_hash = hashlib.sha256(raw_txt.encode("utf-8")).hexdigest()
+                if cached_hash and content_hash == cached_hash:
+                    return ValidationResult(
+                        True,
+                        "valid",
+                        kind,
+                        normalized_url,
+                        channels=[],
+                        content_hash=content_hash,
+                        not_modified=True,
+                    )
+                channels = parse_mylinkpaste(
+                    ref,
+                    normalized_url,
+                    source_name,
+                    session=self.session,
+                    root_raw_txt=raw_txt,
+                )
+                return ValidationResult(
+                    True,
+                    "valid",
+                    kind,
+                    normalized_url,
+                    channels=channels,
+                    content_hash=content_hash,
+                    not_modified=False,
+                )
             elif kind == "acestream_api":
                 body = self._fetch(normalized_url)
+                content_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
+                if cached_hash and content_hash == cached_hash:
+                    return ValidationResult(
+                        True,
+                        "valid",
+                        kind,
+                        normalized_url,
+                        channels=[],
+                        content_hash=content_hash,
+                        not_modified=True,
+                    )
                 channels = parse_acestream_api(body, normalized_url, source_name)
+                return ValidationResult(
+                    True,
+                    "valid",
+                    kind,
+                    normalized_url,
+                    channels=channels,
+                    content_hash=content_hash,
+                    not_modified=False,
+                )
             else:
                 body = self._fetch(normalized_url)
+                content_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
+                if cached_hash and content_hash == cached_hash:
+                    return ValidationResult(
+                        True,
+                        "valid",
+                        kind,
+                        normalized_url,
+                        channels=[],
+                        content_hash=content_hash,
+                        not_modified=True,
+                    )
                 channels = parse_m3u(body, normalized_url, source_name)
-            return ValidationResult(True, "valid", kind, normalized_url, channels)
+                return ValidationResult(
+                    True,
+                    "valid",
+                    kind,
+                    normalized_url,
+                    channels=channels,
+                    content_hash=content_hash,
+                    not_modified=False,
+                )
         except SourceValidationError as exc:
             return ValidationResult(
                 False,

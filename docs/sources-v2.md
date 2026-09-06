@@ -20,15 +20,9 @@ AceHLS admite los siguientes tipos de fuentes (`kind`):
 
 Cada entrada de canal debe contener una URI `acestream://`, `infohash://`, un hash hexadecimal de 40 caracteres o una URL con `id`, `content_id` o `infohash` (query decodificada y sin sensibilidad a mayúsculas).
 
-### Resolución de Fuentes MylinkPaste
-Para fuentes de tipo MylinkPaste:
-- Se realiza una consulta DNS TXT (Tipo 16) vía DNS over HTTPS (DoH) hacia `<code_o_ref>.elcano.top` utilizando Google DNS DoH (`https://dns.google/resolve`) con fallback automático a Cloudflare DoH (`https://cloudflare-dns.com/dns-query`).
-- El registro TXT se desfragmenta, decodifica desde Base64 y se descomprime mediante GZIP si contiene la firma `\x1f\x8b`.
-- El JSON resultante se parsea recursivamente:
-  - Objetos con `type: "category"` y `ref: "<hash>"` se resuelven recursivamente heredando el nombre de grupo/categoría.
-  - Objetos con `subLinks` se expanden para extraer los canales con esquemas `acestream://<HASH>`.
-  - El resolver incorpora detección de referencias circulares (ciclos) y límite de profundidad (`max_depth = 10`).
-- Las fuentes pueden añadirse mediante su identificador directo o formato URI `mylinkpaste://<ID>`.
+### Refresco Concurrente y Verificación de Hash
+- **Refresco Paralelo:** El scheduler y los refrescos manuales procesan las fuentes activas en paralelo mediante hilos de trabajo configurables (`SOURCE_REFRESH_WORKERS=4`), evitando cuellos de botella ante fuentes con latencia.
+- **Verificación de Hash:** Cada snapshot de fuente almacena un `content_hash` (SHA-256). Si al consultar la raíz el contenido no ha variado, el resolver marca la fuente como no modificada (`not_modified`) y reutiliza la caché de inmediato sin descargas ni resoluciones redundantes.
 
 Una fuente se valida antes de activarse. Una respuesta inválida solo puede guardarse enviando `allow_invalid_disabled=true`; el servidor fuerza `enabled=false`. Las fuentes desactivadas no se descargan ni aportan canales. Editar una URL conserva el ID y la caché anterior, aunque esa caché no se mezcla mientras la fuente siga desactivada.
 

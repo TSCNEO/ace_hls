@@ -11,7 +11,7 @@ from copy import deepcopy
 
 from app.config import Config
 from app.services.custom_channel_manager import custom_channel_manager
-from app.services.source_validator import source_validator
+from app.services.source_validator import ValidationResult, source_validator
 from app.services.storage import atomic_write_json, atomic_write_text
 from app.utils import format_url_host
 
@@ -60,24 +60,61 @@ class ChannelManager:
 
     def _update_channels_locked(self):
         from app.services.source_manager import source_manager
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
         sources = source_manager.get_sources()
         enabled_sources = [source for source in sources if source.get("enabled", True)]
-        snapshots: list[list[dict]] = [custom_channel_manager.normalized_channels()]
+        custom_channels = custom_channel_manager.normalized_channels()
+
+        if not enabled_sources:
+            channels = self._merge_source_snapshots([custom_channels])
+            return self._save_global_outputs(channels, 0, 0, 0)
+
+        def _fetch_source(src):
+            cached_channels, cached_hash = self._load_source_cache_entry(src)
+            val = source_validator.validate(src["url"], src.get("name", ""), cached_hash=cached_hash)
+            return src, cached_channels, cached_hash, val
+
+        workers = min(Config.SOURCE_REFRESH_WORKERS, len(enabled_sources))
+        results = []
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="src-refresh") as executor:
+            future_to_src = {executor.submit(_fetch_source, src): src for src in enabled_sources}
+            for future in as_completed(future_to_src):
+                try:
+                    results.append(future.result())
+                except Exception as exc:
+                    src = future_to_src[future]
+                    logger.error("Unexpected error refreshing source %s: %s", src.get("url"), exc)
+                    cached_channels, cached_hash = self._load_source_cache_entry(src)
+                    val = source_validator.ValidationResult(
+                        False, "invalid", "unknown", src.get("url", ""), error=str(exc)
+                    )
+                    results.append((src, cached_channels, cached_hash, val))
+
+        # Preserve source order as in sources.json
+        src_order = {src["id"]: i for i, src in enumerate(enabled_sources)}
+        results.sort(key=lambda r: src_order.get(r[0]["id"], 999))
+
+        snapshots: list[list[dict]] = [custom_channels]
         successful_sources = 0
         cached_sources = 0
 
-        for source in enabled_sources:
-            cached_channels = self._load_source_cache(source)
-            validation = source_validator.validate(source["url"], source.get("name", ""))
+        for source, cached_channels, cached_hash, validation in results:
             if validation.valid:
+                if validation.not_modified:
+                    # Content verified unchanged: reuse cached channels immediately
+                    snapshots.append(cached_channels)
+                    successful_sources += 1
+                    source_manager.record_refresh(source["id"], validation=validation, success=True)
+                    continue
+
                 channels = self._with_source_identity(validation.channels, source)
                 if cached_channels and not channels:
                     validation.valid = False
                     validation.status = "invalid"
                     validation.error = "Una respuesta vacía no puede reemplazar una caché no vacía."
                 else:
-                    self.save_source_snapshot(source, channels)
+                    self.save_source_snapshot(source, channels, content_hash=validation.content_hash)
                     snapshots.append(channels)
                     successful_sources += 1
                     source_manager.record_refresh(source["id"], validation=validation, success=True)
@@ -153,7 +190,7 @@ class ChannelManager:
         except (OSError, ValueError, TypeError) as exc:
             logger.warning("Could not migrate source cache for %s: %s", source["url"], exc)
 
-    def save_source_snapshot(self, source: dict, channels: list[dict]) -> None:
+    def save_source_snapshot(self, source: dict, channels: list[dict], content_hash: str | None = None) -> None:
         os.makedirs(Config.SOURCE_CACHE_DIR, exist_ok=True)
         normalized = self._with_source_identity(channels, source)
         atomic_write_json(
@@ -163,6 +200,7 @@ class ChannelManager:
                 "source_id": source["id"],
                 "source_url": source["url"],
                 "updated_at": time.time(),
+                "content_hash": content_hash,
                 "channels": normalized,
             },
         )
@@ -174,27 +212,32 @@ class ChannelManager:
             except FileNotFoundError:
                 pass
 
-    def _load_source_cache(self, source: dict) -> list[dict]:
+    def _load_source_cache_entry(self, source: dict) -> tuple[list[dict], str | None]:
         self._migrate_source_cache(source)
         try:
             with open(self._source_cache_path(source), "r", encoding="utf-8") as handle:
                 payload = json.load(handle)
             channels = payload.get("channels")
+            content_hash = payload.get("content_hash")
             if (
                 payload.get("source_id") != source["id"]
                 or not isinstance(channels, list)
                 or not all(isinstance(channel, dict) for channel in channels)
             ):
                 raise ValueError("invalid source cache payload")
-            return self._with_source_identity(channels, source)
+            return self._with_source_identity(channels, source), content_hash
         except FileNotFoundError:
             legacy = self._legacy_channels_for_source(self._load_global_channels(), source)
             if legacy:
                 self.save_source_snapshot(source, legacy)
-            return legacy
+            return legacy, None
         except (OSError, ValueError, TypeError) as exc:
             logger.warning("Ignoring invalid cache for %s: %s", source["url"], exc)
-            return []
+            return [], None
+
+    def _load_source_cache(self, source: dict) -> list[dict]:
+        channels, _ = self._load_source_cache_entry(source)
+        return channels
 
     def _load_global_channels(self) -> list[dict]:
         try:

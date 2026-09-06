@@ -50,6 +50,7 @@ class Config:
     SOURCE_READ_TIMEOUT = max(1, int(os.environ.get("SOURCE_READ_TIMEOUT", 30)))
     SOURCE_MAX_BYTES = max(1024, int(os.environ.get("SOURCE_MAX_BYTES", 10 * 1024 * 1024)))
     SOURCE_TLS_VERIFY = os.environ.get("SOURCE_TLS_VERIFY", "false").lower() == "true"
+    SOURCE_REFRESH_WORKERS = max(1, int(os.environ.get("SOURCE_REFRESH_WORKERS", 4)))
     # Use absolute path to avoid confusion with send_from_directory
     DATA_DIR = os.environ.get("DATA_DIR", "/app/data")
     

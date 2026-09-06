@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.8.0
+
+- Añadido refresco concurrente de fuentes con `ThreadPoolExecutor` y parámetro configurable `SOURCE_REFRESH_WORKERS`.
+- Añadida verificación rápida de hash en raíz (`content_hash`) para omitir descargas y resoluciones DNS redundantes cuando el contenido no ha variado (`not_modified`).
+- Optimizado el pipeline de caché por fuente para reutilizar snapshots instantáneamente ante respuestas no modificadas.
+
 ## v2.7.0
 
 - Añadido soporte nativo para fuentes e identificadores **MylinkPaste** resueltos mediante DoH (DNS over HTTPS).

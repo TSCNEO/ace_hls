@@ -61,10 +61,24 @@ def failed_result(url):
 
 
 def refresh_context(sources, results):
+    if isinstance(results, list):
+        url_results = {}
+        for res in results:
+            url_results.setdefault(res.normalized_url, []).append(res)
+
+        def fake_validate(url, name="", **kwargs):
+            if url in url_results and url_results[url]:
+                return url_results[url].pop(0)
+            return results.pop(0) if results else failed_result(url)
+
+        validate_mock = patch("app.services.channel_manager.source_validator.validate", side_effect=fake_validate)
+    else:
+        validate_mock = patch("app.services.channel_manager.source_validator.validate", side_effect=results)
+
     return (
         patch.object(source_manager, "get_sources", return_value=sources),
         patch.object(source_manager, "record_refresh"),
-        patch("app.services.channel_manager.source_validator.validate", side_effect=results),
+        validate_mock,
         patch("app.services.channel_manager.custom_channel_manager.normalized_channels", return_value=[]),
     )
 
@@ -192,3 +206,39 @@ def test_failed_scheduler_uses_bounded_retry_delay():
     scheduler = PlaylistRefreshScheduler(manager=manager, interval=900)
     scheduler.last_result = "failed"
     assert scheduler._seconds_until_due() == 60
+
+
+def test_hash_check_not_modified_reuses_cache(tmp_path):
+    configured_source = source("https://source/test.m3u", "hash_test")
+    first_result = ValidationResult(
+        True,
+        "valid",
+        "m3u",
+        configured_source["url"],
+        channels=[{"id": "a" * 40, "identifier_type": "id", "name": "Initial", "group": "Gen", "logo": "", "tvg_id": "", "source": configured_source["url"]}],
+        content_hash="hash_12345",
+        not_modified=False,
+    )
+    second_result = ValidationResult(
+        True,
+        "valid",
+        "m3u",
+        configured_source["url"],
+        channels=[],
+        content_hash="hash_12345",
+        not_modified=True,
+    )
+
+    with configure_paths(tmp_path):
+        manager = ChannelManager()
+        contexts = refresh_context([configured_source], [first_result, second_result])
+        with contexts[0], contexts[1], contexts[2], contexts[3]:
+            assert manager.update_channels() is True
+            # Second refresh: content_hash matches, not_modified is True
+            assert manager.update_channels() is True
+        channels = json.loads((tmp_path / "channels.json").read_text())
+        cache = json.loads((tmp_path / "source_cache" / "src-hash_test.json").read_text())
+
+    assert len(channels) == 1
+    assert channels[0]["name"] == "Initial"
+    assert cache["content_hash"] == "hash_12345"

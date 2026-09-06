@@ -19,7 +19,7 @@ La versión de la aplicación se define únicamente en [`src/app/version.txt`](s
 
 ## Instalación recomendada: Easy Deploy
 
-[`easy-deploy/`](easy-deploy/) contiene dos paquetes autónomos que usan imágenes ya construidas: no necesitan ejecutar `docker build`. El mismo contenido se publica como un único ZIP en [GitHub Releases](https://github.com/TSCNEO/ace_hls/releases/tag/v2.7.0).
+[`easy-deploy/`](easy-deploy/) contiene dos paquetes autónomos que usan imágenes ya construidas: no necesitan ejecutar `docker build`. El mismo contenido se publica como un único ZIP en [GitHub Releases](https://github.com/TSCNEO/ace_hls/releases/tag/v2.8.0).
 
 Clonar una vez el repositorio:
 
@@ -31,9 +31,9 @@ cd ace_hls
 O descargar solo el paquete listo para desplegar:
 
 ```bash
-curl -LO https://github.com/TSCNEO/ace_hls/releases/download/v2.7.0/ace-hls-easy-deploy-v2.7.0.zip
-unzip ace-hls-easy-deploy-v2.7.0.zip
-cd ace-hls-easy-deploy-v2.7.0
+curl -LO https://github.com/TSCNEO/ace_hls/releases/download/v2.8.0/ace-hls-easy-deploy-v2.8.0.zip
+unzip ace-hls-easy-deploy-v2.8.0.zip
+cd ace-hls-easy-deploy-v2.8.0
 ```
 
 Después elige una de las dos variantes.
@@ -88,12 +88,12 @@ La WebUI queda en `http://IP_DEL_HOST:8088`, el panel del Orchestrator en `http:
 Para construir una imagen local de forma explícita, por ejemplo para AMD64/Intel:
 
 ```bash
-docker build --platform linux/amd64 -t ace-hls-viewer:2.7.0 .
-ACE_HLS_IMAGE=ace-hls-viewer:2.7.0 \
+docker build --platform linux/amd64 -t ace-hls-viewer:2.8.0 .
+ACE_HLS_IMAGE=ace-hls-viewer:2.8.0 \
 docker compose -f release/docker-compose.yml --env-file .env up -d --remove-orphans
 ```
 
-`push_docker.sh --latest` construye y publica conjuntamente las variantes `linux/amd64` y `linux/arm64`, etiquetadas como `2.7.0` y `latest`. Easy Deploy evita todo este proceso y descarga las imágenes publicadas.
+`push_docker.sh --latest` construye y publica conjuntamente las variantes `linux/amd64` y `linux/arm64`, etiquetadas como `2.8.0` y `latest`. Easy Deploy evita todo este proceso y descarga las imágenes publicadas.
 
 Para usar la imagen publicada:
 
@@ -105,7 +105,7 @@ docker compose -f release/docker-compose.yml --env-file .env up -d --remove-orph
 El Compose de release usa `tscneo/ace-hls-viewer:latest`. Para fijar una versión:
 
 ```bash
-ACE_HLS_IMAGE=tscneo/ace-hls-viewer:2.7.0 \
+ACE_HLS_IMAGE=tscneo/ace-hls-viewer:2.8.0 \
 docker compose -f release/docker-compose.yml --env-file .env up -d --remove-orphans
 ```
 
@@ -114,7 +114,7 @@ docker compose -f release/docker-compose.yml --env-file .env up -d --remove-orph
 ```bash
 cp .env.orchestrator-remote.example .env
 # Editar ORCHESTRATOR_HOST y ORCHESTRATOR_API_TOKEN
-ACE_HLS_IMAGE=tscneo/ace-hls-viewer:2.7.0 \
+ACE_HLS_IMAGE=tscneo/ace-hls-viewer:2.8.0 \
 docker compose -f release/docker-compose.orchestrator-remote.yml --env-file .env \
   up -d --remove-orphans
 ```

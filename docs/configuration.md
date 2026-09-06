@@ -63,6 +63,7 @@ Al migrar desde otro Compose, se puede asignar a `ACE_HLS_DATA_VOLUME` el nombre
 | `SOURCE_READ_TIMEOUT` | `30` | Timeout de lectura de fuentes. |
 | `SOURCE_MAX_BYTES` | `10485760` | Límite por respuesta. |
 | `SOURCE_TLS_VERIFY` | `false` | Verificación TLS; `false` mantiene certificados LAN/VPN propios. |
+| `SOURCE_REFRESH_WORKERS` | `4` | Concurrencia máxima para refresco paralelo de fuentes. |
 | `FFMPEG_RW_TIMEOUT` | `60` | Timeout upstream de FFmpeg. |
 | `HLS_IDLE_TIMEOUT` | `120` | Inactividad antes de detener FFmpeg; mínimo 60 segundos. |
 | `ENABLE_TRANSCODE` | `false` | Habilita `max_compat`, `720p` y `480p`. |
