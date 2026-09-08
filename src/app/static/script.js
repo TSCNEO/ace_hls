@@ -565,7 +565,6 @@ function isIOS() {
 }
 
 let loadTimeout = null;
-let stallTimer = null;
 let hasPlayedSuccessfully = false;
 let statsInterval;
 let engineInfoInterval;
@@ -744,10 +743,6 @@ function resetPlayerEngine() {
         clearTimeout(loadTimeout);
         loadTimeout = null;
     }
-    if (stallTimer) {
-        clearTimeout(stallTimer);
-        stallTimer = null;
-    }
 
     if (hlsInstance) {
         hlsInstance.destroy();
@@ -818,33 +813,7 @@ function attachHlsToPlayer(player, streamUrl, aceId, profile, generation) {
             recoverPlayback('Fallo crítico en flujo HLS.', true);
         });
 
-        // Detect frozen / stalled stream during active playback
-        let lastPlayheadPosition = 0;
-        const clearStall = () => {
-            if (stallTimer) {
-                clearTimeout(stallTimer);
-                stallTimer = null;
-            }
-        };
-
-        const handleStall = () => {
-            clearStall();
-            // Don't trigger stall failover before video has actually begun playing
-            if (!hasPlayedSuccessfully) return;
-
-            stallTimer = setTimeout(() => {
-                if (player && !player.paused && player.readyState < 3 && generation === playbackGeneration && currentAceId === aceId) {
-                    console.warn('[Player] Video frozen for > 16s during active playback, triggering failover');
-                    triggerMatchFailover('Transmisión congelada o sin datos por más de 16s.');
-                }
-            }, 16000);
-        };
-
-        player.addEventListener('waiting', handleStall);
-        player.addEventListener('stalled', handleStall);
-
         const onProgressing = () => {
-            clearStall();
             if (loadTimeout) {
                 clearTimeout(loadTimeout);
                 loadTimeout = null;
@@ -857,8 +826,7 @@ function attachHlsToPlayer(player, streamUrl, aceId, profile, generation) {
 
         player.addEventListener('playing', onProgressing);
         player.addEventListener('timeupdate', () => {
-            if (player.currentTime !== lastPlayheadPosition) {
-                lastPlayheadPosition = player.currentTime;
+            if (player.currentTime > 0.1) {
                 onProgressing();
             }
         });
@@ -872,7 +840,6 @@ function attachHlsToPlayer(player, streamUrl, aceId, profile, generation) {
         });
 
         hlsInstance.on(Hls.Events.FRAG_LOADED, () => {
-            clearStall();
             hidePlayerStatus();
         });
 
@@ -944,14 +911,14 @@ async function startPlayback(aceId, profile, options = {}) {
                 vlcBtn.removeAttribute('href'); // Ensure it's a button behavior
             }
 
-            // Timeout Logic (28 seconds) - Trigger failover ONLY if completely unresponsive on startup
+            // Timeout Logic (35 seconds) - Trigger recovery ONLY if completely unresponsive on startup
             if (loadTimeout) clearTimeout(loadTimeout);
             loadTimeout = setTimeout(() => {
                 if (!hasPlayedSuccessfully && (player.readyState < 2 || player.paused) && currentAceId === aceId) {
-                    console.warn("[Player] Stream startup timeout in 28s without playable frames");
-                    recoverPlayback('La señal tardó más de 28s en arrancar.', true);
+                    console.warn("[Player] Stream startup timeout without playable frames");
+                    recoverPlayback('La señal tardó más de 35s en arrancar.', true);
                 }
-            }, 28000);
+            }, 35000);
 
             const onStarted = () => {
                 if (loadTimeout) {
@@ -989,14 +956,19 @@ async function startPlayback(aceId, profile, options = {}) {
 function recoverPlayback(reason, forceRestart) {
     if (!currentAceId) return;
 
-    if (triggerMatchFailover(reason)) {
-        return;
-    }
-
     if (playbackRetryCount < MAX_PLAYBACK_RECOVERY_ATTEMPTS) {
         playbackRetryCount++;
         showPlayerStatus('Reintentando stream', `${reason} Intento ${playbackRetryCount}/${MAX_PLAYBACK_RECOVERY_ATTEMPTS}...`);
-        startPlayback(currentAceId, currentProfile, { force: forceRestart, resetRetries: false });
+        setTimeout(() => {
+            if (currentAceId) {
+                startPlayback(currentAceId, currentProfile, { force: forceRestart, resetRetries: false });
+            }
+        }, 1500);
+        return;
+    }
+
+    // Only after retries on the current stream have failed, trigger failover
+    if (triggerMatchFailover(reason)) {
         return;
     }
 

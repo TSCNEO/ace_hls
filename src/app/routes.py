@@ -732,7 +732,7 @@ def _start_hls_with_retries(
     profile,
     force=False,
     attempts=2,
-    wait_timeout=14,
+    wait_timeout=20,
     upstream_ready=False,
     identifier_type='id',
 ):
@@ -740,7 +740,7 @@ def _start_hls_with_retries(
 
     for attempt in range(1, attempts + 1):
         media_ready = upstream_ready if attempt == 1 else False
-        if not media_ready and not _wait_for_upstream_media(ace_id, timeout=8, identifier_type=identifier_type):
+        if not media_ready and not _wait_for_upstream_media(ace_id, timeout=12, identifier_type=identifier_type):
             if attempt < attempts:
                 time.sleep(min(attempt, 2))
                 continue

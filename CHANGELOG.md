@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.11.3
+
+- **Eliminación de falsas conmutaciones durante la reproducción:**
+  - Eliminados listeners de `waiting` y `stalled` en la etiqueta `<video>`: en streams en vivo HLS, encontrarse en el live edge y esperar brevemente al siguiente segmento es un comportamiento estándar y no debe conmutar de canal.
+  - Prioridad de recuperación: `recoverPlayback` reintenta en primer lugar el canal activo; únicamente tras agotar los reintentos locales conmuta a la señal de respaldo.
+  - Aumentados timeouts de backend (`wait_timeout=20s`, `_wait_for_upstream_media=12s`) y frontend (`loadTimeout=35s`) para evitar falsos timeouts en arranques de canales fríos P2P.
+
 ## v2.11.2
 
 - **Blindaje contra falsos positivos de failover:**
