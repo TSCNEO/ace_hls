@@ -14,7 +14,7 @@
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="style.css?v=v2.10.0">
+    <link rel="stylesheet" href="style.css?v=v2.10.1">
 </head>
 
 <body>
@@ -120,19 +120,32 @@
 
         <div id="agenda-view" style="display:none;">
             <div class="agenda-toolbar">
-                <input type="text" id="agendaSearchInput" placeholder="Buscar equipo, competición o canal..." oninput="filterAgenda()">
-                <div class="agenda-filters">
-                    <label class="agenda-check-label">
-                        <input type="checkbox" id="agendaAvailableOnly" onchange="filterAgenda()" checked>
-                        <span>🟢 Solo disponibles</span>
-                    </label>
-                    <label class="agenda-check-label">
-                        <input type="checkbox" id="agendaLiveOnly" onchange="filterAgenda()">
-                        <span>🔴 En directo</span>
-                    </label>
+                <div class="agenda-toolbar-row">
+                    <input type="text" id="agendaSearchInput" placeholder="Buscar equipo, competición o canal..." oninput="filterAgenda()">
+                    <select id="agendaCompSelect" class="agenda-select" onchange="filterAgenda()">
+                        <option value="">🏆 Todas las competiciones</option>
+                    </select>
                     <button onclick="loadAgenda(true)" class="theme-btn" title="Refrescar Agenda">🔄</button>
+                    <div id="agendaStatus" class="agenda-status-pill"></div>
                 </div>
-                <div id="agendaStatus" class="agenda-status-pill"></div>
+                <div class="agenda-toolbar-row">
+                    <div class="agenda-day-tabs" id="agendaDayTabs">
+                        <button class="day-tab-btn active" data-day="all" onclick="selectAgendaDay('all')">📅 Todos</button>
+                        <button class="day-tab-btn" data-day="0" onclick="selectAgendaDay('0')">⚽ Hoy</button>
+                        <button class="day-tab-btn" data-day="1" onclick="selectAgendaDay('1')">🗓️ Mañana</button>
+                        <button class="day-tab-btn" data-day="2" onclick="selectAgendaDay('2')">🗓️ Pasado</button>
+                    </div>
+                    <div class="agenda-filters">
+                        <label class="agenda-check-label">
+                            <input type="checkbox" id="agendaAvailableOnly" onchange="filterAgenda()" checked>
+                            <span>🟢 Solo disponibles</span>
+                        </label>
+                        <label class="agenda-check-label">
+                            <input type="checkbox" id="agendaLiveOnly" onchange="filterAgenda()">
+                            <span>⚡ En directo</span>
+                        </label>
+                    </div>
+                </div>
             </div>
             <div id="agenda-container">
                 <div class="loading" style="text-align:center;">Cargando agenda deportiva...</div>
@@ -384,7 +397,7 @@
 
     <!-- Custom Scripts -->
     <script src="vendor/hls.min.js?v=1.5.18"></script>
-    <script src="script.js?v=v2.10.0"></script>
+    <script src="script.js?v=v2.10.1"></script>
 </body>
 
 </html>

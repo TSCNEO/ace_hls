@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.10.1
+
+- Rediseño compacto de la barra de herramientas de la Agenda Deportiva (`.agenda-toolbar`), eliminando espacios vacíos e integrando el estado de eventos en la cabecera.
+- Pestañas selectoras de día (`[ 📅 Todos | ⚽ Hoy | 🗓️ Mañana | 🗓️ Pasado ]`) con contador dinámico de eventos en cada píldora.
+- Desplegable de filtro por competición (`#agendaCompSelect`) generado dinámicamente según los eventos cargados.
+- Reemplazo del emoji rojo por `⚡ En directo` tanto en filtros como en las tarjetas de eventos para evitar confusión con estados de error.
+- Búsqueda en tiempo real por equipo, competición o canal combinable con el selector de día y competición.
+
 ## v2.10.0
 
 - Añadido módulo de **Agenda Deportiva (EPG)**: eventos deportivos multidiarios sincronizados con `futbolenlatv.es/deporte`.

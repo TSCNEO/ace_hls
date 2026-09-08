@@ -803,24 +803,75 @@ footer {
 
 .agenda-toolbar {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
+    flex-direction: column;
     gap: 12px;
     margin-bottom: 20px;
     background: var(--card-bg);
-    padding: 12px 16px;
+    padding: 14px 16px;
     border-radius: 10px;
     border: 1px solid var(--border-color);
 }
 
+.agenda-toolbar-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
 .agenda-toolbar input[type="text"] {
-    flex: 1 1 240px;
+    flex: 1 1 220px;
+    min-width: 160px;
     background: var(--input-bg);
     border: 1px solid var(--border-color);
     color: var(--text-color);
     padding: 8px 12px;
     border-radius: 6px;
-    font-size: 0.95rem;
+    font-size: 0.92rem;
+}
+
+.agenda-select {
+    flex: 0 1 240px;
+    min-width: 180px;
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.agenda-day-tabs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.day-tab-btn {
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    user-select: none;
+    font-weight: 500;
+}
+
+.day-tab-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.day-tab-btn.active {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: #fff;
+    font-weight: 600;
 }
 
 .agenda-filters {
@@ -828,6 +879,7 @@ footer {
     align-items: center;
     gap: 14px;
     flex-wrap: wrap;
+    margin-left: auto;
 }
 
 .agenda-check-label {
@@ -840,9 +892,14 @@ footer {
 }
 
 .agenda-status-pill {
-    font-size: 0.8rem;
-    opacity: 0.75;
+    font-size: 0.82rem;
+    opacity: 0.85;
     margin-left: auto;
+    white-space: nowrap;
+    padding: 4px 10px;
+    background: var(--input-bg);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
 }
 
 .agenda-day-section {
@@ -893,7 +950,7 @@ footer {
 }
 
 .agenda-card.is-live {
-    border-left: 4px solid #ff4d4d;
+    border-left: 4px solid #ff7a00;
 }
 
 .agenda-card-header {
@@ -919,7 +976,7 @@ footer {
 }
 
 .badge-live {
-    background: #ff4d4d;
+    background: #ff7a00;
     color: #fff;
     animation: pulse-live 1.8s infinite;
 }

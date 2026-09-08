@@ -74,7 +74,7 @@ docker compose ps
 
 # 2. Version endpoint
 curl -s --fail http://127.0.0.1:8088/api/version
-# Output: {"transcoding":true,"version":"v2.10.0"}
+# Output: {"transcoding":true,"version":"v2.10.1"}
 
 # 3. Health check
 curl -s --fail http://127.0.0.1:8088/health
@@ -86,7 +86,7 @@ curl -s --fail http://127.0.0.1:8088/api/orchestrator/config
 
 ## Critical Agent Invariants
 
-1. **Never use `build:` in Easy Deploy:** Easy Deploy must exclusively pull official prebuilt images (`tscneo/ace-hls-viewer:2.10.0`).
+1. **Never use `build:` in Easy Deploy:** Easy Deploy must exclusively pull official prebuilt images (`tscneo/ace-hls-viewer:2.10.1`).
 2. **Never expose ports directly to WAN:** AceStream and AceHLS are intended for private LANs or VPNs (WireGuard / Tailscale).
 3. **Do not destroy data volumes:** Persistent channels and settings reside in `ace_hls_data`. Never run `docker compose down -v` unless the user explicitly requested data destruction.
 4. **Remote variant isolation:** `orchestrator-remote` must never mount the Docker socket.

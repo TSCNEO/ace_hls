@@ -610,7 +610,7 @@ class AgendaService:
                 comp = ev.get("competition", "")
                 logo = ev.get("competition_icon") or ev.get("local_icon") or ""
 
-                live_tag = "[🔴 VIVO] " if is_live else ""
+                live_tag = "[⚡ VIVO] " if is_live else ""
 
                 for st in ev["streams"]:
                     sid = st.get("stream_id")

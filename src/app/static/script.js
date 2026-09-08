@@ -1587,6 +1587,7 @@ function handleImageError(img, id) {
    ========================================================================== */
 let currentMainView = 'channels';
 let agendaData = null;
+let selectedAgendaDay = 'all';
 
 function switchMainView(view) {
     currentMainView = view;
@@ -1641,6 +1642,8 @@ async function loadAgenda(forceRefresh = false) {
             statusPill.textContent = `📡 ${avail} disponibles / ${total} eventos`;
         }
 
+        populateCompetitionFilter();
+        updateDayTabs();
         filterAgenda();
     } catch (err) {
         console.error("Error loading sports agenda:", err);
@@ -1655,19 +1658,98 @@ async function loadAgenda(forceRefresh = false) {
     }
 }
 
+function populateCompetitionFilter() {
+    const select = document.getElementById('agendaCompSelect');
+    if (!select || !agendaData || !agendaData.days) return;
+    const currentVal = select.value;
+    const comps = new Set();
+    agendaData.days.forEach(day => {
+        (day.events || []).forEach(ev => {
+            if (ev.competition && ev.competition.trim()) {
+                comps.add(ev.competition.trim());
+            }
+        });
+    });
+    const sortedComps = Array.from(comps).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+    select.textContent = '';
+    const defOpt = element('option', '', '🏆 Todas las competiciones');
+    defOpt.value = '';
+    select.appendChild(defOpt);
+    sortedComps.forEach(c => {
+        const opt = element('option', '', c);
+        opt.value = c;
+        if (c === currentVal) opt.selected = true;
+        select.appendChild(opt);
+    });
+}
+
+function updateDayTabs() {
+    const tabsContainer = document.getElementById('agendaDayTabs');
+    if (!tabsContainer || !agendaData || !agendaData.days) return;
+    const availableOnly = !!document.getElementById('agendaAvailableOnly')?.checked;
+
+    const dayButtons = tabsContainer.querySelectorAll('.day-tab-btn');
+    dayButtons.forEach(btn => {
+        const dAttr = btn.getAttribute('data-day');
+        if (dAttr === 'all') {
+            let totalAll = 0;
+            agendaData.days.forEach(d => {
+                totalAll += (d.events || []).filter(e => !availableOnly || e.available).length;
+            });
+            btn.textContent = `📅 Todos (${totalAll})`;
+        } else {
+            const idx = parseInt(dAttr, 10);
+            const d = agendaData.days[idx];
+            if (d) {
+                const count = (d.events || []).filter(e => !availableOnly || e.available).length;
+                const prefix = idx === 0 ? '⚽ Hoy' : (idx === 1 ? '🗓️ Mañana' : '🗓️ Pasado');
+                btn.textContent = `${prefix} (${count})`;
+                btn.style.display = 'inline-flex';
+            } else {
+                btn.style.display = 'none';
+            }
+        }
+    });
+}
+
+function selectAgendaDay(dayAttr) {
+    selectedAgendaDay = String(dayAttr);
+    const tabs = document.querySelectorAll('#agendaDayTabs .day-tab-btn');
+    tabs.forEach(t => {
+        if (t.getAttribute('data-day') === selectedAgendaDay) {
+            t.classList.add('active');
+        } else {
+            t.classList.remove('active');
+        }
+    });
+    filterAgenda();
+}
+
 function filterAgenda() {
     if (!agendaData || !agendaData.days) return;
 
     const query = (document.getElementById('agendaSearchInput')?.value || '').trim().toLowerCase();
+    const selectedComp = (document.getElementById('agendaCompSelect')?.value || '').trim().toLowerCase();
     const availableOnly = !!document.getElementById('agendaAvailableOnly')?.checked;
     const liveOnly = !!document.getElementById('agendaLiveOnly')?.checked;
 
+    updateDayTabs();
+
     const filteredDays = [];
 
-    agendaData.days.forEach(day => {
+    agendaData.days.forEach((day, idx) => {
+        if (selectedAgendaDay !== 'all' && String(idx) !== selectedAgendaDay) {
+            return;
+        }
+
         const matchingEvents = (day.events || []).filter(ev => {
             if (availableOnly && !ev.available) return false;
             if (liveOnly && !ev.is_live) return false;
+
+            if (selectedComp) {
+                const comp = (ev.competition || '').trim().toLowerCase();
+                if (comp !== selectedComp) return false;
+            }
 
             if (query) {
                 const eventText = (ev.event || '').toLowerCase();
@@ -1733,7 +1815,7 @@ function renderAgenda(days) {
             badgesDiv.style.alignItems = 'center';
 
             if (ev.is_live) {
-                badgesDiv.appendChild(element('span', 'agenda-badge badge-live', '🔴 En Directo'));
+                badgesDiv.appendChild(element('span', 'agenda-badge badge-live', '⚡ En Directo'));
             } else if (ev.is_upcoming) {
                 badgesDiv.appendChild(element('span', 'agenda-badge badge-upcoming', '⏳ Próximamente'));
             }

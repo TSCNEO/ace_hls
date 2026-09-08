@@ -51,7 +51,7 @@ http://<ip-o-host>:8088/agenda.m3u
 ### Características
 * **Actualización en tiempo real:** A medida que los eventos van finalizando o entrando en emisión, la lista se refresca automáticamente sin necesidad de editar la URL en tus clientes IPTV.
 * **Detección multiseñal:** Si un evento importante (ej. un partido de liga) cuenta con múltiples emisiones disponibles en tu catálogo (de distintas fuentes o calidades), la lista genera una entrada independiente para cada señal, indicando calidad y origen en el título.
-* **Marcado de emisión en directo:** Los eventos que se están disputando en el momento de la consulta se marcan automáticamente con el prefijo `[🔴 VIVO]`.
+* **Marcado de emisión en directo:** Los eventos que se están disputando en el momento de la consulta se marcan automáticamente con el prefijo `[⚡ VIVO]`.
 
 ### Modos de Reproducción (Surfaces / Perfiles)
 Mediante el parámetro `profile`, puedes elegir qué superficie de reproducción entrega la lista:
@@ -75,9 +75,11 @@ Ejemplo de agrupación en modo `profile=all`:
 ## 4. Uso en la WebUI
 
 1. En la barra superior de AceHLS, pulsa en la pestaña **⚽ Agenda**.
-2. Filtra por texto (equipo o competición), activa la casilla **🟢 Solo disponibles** o filtra por **🔴 En directo**.
-3. Haz clic en **▶ Ver** en cualquier partido para abrir inmediatamente el reproductor integrado HLS de AceHLS.
-4. Para copiar o descargar la lista M3U de eventos, abre el menú desplegable **📋 M3U** de la cabecera y selecciona **⚽ Agenda**.
+2. **Pestañas de Día:** Alterna entre `[ 📅 Todos | ⚽ Hoy | 🗓️ Mañana | 🗓️ Pasado ]` con los contadores de eventos activos en cada pestaña.
+3. **Filtro por Competición:** Utiliza el menú desplegable dinámico para aislar competiciones específicas (ej. *LaLiga EA Sports*, *Champions League*, *US Open*, etc.).
+4. **Búsqueda y Filtros:** Escribe el nombre de cualquier equipo o canal en el buscador, activa la casilla **🟢 Solo disponibles** o filtra por eventos **⚡ En directo**.
+5. Haz clic en **▶ Ver** en cualquier partido para abrir inmediatamente el reproductor integrado HLS de AceHLS.
+6. Para copiar o descargar la lista M3U de eventos, abre el menú desplegable **📋 M3U** de la cabecera y selecciona **⚽ Agenda**.
 
 ---
 
