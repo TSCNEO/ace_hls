@@ -33,6 +33,16 @@ main_bp = Blueprint('main', __name__)
 HLS_CONTENT_TYPE_MARKERS = ('mpegurl', 'application/x-mpegurl')
 MAX_UPSTREAM_MANIFEST_BYTES = 1024 * 1024
 
+def _request_proto(req) -> str:
+    fwd = req.headers.get('X-Forwarded-Proto')
+    if fwd:
+        p = fwd.split(',')[0].strip().lower()
+        if p in ('http', 'https'):
+            return p
+    if getattr(req, 'scheme', None) and req.scheme.lower() in ('http', 'https'):
+        return req.scheme.lower()
+    return 'http'
+
 @main_bp.route('/dashboard')
 def dashboard():
     return current_app.send_static_file('dashboard.html')
@@ -358,6 +368,7 @@ def get_agenda_playlist():
 
     live_only = request.args.get('live_only', '').lower() in ('true', '1')
     host = request.headers.get('Host') or request.host
+    proto = _request_proto(request)
 
     channels_data = []
     if os.path.exists(Config.JSON_FILE):
@@ -369,6 +380,7 @@ def get_agenda_playlist():
 
     m3u_text = agenda_service.generate_agenda_m3u(
         host=host,
+        proto=proto,
         profile=profile,
         catalog_channels=channels_data,
         live_only=live_only,
@@ -972,7 +984,8 @@ def get_playlist():
         channel_manager.update_channels()
 
     host = request.headers.get('Host') or request.host
-    tvg_url = f"http://{host}/epg.xml" if host else "/epg.xml"
+    proto = _request_proto(request)
+    tvg_url = f"{proto}://{host}/epg.xml" if host else "/epg.xml"
     m3u_content = [f'#EXTM3U url-tvg="{tvg_url}" x-tvg-url="{tvg_url}"']
     
     try:
@@ -996,7 +1009,7 @@ def get_playlist():
                     
                 # HLS variants
                 suffix = f"?profile={p}{type_suffix}" if p and p != 'original' else (f"?identifier_type=infohash" if identifier_type == 'infohash' else "")
-                return f"http://{host}/stream/{ch['id']}.m3u8{suffix}"
+                return f"{proto}://{host}/stream/{ch['id']}.m3u8{suffix}"
 
             m3u_content.append(gen_link(profile))
 
@@ -1017,7 +1030,8 @@ def get_playlist_all():
         channel_manager.update_channels()
 
     host = request.headers.get('Host') or request.host
-    tvg_url = f"http://{host}/epg.xml" if host else "/epg.xml"
+    proto = _request_proto(request)
+    tvg_url = f"{proto}://{host}/epg.xml" if host else "/epg.xml"
     m3u_content = [f'#EXTM3U url-tvg="{tvg_url}" x-tvg-url="{tvg_url}"']
     
     try:
@@ -1039,19 +1053,19 @@ def get_playlist_all():
             
             # Original
             m3u_content.append(f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-logo="{logo}" group-title="{group}",{display_name}')
-            m3u_content.append(f"http://{host}/stream/{cid}.m3u8{type_query}")
+            m3u_content.append(f"{proto}://{host}/stream/{cid}.m3u8{type_query}")
 
             # Compat (Recode)
             m3u_content.append(f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-logo="{logo}" group-title="{group}",{display_name} [Compat]')
-            m3u_content.append(f"http://{host}/stream/{cid}.m3u8?profile=max_compat{type_param}")
+            m3u_content.append(f"{proto}://{host}/stream/{cid}.m3u8?profile=max_compat{type_param}")
             
             # 720p
             m3u_content.append(f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-logo="{logo}" group-title="{group}",{display_name} [720p]')
-            m3u_content.append(f"http://{host}/stream/{cid}.m3u8?profile=720p{type_param}")
+            m3u_content.append(f"{proto}://{host}/stream/{cid}.m3u8?profile=720p{type_param}")
 
             # 480p
             m3u_content.append(f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-logo="{logo}" group-title="{group}",{display_name} [480p]')
-            m3u_content.append(f"http://{host}/stream/{cid}.m3u8?profile=480p{type_param}")
+            m3u_content.append(f"{proto}://{host}/stream/{cid}.m3u8?profile=480p{type_param}")
 
     except Exception as e:
         return str(e), 500

@@ -48,6 +48,11 @@ def test_api_agenda_routes():
         assert b"#EXTM3U" in res_api_m3u.data
         assert b'url-tvg="http://localhost/epg.xml"' in res_api_m3u.data
 
+        # 5a. GET /agenda.m3u with HTTPS via reverse proxy header
+        res_m3u_https = client.get("/agenda.m3u", headers={"X-Forwarded-Proto": "https", "Host": "tv.example.com"})
+        assert res_m3u_https.status_code == 200
+        assert b'url-tvg="https://tv.example.com/epg.xml"' in res_m3u_https.data
+
         # 5b. GET /epg.xml and /api/agenda/epg.xml
         res_epg = client.get("/epg.xml")
         assert res_epg.status_code == 200

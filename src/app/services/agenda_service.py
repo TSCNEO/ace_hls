@@ -601,14 +601,18 @@ class AgendaService:
 
     def generate_agenda_m3u(
         self,
-        host: str,
+        host: str | None = None,
+        proto: str = "http",
         profile: str = "original",
         catalog_channels: list[dict[str, Any]] | None = None,
         live_only: bool = False,
     ) -> str:
         """Generate dynamic M3U playlist from current sports agenda with multi-origin signals."""
         agenda = self.get_agenda(catalog_channels=catalog_channels)
-        tvg_url = f"http://{host}/epg.xml" if host else "/epg.xml"
+        scheme = str(proto or "http").strip().lower()
+        if scheme not in ("http", "https"):
+            scheme = "http"
+        tvg_url = f"{scheme}://{host}/epg.xml" if host else "/epg.xml"
         lines = [f'#EXTM3U url-tvg="{tvg_url}" x-tvg-url="{tvg_url}"']
 
         profiles_to_render = (
@@ -685,7 +689,7 @@ class AgendaService:
                                     else ""
                                 )
                             )
-                            link = f"http://{host}/stream/{sid}.m3u8{suffix}"
+                            link = f"{scheme}://{host}/stream/{sid}.m3u8{suffix}"
 
                         safe_title = str(display_name).replace("\r", " ").replace("\n", " ")
                         safe_group = str(group).replace('"', "'").replace("\r", " ").replace("\n", " ")
