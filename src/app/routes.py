@@ -720,7 +720,7 @@ def _probe_upstream_media(ace_id, identifier_type='id'):
     try:
         resp = requests.get(
             _internal_stream_url(ace_id, identifier_type),
-            timeout=(3, 5),
+            timeout=(3, 8),
             stream=True
         )
         resp.raise_for_status()
@@ -742,7 +742,7 @@ def _probe_upstream_media(ace_id, identifier_type='id'):
 def _upstream_has_media(ace_id, identifier_type='id'):
     return _probe_upstream_media(ace_id, identifier_type) is not None
 
-def _wait_for_upstream_media(ace_id, timeout=30, identifier_type='id'):
+def _wait_for_upstream_media(ace_id, timeout=25, identifier_type='id'):
     deadline = time.time() + timeout
     while time.time() < deadline:
         if _upstream_has_media(ace_id, identifier_type):
@@ -792,7 +792,7 @@ def _start_hls_with_retries(
     profile,
     force=False,
     attempts=2,
-    wait_timeout=20,
+    wait_timeout=35,
     upstream_ready=False,
     identifier_type='id',
 ):
@@ -800,7 +800,7 @@ def _start_hls_with_retries(
 
     for attempt in range(1, attempts + 1):
         media_ready = upstream_ready if attempt == 1 else False
-        if not media_ready and not _wait_for_upstream_media(ace_id, timeout=12, identifier_type=identifier_type):
+        if not media_ready and not _wait_for_upstream_media(ace_id, timeout=25, identifier_type=identifier_type):
             if attempt < attempts:
                 time.sleep(min(attempt, 2))
                 continue

@@ -760,7 +760,7 @@ function updateStatsHud(isCalibration = false) {
     if (fpsEl) {
         if (currentMeasuredFps > 0) {
             const is50p = currentMeasuredFps >= 45;
-            fpsEl.textContent = `${currentMeasuredFps} fps ${is50p ? '⚡ (50p Fluido)' : '⚠️ (25p Estándar)'}`;
+            fpsEl.textContent = `${currentMeasuredFps} fps`;
             fpsEl.style.color = is50p ? '#3fb950' : '#d29922';
         } else {
             fpsEl.textContent = 'Midiendo...';
@@ -906,29 +906,46 @@ function jumpToLiveEdge() {
     if (!player) return;
     if (hlsInstance && typeof hlsInstance.liveSyncPosition === 'number' && hlsInstance.liveSyncPosition > 0) {
         player.currentTime = Math.max(0, hlsInstance.liveSyncPosition - 1);
+    } else if (player.seekable && player.seekable.length > 0) {
+        const end = player.seekable.end(player.seekable.length - 1);
+        player.currentTime = Math.max(0, end - 1);
     } else if (player.buffered && player.buffered.length > 0) {
         const end = player.buffered.end(player.buffered.length - 1);
         player.currentTime = Math.max(0, end - 1.5);
     }
     const p = player.play();
     if (p) p.catch(() => {});
-    updateLiveEdgeVisibility();
+    const btn = document.getElementById('btn-live-edge');
+    if (btn) btn.style.display = 'none';
 }
 
+let lastLiveEdgeCheck = 0;
 function updateLiveEdgeVisibility() {
     const player = getPlayerElement();
     const btn = document.getElementById('btn-live-edge');
     if (!player || !btn) return;
 
+    const now = performance.now();
+    if (now - lastLiveEdgeCheck < 1500) return;
+    lastLiveEdgeCheck = now;
+
     let lag = 0;
-    if (player.buffered && player.buffered.length > 0) {
-        const end = player.buffered.end(player.buffered.length - 1);
-        lag = end - player.currentTime;
+    if (hlsInstance && typeof hlsInstance.liveSyncPosition === 'number' && hlsInstance.liveSyncPosition > 0) {
+        lag = Math.max(0, hlsInstance.liveSyncPosition - player.currentTime);
+    } else if (player.seekable && player.seekable.length > 0) {
+        const liveEdge = player.seekable.end(player.seekable.length - 1);
+        lag = Math.max(0, liveEdge - player.currentTime);
     }
-    if (lag > 6 || player.paused) {
-        btn.style.display = 'inline-flex';
+
+    const isVisible = btn.style.display === 'inline-flex';
+    if (isVisible) {
+        if (lag < 6 && !player.paused) {
+            btn.style.display = 'none';
+        }
     } else {
-        btn.style.display = 'none';
+        if (lag > 15 || (player.paused && hasPlayedSuccessfully && player.currentTime > 5)) {
+            btn.style.display = 'inline-flex';
+        }
     }
 }
 
@@ -1170,29 +1187,20 @@ function attachHlsToPlayer(player, streamUrl, aceId, profile, generation) {
             if (data.type === Hls.ErrorTypes.MEDIA_ERROR && hlsInstance) {
                 console.log('[Player] Recovering media error...');
                 hlsInstance.recoverMediaError();
-                setTimeout(() => {
-                    const stillStalled = player.readyState < 2 || (player.paused && hasPlayedSuccessfully);
-                    if (stillStalled && generation === playbackGeneration && currentAceId === aceId) {
-                        recoverPlayback('El reproductor no pudo recuperarse del fallo de medio.', true);
-                    }
-                }, 5000);
                 return;
             }
 
-            // 2. Recover network errors (transient segment delays)
+            // 2. Recover network errors (transient segment delays / 404 while ffmpeg writes)
             if (data.type === Hls.ErrorTypes.NETWORK_ERROR && hlsInstance) {
                 console.log('[Player] Recovering network error...');
                 hlsInstance.startLoad();
-                setTimeout(() => {
-                    if (player.readyState < 2 && generation === playbackGeneration && currentAceId === aceId) {
-                        recoverPlayback('Corte de red en el flujo HLS.', true);
-                    }
-                }, 6000);
                 return;
             }
 
-            // 3. Any other non-recoverable error triggers recovery/failover
-            recoverPlayback('Fallo crítico en flujo HLS.', true);
+            // 3. Only trigger failover if stream was previously playing successfully and died
+            if (hasPlayedSuccessfully) {
+                recoverPlayback('Fallo crítico en flujo HLS.', true);
+            }
         });
 
         const onProgressing = () => {
@@ -1207,6 +1215,13 @@ function attachHlsToPlayer(player, streamUrl, aceId, profile, generation) {
         };
 
         player.addEventListener('playing', onProgressing);
+        player.addEventListener('canplay', () => {
+            hidePlayerStatus();
+            if (player.paused && !hasPlayedSuccessfully) {
+                const p = player.play();
+                if (p) p.catch(() => {});
+            }
+        });
         player.addEventListener('timeupdate', () => {
             if (player.currentTime > 0.1) {
                 onProgressing();
@@ -1217,16 +1232,17 @@ function attachHlsToPlayer(player, streamUrl, aceId, profile, generation) {
         hlsInstance.on(Hls.Events.AUDIO_TRACK_SWITCHED, setupAudioTracks);
 
         hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-            hidePlayerStatus();
             setupAudioTracks();
             const playPromise = player.play();
-            if (playPromise) playPromise.catch(() => {
-                hidePlayerStatus();
-            });
+            if (playPromise) playPromise.catch(() => {});
         });
 
         hlsInstance.on(Hls.Events.FRAG_LOADED, () => {
             hidePlayerStatus();
+            if (player.paused && !hasPlayedSuccessfully) {
+                const playPromise = player.play();
+                if (playPromise) playPromise.catch(() => {});
+            }
         });
 
         hlsInstance.on(Hls.Events.MEDIA_ATTACHED, () => {
@@ -1297,14 +1313,14 @@ async function startPlayback(aceId, profile, options = {}) {
                 vlcBtn.removeAttribute('href'); // Ensure it's a button behavior
             }
 
-            // Timeout Logic (35 seconds) - Trigger recovery ONLY if completely unresponsive on startup
+            // Timeout Logic (45 seconds) - Trigger recovery ONLY if completely unresponsive on startup
             if (loadTimeout) clearTimeout(loadTimeout);
             loadTimeout = setTimeout(() => {
                 if (!hasPlayedSuccessfully && (player.readyState < 2 || player.paused) && currentAceId === aceId) {
                     console.warn("[Player] Stream startup timeout without playable frames");
-                    recoverPlayback('La señal tardó más de 35s en arrancar.', true);
+                    recoverPlayback('La señal tardó más de 45s en arrancar.', true);
                 }
-            }, 35000);
+            }, 45000);
 
             const onStarted = () => {
                 if (loadTimeout) {
@@ -1320,6 +1336,19 @@ async function startPlayback(aceId, profile, options = {}) {
             });
 
         } else {
+            // If the stream is still buffering or timed out, give it one immediate retry without force
+            // because AceStream may have established peers during the previous wait.
+            if (playbackRetryCount < 1 && data.retryable !== false) {
+                playbackRetryCount++;
+                showPlayerStatus('Esperando buffer', 'AceStream sigue conectando con el enjambre P2P... Reintentando...');
+                setTimeout(() => {
+                    if (currentAceId === aceId && generation === playbackGeneration) {
+                        startPlayback(aceId, currentProfile, { force: false, resetRetries: false });
+                    }
+                }, 2000);
+                return;
+            }
+
             if (triggerMatchFailover("Señal no disponible o sin peers.")) {
                 return;
             }
@@ -1331,6 +1360,16 @@ async function startPlayback(aceId, profile, options = {}) {
             console.log("Fetch aborted (user closed player or switched)");
         } else {
             console.error(e);
+            if (playbackRetryCount < 1) {
+                playbackRetryCount++;
+                showPlayerStatus('Reconectando', 'Reintentando conexión con el servidor HLS...');
+                setTimeout(() => {
+                    if (currentAceId === aceId && generation === playbackGeneration) {
+                        startPlayback(aceId, currentProfile, { force: false, resetRetries: false });
+                    }
+                }, 2000);
+                return;
+            }
             if (triggerMatchFailover("Error de conexión con el servidor.")) {
                 return;
             }
@@ -1407,6 +1446,14 @@ function closePlayer(fromHistory = false) {
         currentAbortController = null;
     }
 
+    currentMatchStreamQueue = [];
+    currentMatchQueueIndex = 0;
+    currentMatchTitle = '';
+    if (matchFailoverTimer) {
+        clearTimeout(matchFailoverTimer);
+        matchFailoverTimer = null;
+    }
+
     // Manage History
     if (!fromHistory) {
         // If closed manually (X button), go back to remove hash
@@ -1426,6 +1473,7 @@ function closePlayer(fromHistory = false) {
     playbackGeneration++;
     resetPlayerEngine();
     resetPlayerOverlays();
+    hidePlayerStatus();
     document.getElementById('player-modal').style.display = 'none';
     if (statsInterval) clearInterval(statsInterval);
     if (engineInfoInterval) clearInterval(engineInfoInterval);
