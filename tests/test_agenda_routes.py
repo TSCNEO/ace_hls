@@ -45,3 +45,20 @@ def test_api_agenda_routes():
         assert res_api_m3u.status_code == 200
         assert res_api_m3u.mimetype == "audio/x-mpegurl"
         assert b"#EXTM3U" in res_api_m3u.data
+
+        # 6. POST /api/agenda/probe
+        with patch("app.services.agenda_service.agenda_service.probe_candidate_streams") as mock_probe:
+            mock_probe.return_value = {
+                "status": "ok",
+                "live_count": 1,
+                "probed": {"s1": {"alive": True, "quality": "1080p", "source_name": "Test"}}
+            }
+            res_probe = client.post("/api/agenda/probe", json={"streams": [{"stream_id": "s1"}]})
+            assert res_probe.status_code == 200
+            probe_json = json.loads(res_probe.data)
+            assert probe_json["status"] == "ok"
+            assert probe_json["live_count"] == 1
+
+            # Invalid payload returns 400
+            res_bad = client.post("/api/agenda/probe", json={})
+            assert res_bad.status_code == 400

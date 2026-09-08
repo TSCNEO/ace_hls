@@ -681,5 +681,76 @@ class AgendaService:
                 pass
         return []
 
+    def probe_candidate_streams(
+        self,
+        candidates: list[dict[str, Any]],
+        max_candidates: int = 3,
+        stop_at_live: int = 2,
+        probe_fn: Any = None,
+    ) -> dict[str, Any]:
+        """Test up to max_candidates sequentially; stop as soon as stop_at_live are confirmed alive."""
+        probe_func = probe_fn or probe_single_stream
+        probed_results: dict[str, dict[str, Any]] = {}
+        live_count = 0
+
+        selected = candidates[:max_candidates]
+        for item in selected:
+            sid = str(item.get("stream_id") or "")
+            if not sid:
+                continue
+
+            itype = str(item.get("identifier_type") or "id")
+            is_alive = False
+            try:
+                is_alive = bool(probe_func(sid, itype))
+            except Exception as e:
+                logger.warning(f"Error probing candidate stream {sid}: {e}")
+                is_alive = False
+
+            probed_results[sid] = {
+                "alive": is_alive,
+                "quality": item.get("quality", "SD"),
+                "source_name": item.get("source_name", ""),
+            }
+
+            if is_alive:
+                live_count += 1
+                if live_count >= stop_at_live:
+                    break
+
+        return {
+            "status": "ok",
+            "live_count": live_count,
+            "probed": probed_results,
+        }
+
+
+def probe_single_stream(
+    stream_id: str,
+    identifier_type: str = "id",
+    host: str | None = None,
+    port: int | None = None,
+    timeout: tuple[float, float] = (2.0, 3.0),
+) -> bool:
+    """Connect to stream endpoint and check for initial data chunk without spawning ffmpeg."""
+    try:
+        import requests
+        from app import utils
+        from app.config import Config
+
+        target_host = host or utils.get_stream_proxy_host_for_server()
+        target_port = port or Config.STREAM_PROXY_PORT
+        query_key = "infohash" if identifier_type == "infohash" else "id"
+        url = f"http://{target_host}:{target_port}/ace/getstream?{query_key}={stream_id}"
+
+        resp = requests.get(url, timeout=timeout, stream=True)
+        resp.raise_for_status()
+        chunk = next(resp.iter_content(4096), b"")
+        resp.close()
+        return bool(chunk)
+    except Exception as e:
+        logger.debug(f"Probe failed for {stream_id}: {e}")
+        return False
+
 
 agenda_service = AgendaService()

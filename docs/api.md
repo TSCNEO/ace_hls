@@ -41,6 +41,7 @@ Todas las respuestas de gestión son JSON salvo las listas M3U, logs y archivos 
 | `GET` | `/api/agenda` | Agenda multidiaria de eventos deportivos cruzada con los canales AceStream disponibles. Query opcional: `refresh`, `live_only`, `available_only`. |
 | `GET` | `/api/agenda/live` | Eventos deportivos en directo en la franja horaria actual. Query opcional: `available_only`. |
 | `POST` | `/api/agenda/refresh` | Fuerza el refresco de la agenda deportiva desde la fuente oficial. |
+| `POST` | `/api/agenda/probe` | Sondea de forma secuencial y ligera hasta 3 streams candidatos de un evento para verificar disponibilidad en vivo sin saturar el motor. |
 | `GET` | `/agenda.m3u` | Lista M3U dinámica con eventos deportivos y sus canales disponibles. Query: `profile` (`original`, `direct`, `max_compat`, `720p`, `all`), `live_only`. |
 | `GET` | `/api/agenda/playlist.m3u` | Alias de `/agenda.m3u`. |
 

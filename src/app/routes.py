@@ -301,6 +301,23 @@ def refresh_agenda():
         "updated_at": agenda.get("updated_at"),
     })
 
+@main_bp.route('/api/agenda/probe', methods=['POST'])
+def probe_agenda_streams():
+    payload = request.get_json(silent=True) or {}
+    streams = payload.get("streams", [])
+    if not isinstance(streams, list) or not streams:
+        return jsonify({"status": "error", "message": "No streams provided"}), 400
+
+    max_candidates = min(int(payload.get("max_candidates", 3)), 5)
+    stop_at_live = min(int(payload.get("stop_at_live", 2)), 3)
+
+    result = agenda_service.probe_candidate_streams(
+        candidates=streams,
+        max_candidates=max_candidates,
+        stop_at_live=stop_at_live,
+    )
+    return jsonify(result)
+
 @main_bp.route('/agenda.m3u')
 @main_bp.route('/api/agenda/playlist.m3u')
 def get_agenda_playlist():
@@ -714,8 +731,8 @@ def _start_hls_with_retries(
     ace_id,
     profile,
     force=False,
-    attempts=3,
-    wait_timeout=45,
+    attempts=2,
+    wait_timeout=14,
     upstream_ready=False,
     identifier_type='id',
 ):
@@ -723,9 +740,9 @@ def _start_hls_with_retries(
 
     for attempt in range(1, attempts + 1):
         media_ready = upstream_ready if attempt == 1 else False
-        if not media_ready and not _wait_for_upstream_media(ace_id, timeout=30, identifier_type=identifier_type):
+        if not media_ready and not _wait_for_upstream_media(ace_id, timeout=8, identifier_type=identifier_type):
             if attempt < attempts:
-                time.sleep(min(attempt, 3))
+                time.sleep(min(attempt, 2))
                 continue
             break
 
@@ -749,7 +766,7 @@ def _start_hls_with_retries(
 
         hls_manager.stop_stream(effective_id)
         if attempt < attempts:
-            time.sleep(min(attempt, 3))
+            time.sleep(min(attempt, 2))
 
     return {
         "status": "timeout",

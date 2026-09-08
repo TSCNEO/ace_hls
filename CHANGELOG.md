@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.11.0
+
+- **Failover automático en reproductor Web:** Cuando se reproduce un partido de la Agenda, el reproductor arma una cola con todas las señales alternativas del evento. Si la señal principal tarda más de 12 segundos en arrancar, falla el flujo HLS o se congela el vídeo más de 7s, conmuta automáticamente a la siguiente señal viva sin interrumpir al usuario.
+- **Optimización de timeouts de arranque HLS:** Reducidos los tiempos de espera bloqueantes en el servidor de 45s a 14s por intento y 8s para detección de media, evitando cuelgues indefinidos en estado «Preparando stream».
+- **Seguimiento inteligente de partidos (Match Tracking ⭐):** Marcado de partidos favoritos en la Agenda persistidos en navegador; botón de sondeo acotado (`POST /api/agenda/probe`) que prueba secuencialmente hasta 3 candidatos y se detiene en cuanto confirma 2 señales vivas (🟢 UP), sin sobrecargar el motor AceStream ni generar falsos positivos.
+- Documentación ampliada en `docs/agenda.md` y `docs/api.md`.
+
 ## v2.10.1
 
 - Rediseño compacto de la barra de herramientas de la Agenda Deportiva (`.agenda-toolbar`), eliminando espacios vacíos e integrando el estado de eventos en la cabecera.

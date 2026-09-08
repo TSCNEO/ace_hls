@@ -78,8 +78,10 @@ Ejemplo de agrupación en modo `profile=all`:
 2. **Pestañas de Día:** Alterna entre `[ 📅 Todos | ⚽ Hoy | 🗓️ Mañana | 🗓️ Pasado ]` con los contadores de eventos activos en cada pestaña.
 3. **Filtro por Competición:** Utiliza el menú desplegable dinámico para aislar competiciones específicas (ej. *LaLiga EA Sports*, *Champions League*, *US Open*, etc.).
 4. **Búsqueda y Filtros:** Escribe el nombre de cualquier equipo o canal en el buscador, activa la casilla **🟢 Solo disponibles** o filtra por eventos **⚡ En directo**.
-5. Haz clic en **▶ Ver** en cualquier partido para abrir inmediatamente el reproductor integrado HLS de AceHLS.
-6. Para copiar o descargar la lista M3U de eventos, abre el menú desplegable **📋 M3U** de la cabecera y selecciona **⚽ Agenda**.
+5. **Seguimiento Inteligente (⭐):** Pulsa la estrella en cualquier tarjeta para marcar el partido en seguimiento. Permite ejecutar una comprobación ligera en segundo plano (`⚡ Comprobar`) que prueba secuencialmente hasta 3 candidatos sin sobrecargar el motor P2P y destaca las señales vivas confirmadas con la etiqueta `🟢 UP`.
+6. **Failover Automático:** Al reproducir un evento con múltiples señales, el reproductor HLS arma automáticamente una cadena de respaldo. Si la señal seleccionada tarda más de 12 segundos en entregar vídeo, sufre un corte fatal o se congela durante la emisión, conmuta inmediatamente a la siguiente mejor señal viva sin intervención manual.
+7. Haz clic en **▶ Ver** en cualquier partido para abrir inmediatamente el reproductor integrado HLS de AceHLS.
+8. Para copiar o descargar la lista M3U de eventos, abre el menú desplegable **📋 M3U** de la cabecera y selecciona **⚽ Agenda**.
 
 ---
 
@@ -88,5 +90,6 @@ Ejemplo de agrupación en modo `profile=all`:
 * `GET /api/agenda`: Devuelve el JSON estructurado de la agenda cruzada con tu catálogo. Query opcional: `refresh=true`, `live_only=true`, `available_only=true`.
 * `GET /api/agenda/live`: Devuelve únicamente los eventos en vivo en la franja horaria actual.
 * `POST /api/agenda/refresh`: Fuerza la descarga y procesamiento inmediato de la guía externa.
+* `POST /api/agenda/probe`: Sondea de forma secuencial y ligera hasta 3 streams candidatos de un evento para verificar disponibilidad en vivo sin saturar el motor.
 * `GET /agenda.m3u`: Exporta la lista M3U dinámica (admite `?profile=...` y `?live_only=true`).
 * `GET /api/agenda/playlist.m3u`: Alias de `/agenda.m3u`.

@@ -11,6 +11,47 @@ let playbackRetryCount = 0;
 let suppressPlayerErrors = false;
 const MAX_PLAYBACK_RECOVERY_ATTEMPTS = 2;
 
+// Match Stream Queue for Sports Agenda Failover
+let currentMatchStreamQueue = [];
+let currentMatchQueueIndex = 0;
+let currentMatchTitle = '';
+let matchFailoverTimer = null;
+
+function triggerMatchFailover(reason) {
+    if (matchFailoverTimer) {
+        clearTimeout(matchFailoverTimer);
+        matchFailoverTimer = null;
+    }
+
+    if (!currentMatchStreamQueue || currentMatchStreamQueue.length <= 1) {
+        return false;
+    }
+
+    if (currentMatchQueueIndex + 1 < currentMatchStreamQueue.length) {
+        currentMatchQueueIndex++;
+        const nextStream = currentMatchStreamQueue[currentMatchQueueIndex];
+        console.warn(`[Failover] Switching to backup stream #${currentMatchQueueIndex + 1}: ${nextStream.channel_name} (${reason})`);
+        showPlayerStatus(
+            '⚡ Conmutando señal',
+            `${reason} Saltando a señal de respaldo #${currentMatchQueueIndex + 1} (${nextStream.quality} · ${nextStream.source_name})...`,
+            { icon: '🔄' }
+        );
+
+        setTimeout(() => {
+            playAgendaStream(
+                nextStream.stream_id,
+                nextStream.channel_name,
+                currentMatchStreamQueue,
+                currentMatchQueueIndex,
+                currentMatchTitle
+            );
+        }, 800);
+        return true;
+    }
+
+    return false;
+}
+
 function absolutizeUrl(url) {
     if (!url) return '';
     if (/^https?:\/\//i.test(url)) return url;
@@ -741,6 +782,10 @@ function attachHlsToPlayer(player, streamUrl, aceId, profile, generation) {
             console.warn(data.fatal ? 'Fatal hls.js error:' : 'hls.js warning:', data);
             if (!data.fatal) return;
 
+            if (triggerMatchFailover('Fallo crítico en flujo HLS.')) {
+                return;
+            }
+
             if (data.type === Hls.ErrorTypes.MEDIA_ERROR && hlsInstance) {
                 showPlayerStatus('Recuperando reproducción', 'hls.js detectó un error de medio. Reintentando...');
                 hlsInstance.recoverMediaError();
@@ -756,6 +801,20 @@ function attachHlsToPlayer(player, streamUrl, aceId, profile, generation) {
             recoverPlayback('El stream HLS falló durante la reproducción.', true);
         });
 
+        // Detect frozen / stalled stream during playback
+        let stallTimer = null;
+        const handleStall = () => {
+            if (stallTimer) clearTimeout(stallTimer);
+            stallTimer = setTimeout(() => {
+                if (player && !player.paused && player.readyState < 3 && generation === playbackGeneration && currentAceId === aceId) {
+                    console.warn("Video stalled for > 7s, triggering failover");
+                    triggerMatchFailover("Transmisión congelada o sin datos.");
+                }
+            }, 7500);
+        };
+        player.addEventListener('waiting', handleStall);
+        player.addEventListener('stalled', handleStall);
+
         hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
             hidePlayerStatus();
             const playPromise = player.play();
@@ -765,6 +824,7 @@ function attachHlsToPlayer(player, streamUrl, aceId, profile, generation) {
         });
 
         hlsInstance.on(Hls.Events.FRAG_LOADED, () => {
+            if (stallTimer) clearTimeout(stallTimer);
             hidePlayerStatus();
         });
 
@@ -836,16 +896,14 @@ async function startPlayback(aceId, profile, options = {}) {
                 vlcBtn.removeAttribute('href'); // Ensure it's a button behavior
             }
 
-
-            // Timeout Logic (20 seconds) - Only relevant if player is active
+            // Timeout Logic (12 seconds) - Trigger failover if slow
             if (loadTimeout) clearTimeout(loadTimeout);
             loadTimeout = setTimeout(() => {
-                // Check if still playing THIS stream
-                if (player.readyState === 0 && currentAceId === aceId) {
-                    console.warn("Stream timeout");
-                    recoverPlayback('El player no empezó a reproducir a tiempo.', true);
+                if ((player.readyState < 2 || player.paused) && currentAceId === aceId) {
+                    console.warn("Stream startup timeout in 12s");
+                    recoverPlayback('La señal tardó más de 12s en arrancar.', true);
                 }
-            }, 20000);
+            }, 12000);
 
             player.addEventListener('playing', () => {
                 if (loadTimeout) clearTimeout(loadTimeout);
@@ -853,6 +911,9 @@ async function startPlayback(aceId, profile, options = {}) {
             }, { once: true });
 
         } else {
+            if (triggerMatchFailover("Señal no disponible o sin peers.")) {
+                return;
+            }
             const msg = data.message || `Error servidor: ${data.status}`;
             showPlayerStatus('Stream no disponible', msg, { icon: '⚠️', retry: data.retryable !== false });
         }
@@ -861,6 +922,9 @@ async function startPlayback(aceId, profile, options = {}) {
             console.log("Fetch aborted (user closed player or switched)");
         } else {
             console.error(e);
+            if (triggerMatchFailover("Error de conexión con el servidor.")) {
+                return;
+            }
             showPlayerStatus('Error de conexión', 'No se pudo contactar con el servidor HLS.', { icon: '⚠️', retry: true });
         }
     }
@@ -868,6 +932,10 @@ async function startPlayback(aceId, profile, options = {}) {
 
 function recoverPlayback(reason, forceRestart) {
     if (!currentAceId) return;
+
+    if (triggerMatchFailover(reason)) {
+        return;
+    }
 
     if (playbackRetryCount < MAX_PLAYBACK_RECOVERY_ATTEMPTS) {
         playbackRetryCount++;
@@ -1588,6 +1656,72 @@ function handleImageError(img, id) {
 let currentMainView = 'channels';
 let agendaData = null;
 let selectedAgendaDay = 'all';
+let trackedMatchEvents = new Set();
+let probedMatchStreams = {};
+let probingMatches = new Set();
+
+function loadTrackedMatches() {
+    try {
+        const stored = localStorage.getItem('ace_tracked_matches');
+        if (stored) {
+            trackedMatchEvents = new Set(JSON.parse(stored));
+        }
+    } catch (e) {
+        trackedMatchEvents = new Set();
+    }
+}
+
+function saveTrackedMatches() {
+    try {
+        localStorage.setItem('ace_tracked_matches', JSON.stringify(Array.from(trackedMatchEvents)));
+    } catch (e) {}
+}
+
+async function toggleTrackMatch(eventKey, streams) {
+    if (trackedMatchEvents.has(eventKey)) {
+        trackedMatchEvents.delete(eventKey);
+        delete probedMatchStreams[eventKey];
+    } else {
+        trackedMatchEvents.add(eventKey);
+        if (streams && streams.length > 0) {
+            probeMatchStreams(eventKey, streams);
+        }
+    }
+    saveTrackedMatches();
+    filterAgenda();
+}
+
+async function probeMatchStreams(eventKey, streams) {
+    if (!streams || streams.length === 0 || probingMatches.has(eventKey)) return;
+
+    probingMatches.add(eventKey);
+    filterAgenda();
+
+    try {
+        const candidates = streams.slice(0, 4);
+        const res = await fetch('/api/agenda/probe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                streams: candidates,
+                max_candidates: 3,
+                stop_at_live: 2
+            })
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            if (data.status === 'ok') {
+                probedMatchStreams[eventKey] = data.probed || {};
+            }
+        }
+    } catch (e) {
+        console.error("Error probing match streams:", e);
+    } finally {
+        probingMatches.delete(eventKey);
+        filterAgenda();
+    }
+}
 
 function switchMainView(view) {
     currentMainView = view;
@@ -1617,6 +1751,7 @@ function switchMainView(view) {
 }
 
 async function loadAgenda(forceRefresh = false) {
+    loadTrackedMatches();
     const container = document.getElementById('agenda-container');
     const statusPill = document.getElementById('agendaStatus');
 
@@ -1804,15 +1939,45 @@ function renderAgenda(days) {
         const grid = element('div', 'agenda-grid');
 
         day.events.forEach(ev => {
-            const card = element('div', 'agenda-card' + (ev.is_live ? ' is-live' : ''));
+            const eventKey = `${day.date || ''}_${ev.time || ''}_${ev.event || ''}`;
+            const isTracked = trackedMatchEvents.has(eventKey);
+            const isProbing = probingMatches.has(eventKey);
+            const probeData = probedMatchStreams[eventKey] || null;
+
+            const card = element('div', 'agenda-card' + (ev.is_live ? ' is-live' : '') + (isTracked ? ' is-tracked' : ''));
 
             // Card Header
             const cardHeader = element('div', 'agenda-card-header');
-            const timeSpan = element('span', 'agenda-time', `⏰ ${ev.time}`);
+
+            const timeWrapper = element('div', 'agenda-time-wrapper');
+            const starBtn = element('button', 'track-event-btn' + (isTracked ? ' active' : ''), isTracked ? '★' : '☆');
+            starBtn.title = isTracked ? 'Seguimiento activo (clic para desactivar)' : 'Marcar partido en seguimiento (comprobar señales)';
+            starBtn.onclick = (e) => {
+                e.stopPropagation();
+                toggleTrackMatch(eventKey, ev.streams || []);
+            };
+            timeWrapper.appendChild(starBtn);
+            timeWrapper.appendChild(element('span', 'agenda-time', `⏰ ${ev.time}`));
+            cardHeader.appendChild(timeWrapper);
+
             const badgesDiv = element('div');
             badgesDiv.style.display = 'flex';
             badgesDiv.style.gap = '4px';
             badgesDiv.style.alignItems = 'center';
+
+            if (isTracked && ev.available && ev.streams && ev.streams.length > 0) {
+                const probeBtn = element(
+                    'button',
+                    'probe-refresh-btn',
+                    isProbing ? '⏳ Probando...' : (probeData ? '⚡ Recomprobar' : '⚡ Comprobar')
+                );
+                probeBtn.title = 'Comprueba en segundo plano las señales vivas de este evento';
+                probeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    probeMatchStreams(eventKey, ev.streams);
+                };
+                badgesDiv.appendChild(probeBtn);
+            }
 
             if (ev.is_live) {
                 badgesDiv.appendChild(element('span', 'agenda-badge badge-live', '⚡ En Directo'));
@@ -1827,7 +1992,6 @@ function renderAgenda(days) {
                 badgesDiv.appendChild(element('span', 'agenda-badge badge-unavailable', '⚪ Sin señal'));
             }
 
-            cardHeader.appendChild(timeSpan);
             cardHeader.appendChild(badgesDiv);
             card.appendChild(cardHeader);
 
@@ -1862,20 +2026,41 @@ function renderAgenda(days) {
             // Streams row
             if (ev.available && ev.streams && ev.streams.length > 0) {
                 const streamsRow = element('div', 'agenda-streams-row');
-                const primary = ev.streams[0];
+
+                let sortedStreams = (ev.streams || []).slice();
+                if (probeData) {
+                    sortedStreams.sort((a, b) => {
+                        const aLive = probeData[a.stream_id]?.alive ? 1 : 0;
+                        const bLive = probeData[b.stream_id]?.alive ? 1 : 0;
+                        return bLive - aLive;
+                    });
+                }
+
+                const primary = sortedStreams[0];
+                const pLive = probeData && probeData[primary.stream_id]?.alive;
+                const pDown = probeData && probeData[primary.stream_id]?.alive === false;
+                const primaryLiveTag = pLive ? ' 🟢 UP' : (pDown ? ' ⚪' : '');
+
                 const primaryBtn = element(
                     'button',
-                    'stream-play-btn',
-                    `▶ Ver (${primary.quality} · ${primary.source_name})`
+                    'stream-play-btn' + (pLive ? ' is-probed-live' : ''),
+                    `▶ Ver (${primary.quality} · ${primary.source_name}${primaryLiveTag})`
                 );
-                primaryBtn.onclick = () => playAgendaStream(primary.stream_id, primary.channel_name);
+                primaryBtn.onclick = () => playAgendaStream(primary.stream_id, primary.channel_name, sortedStreams, 0, ev.event);
                 streamsRow.appendChild(primaryBtn);
 
-                if (ev.streams.length > 1) {
-                    ev.streams.slice(1).forEach(st => {
-                        const optBtn = element('button', 'stream-opt-btn', `${st.quality} · ${st.source_name}`);
+                if (sortedStreams.length > 1) {
+                    sortedStreams.slice(1).forEach((st, idx) => {
+                        const sLive = probeData && probeData[st.stream_id]?.alive;
+                        const sDown = probeData && probeData[st.stream_id]?.alive === false;
+                        const optLiveTag = sLive ? ' 🟢 UP' : (sDown ? ' ⚪' : '');
+                        const optBtn = element(
+                            'button',
+                            'stream-opt-btn' + (sLive ? ' is-probed-live' : '') + (sDown ? ' is-probed-down' : ''),
+                            `${st.quality} · ${st.source_name}${optLiveTag}`
+                        );
                         optBtn.title = st.channel_name;
-                        optBtn.onclick = () => playAgendaStream(st.stream_id, st.channel_name);
+                        optBtn.onclick = () => playAgendaStream(st.stream_id, st.channel_name, sortedStreams, idx + 1, ev.event);
                         streamsRow.appendChild(optBtn);
                     });
                 }
@@ -1893,14 +2078,29 @@ function renderAgenda(days) {
     });
 }
 
-function playAgendaStream(streamId, channelName) {
+function playAgendaStream(streamId, channelName, matchStreams = [], queueIndex = 0, matchTitle = '') {
     if (!streamId) return;
+
+    if (matchStreams && matchStreams.length > 0) {
+        currentMatchStreamQueue = matchStreams;
+        currentMatchQueueIndex = queueIndex;
+        currentMatchTitle = matchTitle || channelName || 'Evento deportivo';
+    } else {
+        currentMatchStreamQueue = [];
+        currentMatchQueueIndex = 0;
+        currentMatchTitle = '';
+    }
+
+    if (matchFailoverTimer) {
+        clearTimeout(matchFailoverTimer);
+        matchFailoverTimer = null;
+    }
 
     let ch = allChannels.find(c => c.id === streamId || c.stream_id === streamId);
     if (!ch) {
         ch = {
             id: streamId,
-            name: channelName || 'Evento deportivo',
+            name: channelName || currentMatchTitle || 'Evento deportivo',
             stream_id: streamId,
             type: 'acestream'
         };

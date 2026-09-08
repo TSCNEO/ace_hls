@@ -216,3 +216,38 @@ def test_generate_agenda_m3u(monkeypatch):
         assert 'group-title="⚽ Hoy · Directo"' in m3u_all
         assert 'group-title="⚽ Hoy · HLS Original"' in m3u_all
         assert 'group-title="⚽ Hoy · HLS 720p"' in m3u_all
+
+
+def test_probe_candidate_streams():
+    service = AgendaService()
+
+    candidates = [
+        {"stream_id": "stream_1", "quality": "1080p", "source_name": "S1"},
+        {"stream_id": "stream_2", "quality": "1080p", "source_name": "S2"},
+        {"stream_id": "stream_3", "quality": "720p", "source_name": "S3"},
+        {"stream_id": "stream_4", "quality": "SD", "source_name": "S4"},
+    ]
+
+    probed_calls = []
+
+    def mock_probe_fn(stream_id, itype):
+        probed_calls.append(stream_id)
+        # stream_1 and stream_2 are live
+        return stream_id in ("stream_1", "stream_2")
+
+    result = service.probe_candidate_streams(
+        candidates,
+        max_candidates=3,
+        stop_at_live=2,
+        probe_fn=mock_probe_fn,
+    )
+
+    assert result["status"] == "ok"
+    assert result["live_count"] == 2
+    assert "stream_1" in result["probed"]
+    assert result["probed"]["stream_1"]["alive"] is True
+    assert "stream_2" in result["probed"]
+    assert result["probed"]["stream_2"]["alive"] is True
+    # Stopped as soon as 2 live streams were found, stream_3 and stream_4 were never called
+    assert "stream_3" not in result["probed"]
+    assert probed_calls == ["stream_1", "stream_2"]

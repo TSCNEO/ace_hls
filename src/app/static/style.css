@@ -1095,3 +1095,69 @@ footer {
     font-style: italic;
     padding: 4px 0;
 }
+
+.agenda-time-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.track-event-btn {
+    background: transparent;
+    border: none;
+    font-size: 1.15rem;
+    cursor: pointer;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 4px;
+    color: #888;
+    transition: transform 0.15s, color 0.15s;
+}
+
+.track-event-btn:hover {
+    transform: scale(1.2);
+    color: #ffd700;
+}
+
+.track-event-btn.active {
+    color: #ffd700;
+    text-shadow: 0 0 6px rgba(255, 215, 0, 0.4);
+}
+
+.agenda-card.is-tracked {
+    border-color: #ffaa00;
+    box-shadow: 0 0 10px rgba(255, 170, 0, 0.15);
+}
+
+.probe-refresh-btn {
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    font-size: 0.75rem;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.probe-refresh-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--accent-color);
+}
+
+.stream-play-btn.is-probed-live {
+    border: 1px solid #4caf50 !important;
+    background: #1b5e20 !important;
+    box-shadow: 0 0 8px rgba(76, 175, 80, 0.3);
+}
+
+.stream-opt-btn.is-probed-live {
+    border: 1px solid #4caf50 !important;
+    background: rgba(76, 175, 80, 0.15) !important;
+    color: #81c784 !important;
+}
+
+.stream-opt-btn.is-probed-down {
+    opacity: 0.45;
+    border: 1px dashed #666 !important;
+}
