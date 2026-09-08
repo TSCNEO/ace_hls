@@ -424,8 +424,8 @@ class AgendaService:
             is_live = -8100 <= diff <= 300
             # Upcoming: Starts in next 30 minutes
             is_upcoming = 300 < diff <= 1800
-            # Soon: Live now or starts in next 15 minutes (<= 900s)
-            is_soon = is_live or diff <= 900
+            # Soon: Live now or starts in next 15 minutes (0 <= diff <= 900)
+            is_soon = is_live or (0 <= diff <= 900)
             return is_live, is_upcoming, diff_minutes, is_soon
         except Exception:
             return False, False, 9999, False
