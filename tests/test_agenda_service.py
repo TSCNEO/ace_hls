@@ -165,8 +165,8 @@ def test_get_agenda_enrichment_and_caching(monkeypatch):
         monkeypatch.setattr(service, "fetch_raw_agenda", lambda: SAMPLE_HTML)
 
         catalog = [
-            {"name": "M+ LaLiga 1080p **", "stream_id": "stream_laliga_1080", "source_name": "ElCano"},
-            {"name": "M+ LaLiga 720p *", "stream_id": "stream_laliga_720", "source_name": "ElCano"},
+            {"name": "M+ LaLiga 1080p **", "stream_id": "stream_laliga_1080", "source_name": "Fuente A"},
+            {"name": "M+ LaLiga 720p *", "stream_id": "stream_laliga_720", "source_name": "Fuente B"},
         ]
 
         agenda = service.get_agenda(catalog_channels=catalog, force_refresh=True)
@@ -184,3 +184,35 @@ def test_get_agenda_enrichment_and_caching(monkeypatch):
         assert ev_clasico["primary_stream_id"] == "stream_laliga_1080"
         # First stream must be 1080p
         assert ev_clasico["streams"][0]["quality"] == "1080p"
+
+
+def test_generate_agenda_m3u(monkeypatch):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        service = AgendaService(data_dir=tmpdir)
+        monkeypatch.setattr(service, "fetch_raw_agenda", lambda: SAMPLE_HTML)
+
+        catalog = [
+            {"name": "M+ LaLiga 1080p **", "stream_id": "stream_laliga_1080", "source_name": "Fuente A"},
+            {"name": "M+ LaLiga 720p *", "stream_id": "stream_laliga_720", "source_name": "Fuente B"},
+        ]
+
+        # 1. Standard single-profile M3U
+        m3u_text = service.generate_agenda_m3u(
+            host="127.0.0.1:8088",
+            profile="original",
+            catalog_channels=catalog,
+        )
+        assert m3u_text.startswith("#EXTM3U")
+        assert "Real Madrid - Barcelona (1080p · Fuente A)" in m3u_text
+        assert "Real Madrid - Barcelona (720p · Fuente B)" in m3u_text
+        assert "http://127.0.0.1:8088/stream/stream_laliga_1080.m3u8" in m3u_text
+
+        # 2. Multi-surface "all" profile M3U
+        m3u_all = service.generate_agenda_m3u(
+            host="127.0.0.1:8088",
+            profile="all",
+            catalog_channels=catalog,
+        )
+        assert 'group-title="⚽ Hoy · Directo"' in m3u_all
+        assert 'group-title="⚽ Hoy · HLS Original"' in m3u_all
+        assert 'group-title="⚽ Hoy · HLS 720p"' in m3u_all

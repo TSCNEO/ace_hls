@@ -1042,6 +1042,27 @@ function copyM3ULink(profile) {
     toggleM3UMenu();
 }
 
+function downloadAgendaM3U(profile = 'all') {
+    const url = `/agenda.m3u?profile=${encodeURIComponent(profile)}`;
+    window.location.href = url;
+    toggleM3UMenu();
+}
+
+function copyAgendaM3ULink(profile = 'all') {
+    const url = `${window.location.origin}/agenda.m3u?profile=${encodeURIComponent(profile)}`;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(() => {
+            alert('Enlace M3U de Agenda copiado al portapapeles');
+        }).catch(err => {
+            console.error('Copy failed, using fallback', err);
+            fallbackCopy(url);
+        });
+    } else {
+        fallbackCopy(url);
+    }
+    toggleM3UMenu();
+}
+
 
 // Close Dropdown on click outside
 // Copy Dropdown Logic

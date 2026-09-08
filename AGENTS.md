@@ -65,6 +65,7 @@ documentation:
   easy_deploy: easy-deploy/README.md
   configuration: docs/configuration.md
   api: docs/api.md
+  agenda: docs/agenda.md
   sources_v2: docs/sources-v2.md
   orchestrator_deployment: docs/orchestrator-deployment.md
   releases: CHANGELOG.md
@@ -109,7 +110,8 @@ http_api:
   channels: /api/channels
   settings: /api/settings
   system: [/health, /api/version, /api/system/stats, /api/system/logs]
-  playlists: [/playlist.m3u, /api/playlist/all.m3u]
+  playlists: [/playlist.m3u, /api/playlist/all.m3u, /agenda.m3u, /api/agenda/playlist.m3u]
+  agenda: [/api/agenda, /api/agenda/live, /api/agenda/refresh]
   sources: [/api/sources, /api/sources/{source_id}, /api/sources/{source_id}/validate, /api/sources/refresh, /api/sources/refresh/status]
   custom_channels: [/api/custom-channels, /api/custom-channels/{channel_id}]
   hls_start: /api/hls/start/{ace_id}

@@ -570,6 +570,104 @@ class AgendaService:
                     live_list.append(ev)
         return live_list
 
+    def generate_agenda_m3u(
+        self,
+        host: str,
+        profile: str = "original",
+        catalog_channels: list[dict[str, Any]] | None = None,
+        live_only: bool = False,
+    ) -> str:
+        """Generate dynamic M3U playlist from current sports agenda with multi-origin signals."""
+        agenda = self.get_agenda(catalog_channels=catalog_channels)
+        lines = ["#EXTM3U"]
+
+        profiles_to_render = (
+            ["direct", "original", "max_compat", "720p"]
+            if profile == "all"
+            else [profile]
+        )
+
+        for day in agenda.get("days", []):
+            date_str = day.get("date", "")
+            day_title = day.get("title") or date_str or "Eventos"
+            day_label = (
+                "Hoy"
+                if "hoy" in day_title.lower()
+                else ("Mañana" if "mañana" in day_title.lower() else date_str)
+            )
+
+            for ev in day.get("events", []):
+                if live_only and not ev.get("is_live"):
+                    continue
+                if not ev.get("available") or not ev.get("streams"):
+                    continue
+
+                event_title = ev.get("event", "Evento deportivo")
+                time_str = ev.get("time", "")
+                is_live = ev.get("is_live", False)
+                comp = ev.get("competition", "")
+                logo = ev.get("competition_icon") or ev.get("local_icon") or ""
+
+                live_tag = "[🔴 VIVO] " if is_live else ""
+
+                for st in ev["streams"]:
+                    sid = st.get("stream_id")
+                    if not sid:
+                        continue
+                    q = st.get("quality", "SD")
+                    src = st.get("source_name", "AceHLS")
+                    ident_type = st.get("identifier_type", "id")
+
+                    for p in profiles_to_render:
+                        if profile == "all":
+                            surface_name = {
+                                "direct": "Directo",
+                                "original": "HLS Original",
+                                "max_compat": "HLS Compatible",
+                                "720p": "HLS 720p",
+                                "480p": "HLS 480p",
+                            }.get(p, p)
+                            group = f"⚽ {day_label} · {surface_name}"
+                        else:
+                            group = (
+                                f"⚽ {day_label} - {comp}"
+                                if comp
+                                else f"⚽ {day_label}"
+                            )
+
+                        display_name = f"{live_tag}[{time_str}] {event_title} ({q} · {src})"
+
+                        if p == "direct":
+                            from app import utils
+                            link = utils.get_stream_url_for_client(host, sid, ident_type)
+                        else:
+                            type_suffix = (
+                                "&identifier_type=infohash"
+                                if ident_type == "infohash"
+                                else ""
+                            )
+                            suffix = (
+                                f"?profile={p}{type_suffix}"
+                                if p and p != "original"
+                                else (
+                                    f"?identifier_type=infohash"
+                                    if ident_type == "infohash"
+                                    else ""
+                                )
+                            )
+                            link = f"http://{host}/stream/{sid}.m3u8{suffix}"
+
+                        safe_title = str(display_name).replace("\r", " ").replace("\n", " ")
+                        safe_group = str(group).replace('"', "'").replace("\r", " ").replace("\n", " ")
+                        safe_logo = str(logo).replace('"', "'").replace("\r", " ").replace("\n", " ")
+
+                        lines.append(
+                            f'#EXTINF:-1 tvg-id="{sid}" tvg-name="{safe_title}" tvg-logo="{safe_logo}" group-title="{safe_group}",{safe_title}'
+                        )
+                        lines.append(link)
+
+        return "\n".join(lines)
+
     def _load_default_channels(self) -> list[dict[str, Any]]:
         """Load global channel catalog from channels.json."""
         ch_file = os.path.join(self.data_dir, "channels.json")

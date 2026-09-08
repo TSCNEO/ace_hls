@@ -301,6 +301,36 @@ def refresh_agenda():
         "updated_at": agenda.get("updated_at"),
     })
 
+@main_bp.route('/agenda.m3u')
+@main_bp.route('/api/agenda/playlist.m3u')
+def get_agenda_playlist():
+    profile = request.args.get('profile', 'original')
+    if not Config.ENABLE_TRANSCODE and profile in ['720p', '480p', 'max_compat']:
+        profile = 'original'
+
+    live_only = request.args.get('live_only', '').lower() in ('true', '1')
+    host = request.headers.get('Host') or request.host
+
+    channels_data = []
+    if os.path.exists(Config.JSON_FILE):
+        try:
+            with open(Config.JSON_FILE, 'r', encoding='utf-8') as f:
+                channels_data = json.load(f)
+        except Exception:
+            pass
+
+    m3u_text = agenda_service.generate_agenda_m3u(
+        host=host,
+        profile=profile,
+        catalog_channels=channels_data,
+        live_only=live_only,
+    )
+
+    response = Response(m3u_text, mimetype='audio/x-mpegurl')
+    response.headers["Content-Disposition"] = "attachment; filename=agenda.m3u"
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return response
+
 @main_bp.route('/api/sources', methods=['GET'])
 def get_sources():
     try:

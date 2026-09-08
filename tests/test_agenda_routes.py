@@ -34,3 +34,14 @@ def test_api_agenda_routes():
         res_live = client.get("/api/agenda/live")
         assert res_live.status_code == 200
         assert isinstance(json.loads(res_live.data), list)
+
+        # 5. GET /agenda.m3u and /api/agenda/playlist.m3u
+        res_m3u = client.get("/agenda.m3u")
+        assert res_m3u.status_code == 200
+        assert res_m3u.mimetype == "audio/x-mpegurl"
+        assert b"#EXTM3U" in res_m3u.data
+
+        res_api_m3u = client.get("/api/agenda/playlist.m3u?profile=all")
+        assert res_api_m3u.status_code == 200
+        assert res_api_m3u.mimetype == "audio/x-mpegurl"
+        assert b"#EXTM3U" in res_api_m3u.data

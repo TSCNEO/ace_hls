@@ -16,6 +16,7 @@ La versión de la aplicación se define únicamente en [`src/app/version.txt`](s
 - Detección de HLS real; los streams MPEG-TS continuos se remultiplexan con FFmpeg.
 - Perfiles `original`, `max_compat`, `720p` y `480p`; los tres últimos requieren transcodificación.
 - Dashboard local, estadísticas persistentes e integración con AceStream Orchestrator.
+- Agenda Deportiva (EPG): eventos deportivos multidiarios cruzados con tus canales disponibles, reproducción en 1 clic y lista M3U dinámica (`/agenda.m3u`). Consulte [`docs/agenda.md`](docs/agenda.md).
 
 ## Instalación recomendada: Easy Deploy
 
@@ -154,6 +155,8 @@ Detalles del formato y compatibilidad: [`docs/sources-v2.md`](docs/sources-v2.md
 | 720p | `/playlist.m3u?profile=720p` |
 | 480p | `/playlist.m3u?profile=480p` |
 | Todas las variantes | `/api/playlist/all.m3u` |
+| Agenda Deportiva (M3U dinámica) | `/agenda.m3u` |
+| Agenda (Todas las surfaces) | `/agenda.m3u?profile=all` |
 
 En modo local, `direct` genera `http://IP_DEL_HOST:8000/ace/getstream`. En modo remoto usa `ORCHESTRATOR_HOST:ORCHESTRATOR_PORT`. `STREAM_PUBLIC_ENDPOINT` permite sobrescribir ambos casos. `max_compat`, `720p` y `480p` requieren `ENABLE_TRANSCODE=true`. Si se habilita VAAPI, debe montarse `/dev/dri` en el contenedor.
 
