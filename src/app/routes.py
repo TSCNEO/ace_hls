@@ -25,6 +25,7 @@ from app.services.source_manager import (
 )
 from app.services.source_validator import source_validator
 from app.services.stats_manager import stats_manager
+from app.services.agenda_service import agenda_service
 from app import utils
 
 main_bp = Blueprint('main', __name__)
@@ -229,6 +230,76 @@ def get_channels():
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
+
+@main_bp.route('/api/agenda', methods=['GET'])
+def get_agenda():
+    force = request.args.get('refresh', '').lower() in ('true', '1')
+    live_only = request.args.get('live_only', '').lower() in ('true', '1')
+    available_only = request.args.get('available_only', '').lower() in ('true', '1')
+
+    channels_data = []
+    if os.path.exists(Config.JSON_FILE):
+        try:
+            with open(Config.JSON_FILE, 'r', encoding='utf-8') as f:
+                channels_data = json.load(f)
+        except Exception:
+            pass
+
+    agenda = agenda_service.get_agenda(catalog_channels=channels_data, force_refresh=force)
+
+    if live_only or available_only:
+        filtered_days = []
+        for day in agenda.get("days", []):
+            evs = day.get("events", [])
+            if live_only:
+                evs = [e for e in evs if e.get("is_live")]
+            if available_only:
+                evs = [e for e in evs if e.get("available")]
+            if evs:
+                day_copy = dict(day)
+                day_copy["events"] = evs
+                day_copy["events_count"] = len(evs)
+                filtered_days.append(day_copy)
+        agenda = dict(agenda)
+        agenda["days"] = filtered_days
+        agenda["total_events"] = sum(d["events_count"] for d in filtered_days)
+        agenda["available_events"] = sum(1 for d in filtered_days for e in d["events"] if e.get("available"))
+
+    response = jsonify(agenda)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return response
+
+@main_bp.route('/api/agenda/live', methods=['GET'])
+def get_agenda_live():
+    channels_data = []
+    if os.path.exists(Config.JSON_FILE):
+        try:
+            with open(Config.JSON_FILE, 'r', encoding='utf-8') as f:
+                channels_data = json.load(f)
+        except Exception:
+            pass
+    live_events = agenda_service.get_live_events(catalog_channels=channels_data)
+    available_only = request.args.get('available_only', '').lower() in ('true', '1')
+    if available_only:
+        live_events = [e for e in live_events if e.get("available")]
+    return jsonify(live_events)
+
+@main_bp.route('/api/agenda/refresh', methods=['POST'])
+def refresh_agenda():
+    channels_data = []
+    if os.path.exists(Config.JSON_FILE):
+        try:
+            with open(Config.JSON_FILE, 'r', encoding='utf-8') as f:
+                channels_data = json.load(f)
+        except Exception:
+            pass
+    agenda = agenda_service.get_agenda(catalog_channels=channels_data, force_refresh=True)
+    return jsonify({
+        "status": "ok",
+        "total_events": agenda.get("total_events", 0),
+        "available_events": agenda.get("available_events", 0),
+        "updated_at": agenda.get("updated_at"),
+    })
 
 @main_bp.route('/api/sources', methods=['GET'])
 def get_sources():

@@ -1,0 +1,186 @@
+import os
+import tempfile
+import pytest
+
+from app.services.agenda_service import (
+    AgendaService,
+    canonical_tokens,
+    extract_stream_quality,
+)
+
+SAMPLE_HTML = """
+<!DOCTYPE html>
+<html>
+<body>
+<table class="tablaPrincipal">
+  <tr class="cabeceraTabla">
+    <td colspan="5">Partidos de hoy martes, 08/09/2026</td>
+  </tr>
+  <tr>
+    <td class="hora">21:00</td>
+    <td class="detalles">
+      <div class="contenedorImgCompeticion">
+        <img src="/img/laliga.png" />
+      </div>
+      <div class="ajusteDoslineas" title="LaLiga EA Sports | Jornada 5">
+        <label title="LaLiga EA Sports">LaLiga EA Sports</label>
+      </div>
+    </td>
+    <td class="evento">
+      <div class="local"><span title="Real Madrid">Real Madrid</span></div>
+      <div class="visitante"><span title="Barcelona">Barcelona</span></div>
+    </td>
+    <td class="canales">
+      <ul class="listaCanales">
+        <li title="M+ LALIGA (M54 O110)">M+ LALIGA</li>
+        <li title="DAZN LaLiga (M55 O113)">DAZN LaLiga</li>
+        <li title="RTVE Play">RTVE Play</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td class="hora">22:30</td>
+    <td class="detalles">
+      <div class="ajusteDoslineas" title="Fórmula 1">Fórmula 1</div>
+    </td>
+    <td class="evento">
+      <div class="eventoUnico">Clasificación GP Monza</div>
+    </td>
+    <td class="canales">
+      <ul class="listaCanales">
+        <li title="DAZN 1 (M70)">DAZN 1</li>
+      </ul>
+    </td>
+  </tr>
+</table>
+<table class="tablaPrincipal">
+  <tr class="cabeceraTabla">
+    <td colspan="5">Mañana miércoles, 09/09/2026</td>
+  </tr>
+  <tr>
+    <td class="hora">19:00</td>
+    <td class="detalles">
+      <div class="ajusteDoslineas" title="Champions League">Champions League</div>
+    </td>
+    <td class="evento">
+      <div class="local"><span title="PSG">PSG</span></div>
+      <div class="visitante"><span title="Bayern">Bayern</span></div>
+    </td>
+    <td class="canales">
+      <ul class="listaCanales">
+        <li title="M+ Liga de Campeones 2 (M61 O117)">M+ Liga de Campeones 2</li>
+      </ul>
+    </td>
+  </tr>
+</table>
+</body>
+</html>
+"""
+
+
+def test_quality_extraction():
+    assert extract_stream_quality("M+ LaLiga 1080p *") == "1080p"
+    assert extract_stream_quality("DAZN 1 FHD ad6d --> NEW ERA") == "1080p"
+    assert extract_stream_quality("LaLiga TV Hypermotion 720p **") == "720p"
+    assert extract_stream_quality("Eurosport 4K") == "4K"
+    assert extract_stream_quality("🔹Dazn La Liga ★") == "SD"
+
+
+def test_canonical_tokens():
+    tokens1 = canonical_tokens("M+ LALIGA (M54 O110)")
+    assert "movistar" in tokens1
+    assert "la" in tokens1 and "liga" in tokens1
+    assert "m54" not in tokens1
+
+    tokens2 = canonical_tokens("M+ Liga de Campeones 2 1080p *")
+    assert "2" in tokens2
+    assert "1080p" not in tokens2
+
+    tokens3 = canonical_tokens("DAZN 1 FHD ad6d --> NEW ERA")
+    assert "1" in tokens3
+    assert "new" not in tokens3 and "era" not in tokens3
+
+
+def test_parse_agenda_html():
+    service = AgendaService()
+    days = service.parse_agenda_html(SAMPLE_HTML)
+    assert len(days) == 2
+
+    # Day 1
+    d1 = days[0]
+    assert d1["date"] == "08/09/2026"
+    assert d1["events_count"] == 2
+
+    ev1 = d1["events"][0]
+    assert ev1["time"] == "21:00"
+    assert ev1["event"] == "Real Madrid - Barcelona"
+    assert "LaLiga EA Sports" in ev1["competition"]
+    # RTVE Play should be excluded by default filters
+    assert "RTVE Play" not in ev1["channels"]
+    assert "M+ LALIGA (M54 O110)" in ev1["channels"]
+    assert "DAZN LaLiga (M55 O113)" in ev1["channels"]
+
+    # Day 2
+    d2 = days[1]
+    assert d2["date"] == "09/09/2026"
+    assert d2["events_count"] == 1
+    assert d2["events"][0]["event"] == "PSG - Bayern"
+
+
+def test_strict_number_channel_matching():
+    service = AgendaService()
+    equivs = service.load_equivalencias()
+
+    catalog = [
+        {"name": "M+ Liga de Campeones 1080p *", "stream_id": "champ_1_1080"},
+        {"name": "M+ Liga de Campeones 2 720p *", "stream_id": "champ_2_720"},
+        {"name": "M+ Liga de Campeones 2 1080p *", "stream_id": "champ_2_1080"},
+        {"name": "DAZN 1 FHD", "stream_id": "dazn_1_fhd"},
+        {"name": "DAZN 2 1080p", "stream_id": "dazn_2_1080"},
+    ]
+
+    # Matching "M+ Liga de Campeones 2 (M61 O117)" must ONLY match champ_2, NOT champ_1
+    m2 = service.match_channel_to_catalog("M+ Liga de Campeones 2 (M61 O117)", catalog, equivs)
+    matched_ids2 = [item["stream_id"] for item in m2]
+    assert "champ_2_1080" in matched_ids2
+    assert "champ_2_720" in matched_ids2
+    assert "champ_1_1080" not in matched_ids2
+
+    # Matching "M+ Liga de Campeones (M60 O115)" must ONLY match champ_1, NOT champ_2
+    m1 = service.match_channel_to_catalog("M+ Liga de Campeones (M60 O115)", catalog, equivs)
+    matched_ids1 = [item["stream_id"] for item in m1]
+    assert "champ_1_1080" in matched_ids1
+    assert "champ_2_1080" not in matched_ids1
+
+    # Matching DAZN 1
+    dazn1 = service.match_channel_to_catalog("DAZN 1 (M70)", catalog, equivs)
+    dazn1_ids = [item["stream_id"] for item in dazn1]
+    assert "dazn_1_fhd" in dazn1_ids
+    assert "dazn_2_1080" not in dazn1_ids
+
+
+def test_get_agenda_enrichment_and_caching(monkeypatch):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        service = AgendaService(data_dir=tmpdir)
+        monkeypatch.setattr(service, "fetch_raw_agenda", lambda: SAMPLE_HTML)
+
+        catalog = [
+            {"name": "M+ LaLiga 1080p **", "stream_id": "stream_laliga_1080", "source_name": "ElCano"},
+            {"name": "M+ LaLiga 720p *", "stream_id": "stream_laliga_720", "source_name": "ElCano"},
+        ]
+
+        agenda = service.get_agenda(catalog_channels=catalog, force_refresh=True)
+        assert agenda["total_events"] == 3
+        assert agenda["available_events"] == 1  # Only Real Madrid vs Barcelona matched
+
+        # Cache file must exist
+        assert os.path.exists(service.cache_file)
+
+        # Inspect first event
+        d1 = agenda["days"][0]
+        ev_clasico = d1["events"][0]
+        assert ev_clasico["available"] is True
+        assert ev_clasico["streams_count"] == 2
+        assert ev_clasico["primary_stream_id"] == "stream_laliga_1080"
+        # First stream must be 1080p
+        assert ev_clasico["streams"][0]["quality"] == "1080p"

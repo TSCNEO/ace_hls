@@ -20,8 +20,14 @@
 <body>
 
     <header>
-        <h1>AceHLS</h1>
-        <div class="controls">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:15px;">
+            <h1 style="margin:0;">AceHLS</h1>
+            <div class="view-tabs">
+                <button id="tabChannels" class="tab-btn active" onclick="switchMainView('channels')">📡 Canales</button>
+                <button id="tabAgenda" class="tab-btn" onclick="switchMainView('agenda')">⚽ Agenda</button>
+            </div>
+        </div>
+        <div id="channels-controls" class="controls">
             <div class="filter-container">
                 <input type="text" id="searchInput" placeholder="Buscar canal..." oninput="filterChannels()">
                 <select id="sourceSelect" onchange="onSourceChange()">
@@ -93,9 +99,32 @@
     </header>
 
     <main>
-        <div id="favorites-grid" class="favorites-grid" style="display:none;"></div>
-        <div id="channel-grid">
-            <div class="loading" style="text-align:center;">Cargando canales...</div>
+        <div id="channels-view">
+            <div id="favorites-grid" class="favorites-grid" style="display:none;"></div>
+            <div id="channel-grid">
+                <div class="loading" style="text-align:center;">Cargando canales...</div>
+            </div>
+        </div>
+
+        <div id="agenda-view" style="display:none;">
+            <div class="agenda-toolbar">
+                <input type="text" id="agendaSearchInput" placeholder="Buscar equipo, competición o canal..." oninput="filterAgenda()">
+                <div class="agenda-filters">
+                    <label class="agenda-check-label">
+                        <input type="checkbox" id="agendaAvailableOnly" onchange="filterAgenda()" checked>
+                        <span>🟢 Solo disponibles</span>
+                    </label>
+                    <label class="agenda-check-label">
+                        <input type="checkbox" id="agendaLiveOnly" onchange="filterAgenda()">
+                        <span>🔴 En directo</span>
+                    </label>
+                    <button onclick="loadAgenda(true)" class="theme-btn" title="Refrescar Agenda">🔄</button>
+                </div>
+                <div id="agendaStatus" class="agenda-status-pill"></div>
+            </div>
+            <div id="agenda-container">
+                <div class="loading" style="text-align:center;">Cargando agenda deportiva...</div>
+            </div>
         </div>
     </main>
 

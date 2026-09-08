@@ -1560,3 +1560,257 @@ function handleImageError(img, id) {
         ch.logo = FALLBACK_LOGO;
     }
 }
+
+/* ==========================================================================
+   Sports Agenda (EPG) Logic
+   ========================================================================== */
+let currentMainView = 'channels';
+let agendaData = null;
+
+function switchMainView(view) {
+    currentMainView = view;
+    const channelsView = document.getElementById('channels-view');
+    const agendaView = document.getElementById('agenda-view');
+    const channelsControls = document.getElementById('channels-controls');
+    const tabChannels = document.getElementById('tabChannels');
+    const tabAgenda = document.getElementById('tabAgenda');
+
+    if (view === 'agenda') {
+        if (channelsView) channelsView.style.display = 'none';
+        if (agendaView) agendaView.style.display = 'block';
+        if (channelsControls) channelsControls.style.display = 'none';
+        if (tabChannels) tabChannels.classList.remove('active');
+        if (tabAgenda) tabAgenda.classList.add('active');
+
+        if (!agendaData) {
+            loadAgenda();
+        }
+    } else {
+        if (channelsView) channelsView.style.display = 'block';
+        if (agendaView) agendaView.style.display = 'none';
+        if (channelsControls) channelsControls.style.display = 'flex';
+        if (tabChannels) tabChannels.classList.add('active');
+        if (tabAgenda) tabAgenda.classList.remove('active');
+    }
+}
+
+async function loadAgenda(forceRefresh = false) {
+    const container = document.getElementById('agenda-container');
+    const statusPill = document.getElementById('agendaStatus');
+
+    if (container) {
+        container.textContent = '';
+        const loadingDiv = element('div', 'loading', '⏳ Cargando agenda deportiva...');
+        loadingDiv.style.textAlign = 'center';
+        loadingDiv.style.padding = '30px';
+        container.appendChild(loadingDiv);
+    }
+
+    try {
+        const url = forceRefresh ? '/api/agenda?refresh=1' : '/api/agenda';
+        const res = await fetch(url);
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+        }
+        agendaData = await res.json();
+
+        if (statusPill && agendaData) {
+            const total = agendaData.total_events || 0;
+            const avail = agendaData.available_events || 0;
+            statusPill.textContent = `📡 ${avail} disponibles / ${total} eventos`;
+        }
+
+        filterAgenda();
+    } catch (err) {
+        console.error("Error loading sports agenda:", err);
+        if (container) {
+            container.textContent = '';
+            const errDiv = element('div', 'loading', `❌ Error al cargar la agenda deportiva (${err.message}). Reintenta en unos instantes.`);
+            errDiv.style.textAlign = 'center';
+            errDiv.style.color = '#ff6b6b';
+            errDiv.style.padding = '30px';
+            container.appendChild(errDiv);
+        }
+    }
+}
+
+function filterAgenda() {
+    if (!agendaData || !agendaData.days) return;
+
+    const query = (document.getElementById('agendaSearchInput')?.value || '').trim().toLowerCase();
+    const availableOnly = !!document.getElementById('agendaAvailableOnly')?.checked;
+    const liveOnly = !!document.getElementById('agendaLiveOnly')?.checked;
+
+    const filteredDays = [];
+
+    agendaData.days.forEach(day => {
+        const matchingEvents = (day.events || []).filter(ev => {
+            if (availableOnly && !ev.available) return false;
+            if (liveOnly && !ev.is_live) return false;
+
+            if (query) {
+                const eventText = (ev.event || '').toLowerCase();
+                const compText = (ev.competition || '').toLowerCase();
+                const chanText = (ev.channels || []).join(' ').toLowerCase();
+                const streamsText = (ev.streams || []).map(s => s.channel_name || '').join(' ').toLowerCase();
+
+                if (!eventText.includes(query) && !compText.includes(query) && !chanText.includes(query) && !streamsText.includes(query)) {
+                    return false;
+                }
+            }
+            return true;
+        });
+
+        if (matchingEvents.length > 0) {
+            filteredDays.push({
+                ...day,
+                events: matchingEvents,
+                events_count: matchingEvents.length
+            });
+        }
+    });
+
+    renderAgenda(filteredDays);
+}
+
+function renderAgenda(days) {
+    const container = document.getElementById('agenda-container');
+    if (!container) return;
+
+    container.textContent = '';
+
+    if (!days || days.length === 0) {
+        const emptyDiv = element('div', 'loading', 'No se han encontrado eventos deportivos con los filtros seleccionados.');
+        emptyDiv.style.textAlign = 'center';
+        emptyDiv.style.padding = '40px';
+        emptyDiv.style.color = '#888';
+        container.appendChild(emptyDiv);
+        return;
+    }
+
+    days.forEach(day => {
+        const section = element('section', 'agenda-day-section');
+
+        const header = element('div', 'agenda-day-header');
+        const titleSpan = element('span', '', `📅 ${day.title || day.date}`);
+        const countSpan = element('span', 'agenda-day-count', `${day.events_count} eventos`);
+        header.appendChild(titleSpan);
+        header.appendChild(countSpan);
+        section.appendChild(header);
+
+        const grid = element('div', 'agenda-grid');
+
+        day.events.forEach(ev => {
+            const card = element('div', 'agenda-card' + (ev.is_live ? ' is-live' : ''));
+
+            // Card Header
+            const cardHeader = element('div', 'agenda-card-header');
+            const timeSpan = element('span', 'agenda-time', `⏰ ${ev.time}`);
+            const badgesDiv = element('div');
+            badgesDiv.style.display = 'flex';
+            badgesDiv.style.gap = '4px';
+            badgesDiv.style.alignItems = 'center';
+
+            if (ev.is_live) {
+                badgesDiv.appendChild(element('span', 'agenda-badge badge-live', '🔴 En Directo'));
+            } else if (ev.is_upcoming) {
+                badgesDiv.appendChild(element('span', 'agenda-badge badge-upcoming', '⏳ Próximamente'));
+            }
+
+            if (ev.available) {
+                const label = `🟢 ${ev.streams_count} señal${ev.streams_count > 1 ? 'es' : ''}`;
+                badgesDiv.appendChild(element('span', 'agenda-badge badge-available', label));
+            } else {
+                badgesDiv.appendChild(element('span', 'agenda-badge badge-unavailable', '⚪ Sin señal'));
+            }
+
+            cardHeader.appendChild(timeSpan);
+            cardHeader.appendChild(badgesDiv);
+            card.appendChild(cardHeader);
+
+            // Competition
+            if (ev.competition) {
+                const compDiv = element('div', 'agenda-competition');
+                if (ev.competition_icon) {
+                    const icon = document.createElement('img');
+                    icon.src = ev.competition_icon;
+                    icon.className = 'agenda-comp-icon';
+                    icon.alt = '';
+                    compDiv.appendChild(icon);
+                } else {
+                    compDiv.appendChild(element('span', '', '🏆'));
+                }
+                compDiv.appendChild(element('span', '', ev.competition));
+                card.appendChild(compDiv);
+            }
+
+            // Event Title
+            card.appendChild(element('div', 'agenda-event-title', ev.event));
+
+            // TV Channels
+            if (ev.channels && ev.channels.length > 0) {
+                const tvDiv = element('div', 'agenda-tv-channels');
+                ev.channels.forEach(ch => {
+                    tvDiv.appendChild(element('span', 'tv-tag', `📺 ${ch}`));
+                });
+                card.appendChild(tvDiv);
+            }
+
+            // Streams row
+            if (ev.available && ev.streams && ev.streams.length > 0) {
+                const streamsRow = element('div', 'agenda-streams-row');
+                const primary = ev.streams[0];
+                const primaryBtn = element(
+                    'button',
+                    'stream-play-btn',
+                    `▶ Ver (${primary.quality} · ${primary.source_name})`
+                );
+                primaryBtn.onclick = () => playAgendaStream(primary.stream_id, primary.channel_name);
+                streamsRow.appendChild(primaryBtn);
+
+                if (ev.streams.length > 1) {
+                    ev.streams.slice(1).forEach(st => {
+                        const optBtn = element('button', 'stream-opt-btn', `${st.quality} · ${st.source_name}`);
+                        optBtn.title = st.channel_name;
+                        optBtn.onclick = () => playAgendaStream(st.stream_id, st.channel_name);
+                        streamsRow.appendChild(optBtn);
+                    });
+                }
+                card.appendChild(streamsRow);
+            } else {
+                const hint = element('div', 'no-stream-hint', 'No hay canales sintonizables en tu catálogo para este evento.');
+                card.appendChild(hint);
+            }
+
+            grid.appendChild(card);
+        });
+
+        section.appendChild(grid);
+        container.appendChild(section);
+    });
+}
+
+function playAgendaStream(streamId, channelName) {
+    if (!streamId) return;
+
+    let ch = allChannels.find(c => c.id === streamId || c.stream_id === streamId);
+    if (!ch) {
+        ch = {
+            id: streamId,
+            name: channelName || 'Evento deportivo',
+            stream_id: streamId,
+            type: 'acestream'
+        };
+    }
+    playChannel(ch);
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}

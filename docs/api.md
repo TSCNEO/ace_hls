@@ -34,6 +34,14 @@ Todas las respuestas de gestión son JSON salvo las listas M3U, logs y archivos 
 | `DELETE` | `/api/custom-channels/<channel_id>` | Elimina un canal personalizado. |
 | `POST` | `/api/stats/feedback` | Registra `{"id":"…","vote":"like|dislike"}`. |
 
+## Agenda Deportiva (EPG)
+
+| Método | Ruta | Resultado |
+|---|---|---|
+| `GET` | `/api/agenda` | Agenda multidiaria de eventos deportivos cruzada con los canales AceStream disponibles. Query opcional: `refresh`, `live_only`, `available_only`. |
+| `GET` | `/api/agenda/live` | Eventos deportivos en directo en la franja horaria actual. Query opcional: `available_only`. |
+| `POST` | `/api/agenda/refresh` | Fuerza el refresco de la agenda deportiva desde la fuente oficial. |
+
 Para guardar una fuente inválida desactivada, `POST` o `PATCH` debe incluir `"allow_invalid_disabled":true`. Los errores habituales usan 400, 404, 409 o 422 con `error` y `code`.
 
 Un canal personalizado requiere `name` y `stream_id`; admite `group`, `logo` y `tvg_id`. Los duplicados se comparan por `identifier_type + stream_id`.
