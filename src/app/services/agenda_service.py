@@ -286,17 +286,19 @@ class AgendaService:
                     continue
 
                 if all(tok in c_set for tok in non_num_t):
-                    sid = ch.get("stream_id") or ch.get("name") or ""
-                    if sid in seen_stream_ids:
+                    channel_id = str(ch.get("id") or ch.get("stream_id") or "")
+                    sid = channel_id or str(ch.get("name") or "")
+                    if not sid or sid in seen_stream_ids:
                         continue
                     seen_stream_ids.add(sid)
 
                     q = extract_stream_quality(ch.get("name", ""))
                     matches.append({
                         "channel_name": ch.get("name"),
-                        "stream_id": ch.get("stream_id"),
+                        "stream_id": channel_id,
                         "source_name": ch.get("source_name") or "AceHLS",
                         "source_id": ch.get("source_id"),
+                        "identifier_type": ch.get("identifier_type", "id"),
                         "quality": q,
                         "quality_score": quality_order.get(q, 0),
                         "type": ch.get("type", "acestream"),
