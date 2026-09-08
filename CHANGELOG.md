@@ -1,6 +1,13 @@
 # Changelog
 
-## v2.9.0
+## v2.10.0
+
+- Añadido módulo de **Agenda Deportiva (EPG)**: eventos deportivos multidiarios sincronizados con `futbolenlatv.es/deporte`.
+- Motor de emparejamiento inteligente de canales (`Channel Matcher`) con aislamiento estricto de números y diales de canal, detección de calidad y mapeo de equivalencias configurable.
+- Nueva pestaña interactiva **⚽ Agenda** en la WebUI con filtrado por eventos disponibles, en directo o búsqueda textual y reproducción HLS en 1 clic.
+- Exportación de lista M3U viva y dinámica en `/agenda.m3u` con multiseñal ordenada por calidad y perfiles por surface (`original`, `direct`, `max_compat`, `720p`, `all`).
+- Nuevos endpoints de API: `/api/agenda`, `/api/agenda/live`, `/api/agenda/refresh` y `/api/agenda/playlist.m3u`.
+- Documentación completa en `docs/agenda.md`.
 
 - Añadido desplegable de filtro por fuente (`#sourceSelect`) en la cabecera: «Todas las fuentes (Mix)» o una fuente concreta.
 - Al elegir una fuente concreta, `/api/channels?source=<id>` devuelve los canales **crudos de esa fuente sin deduplicar** (se ven los duplicados reales de cada lista).
