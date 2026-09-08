@@ -742,11 +742,41 @@ def _probe_upstream_media(ace_id, identifier_type='id'):
 def _upstream_has_media(ace_id, identifier_type='id'):
     return _probe_upstream_media(ace_id, identifier_type) is not None
 
+def _is_orchestrator_downloading(ace_id):
+    try:
+        from app.services.orchestrator import OrchestratorService
+        service = OrchestratorService()
+        if not service.is_enabled():
+            return False
+        streams = service.get_streams()
+        if not isinstance(streams, list):
+            return False
+        target = str(ace_id).lower()
+        for s in streams:
+            if not isinstance(s, dict):
+                continue
+            matches = any(
+                isinstance(s.get(k), str) and target in s[k].lower()
+                for k in ('key', 'content_id', 'id')
+            )
+            if matches:
+                speed = s.get('speed_down', 0) or 0
+                peers = s.get('peers', 0) or 0
+                if speed > 20 or peers > 0:
+                    return True
+    except Exception:
+        pass
+    return False
+
 def _wait_for_upstream_media(ace_id, timeout=25, identifier_type='id'):
     deadline = time.time() + timeout
     while time.time() < deadline:
         if _upstream_has_media(ace_id, identifier_type):
             return True
+        if _is_orchestrator_downloading(ace_id):
+            deadline = max(deadline, time.time() + 15)
+            if deadline - time.time() > 45:
+                deadline = time.time() + 45
         time.sleep(2)
     return False
 
@@ -815,7 +845,11 @@ def _start_hls_with_retries(
         )
         last_effective_id = effective_id
 
-        if success and _wait_for_ready_manifest(effective_id, wait_timeout):
+        actual_wait = wait_timeout
+        if _is_orchestrator_downloading(ace_id):
+            actual_wait = max(wait_timeout, 45)
+
+        if success and _wait_for_ready_manifest(effective_id, actual_wait):
             return {
                 "status": "ok",
                 "url": f"/hls/{effective_id}/index.m3u8",

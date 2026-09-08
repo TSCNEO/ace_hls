@@ -643,6 +643,33 @@ async function fetchEngineInfo(aceId, isUpdate = false) {
 
             const hudSwarm = document.getElementById('hud-swarm');
             if (hudSwarm) hudSwarm.textContent = `👤 ${peers} | ⬇️ ${downVal} KB/s`;
+
+            // Player inteligente / Orchestrator-Aware:
+            // Si el motor está descargando activamente o conectado a peers, el stream está vivo.
+            const isActivelyWorking = downVal > 20 || peers > 0;
+            if (!hasPlayedSuccessfully && isActivelyWorking && currentAceId === aceId) {
+                const errOverlay = document.getElementById('player-error');
+                if (errOverlay && errOverlay.style.display !== 'none') {
+                    const errTitle = document.getElementById('player-error-title');
+                    const errMsg = document.getElementById('player-error-message');
+                    const errIcon = document.getElementById('player-error-icon');
+                    if (errTitle) errTitle.textContent = 'Recibiendo datos de AceStream';
+                    if (errIcon) errIcon.textContent = '⚡';
+                    if (errMsg) errMsg.textContent = `Descargando del enjambre P2P (👤 ${peers} peers | ⬇️ ${downVal} KB/s)... Creando buffer HLS.`;
+                }
+
+                // Extender timeout de carga: NO cerrar mientras haya descarga activa
+                if (loadTimeout) {
+                    clearTimeout(loadTimeout);
+                    loadTimeout = setTimeout(() => {
+                        const player = getPlayerElement();
+                        if (!hasPlayedSuccessfully && player && (player.readyState < 2 || player.paused) && currentAceId === aceId) {
+                            console.warn("[Player] Stream startup timeout without playable frames");
+                            recoverPlayback('La señal tardó demasiado en arrancar.', true);
+                        }
+                    }, 35000);
+                }
+            }
         }
 
         if (!identified) container.textContent = 'Motor no identificado';
@@ -1282,6 +1309,9 @@ async function startPlayback(aceId, profile, options = {}) {
     currentAbortController = new AbortController();
     const signal = currentAbortController.signal;
     resetPlayerEngine();
+    if (engineInfoInterval) clearInterval(engineInfoInterval);
+    fetchEngineInfo(aceId);
+    engineInfoInterval = setInterval(() => fetchEngineInfo(aceId, true), 2500);
     showPlayerStatus('Preparando stream', force ? 'Reiniciando AceStream y esperando segmentos...' : 'Conectando con AceStream...');
 
     try {
