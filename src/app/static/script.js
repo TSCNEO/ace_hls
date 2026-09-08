@@ -1987,173 +1987,206 @@ function renderAgenda(days) {
         header.appendChild(countSpan);
         section.appendChild(header);
 
-        const grid = element('div', 'agenda-grid');
+        const pastEvents = (day.events || []).filter(e => e.is_past);
+        const activeEvents = (day.events || []).filter(e => !e.is_past);
 
-        day.events.forEach(ev => {
-            const eventKey = `${day.date || ''}_${ev.time || ''}_${ev.event || ''}`;
-            const isTracked = trackedMatchEvents.has(eventKey);
-            const isProbing = probingMatches.has(eventKey);
-            const probeData = probedMatchStreams[eventKey] || null;
+        if (pastEvents.length > 0) {
+            const toggleBar = element('div', 'agenda-past-toggle-bar');
+            const pastGrid = element('div', 'agenda-grid agenda-past-grid');
+            const showInitially = activeEvents.length === 0;
+            pastGrid.style.display = showInitially ? 'grid' : 'none';
 
-            const diffMin = (typeof ev.starts_in_minutes === 'number')
-                ? ev.starts_in_minutes
-                : getMinutesUntilEvent(day.date, ev.time);
-            const isSoon = ev.is_soon || ev.is_live || (diffMin !== null && diffMin <= 15 && diffMin >= -135);
-
-            const card = element('div', 'agenda-card' + (ev.is_live ? ' is-live' : '') + (isTracked ? ' is-tracked' : ''));
-
-            // Card Header
-            const cardHeader = element('div', 'agenda-card-header');
-
-            const timeWrapper = element('div', 'agenda-time-wrapper');
-            const starBtn = element('button', 'track-event-btn' + (isTracked ? ' active' : ''), isTracked ? '★' : '☆');
-            starBtn.title = isTracked
-                ? 'Seguimiento activo (clic para desactivar)'
-                : (isSoon
-                    ? 'Marcar partido en seguimiento (comprueba señales vivas ahora)'
-                    : 'Marcar partido en seguimiento (se comprobará 15 min antes del partido)');
-            starBtn.onclick = (e) => {
-                e.stopPropagation();
-                toggleTrackMatch(eventKey, ev.streams || [], isSoon);
+            const toggleBtn = element(
+                'button',
+                'agenda-past-toggle-btn',
+                showInitially
+                    ? `🔼 Ocultar ${pastEvents.length} eventos anteriores de hoy`
+                    : `⏪ Ver ${pastEvents.length} evento(s) anteriores de hoy`
+            );
+            toggleBtn.onclick = () => {
+                const isHidden = pastGrid.style.display === 'none';
+                pastGrid.style.display = isHidden ? 'grid' : 'none';
+                toggleBtn.textContent = isHidden
+                    ? `🔼 Ocultar ${pastEvents.length} eventos anteriores de hoy`
+                    : `⏪ Ver ${pastEvents.length} evento(s) anteriores de hoy`;
             };
-            timeWrapper.appendChild(starBtn);
-            timeWrapper.appendChild(element('span', 'agenda-time', `⏰ ${ev.time}`));
-            cardHeader.appendChild(timeWrapper);
+            toggleBar.appendChild(toggleBtn);
+            section.appendChild(toggleBar);
 
-            const badgesDiv = element('div');
-            badgesDiv.style.display = 'flex';
-            badgesDiv.style.gap = '4px';
-            badgesDiv.style.alignItems = 'center';
+            pastEvents.forEach(ev => renderAgendaCard(ev, day, pastGrid));
+            section.appendChild(pastGrid);
+        }
 
-            if (isTracked && ev.available && ev.streams && ev.streams.length > 0) {
-                if (isSoon) {
-                    const probeBtn = element(
-                        'button',
-                        'probe-refresh-btn',
-                        isProbing ? '⏳ Probando...' : (probeData ? '⚡ Recomprobar' : '⚡ Comprobar')
-                    );
-                    probeBtn.title = 'Comprueba en segundo plano las señales vivas de este evento';
-                    probeBtn.onclick = (e) => {
-                        e.stopPropagation();
-                        probeMatchStreams(eventKey, ev.streams);
-                    };
-                    badgesDiv.appendChild(probeBtn);
-                } else {
-                    const schedPill = element('span', 'agenda-badge badge-scheduled', '⭐ Auto T-15m');
-                    schedPill.title = 'Seguimiento activo: se comprobarán las señales automáticamente 15 minutos antes de la hora';
-                    badgesDiv.appendChild(schedPill);
+        const mainGrid = element('div', 'agenda-grid');
+        activeEvents.forEach(ev => renderAgendaCard(ev, day, mainGrid));
+        section.appendChild(mainGrid);
 
-                    const manualBtn = element(
-                        'button',
-                        'probe-refresh-btn',
-                        isProbing ? '⏳ Probando...' : (probeData ? '⚡ Recomprobar' : '⚡ Probar ahora')
-                    );
-                    manualBtn.title = 'Comprobar señales ahora de forma manual';
-                    manualBtn.onclick = (e) => {
-                        e.stopPropagation();
-                        probeMatchStreams(eventKey, ev.streams);
-                    };
-                    badgesDiv.appendChild(manualBtn);
-                }
-            }
-
-            if (ev.is_live) {
-                badgesDiv.appendChild(element('span', 'agenda-badge badge-live', '⚡ En Directo'));
-            } else if (ev.is_upcoming) {
-                badgesDiv.appendChild(element('span', 'agenda-badge badge-upcoming', '⏳ Próximamente'));
-            }
-
-            if (ev.available) {
-                const label = `🟢 ${ev.streams_count} señal${ev.streams_count > 1 ? 'es' : ''}`;
-                badgesDiv.appendChild(element('span', 'agenda-badge badge-available', label));
-            } else {
-                badgesDiv.appendChild(element('span', 'agenda-badge badge-unavailable', '⚪ Sin señal'));
-            }
-
-            cardHeader.appendChild(badgesDiv);
-            card.appendChild(cardHeader);
-
-            // Competition
-            if (ev.competition) {
-                const compDiv = element('div', 'agenda-competition');
-                if (ev.competition_icon) {
-                    const icon = document.createElement('img');
-                    icon.src = ev.competition_icon;
-                    icon.className = 'agenda-comp-icon';
-                    icon.alt = '';
-                    compDiv.appendChild(icon);
-                } else {
-                    compDiv.appendChild(element('span', '', '🏆'));
-                }
-                compDiv.appendChild(element('span', '', ev.competition));
-                card.appendChild(compDiv);
-            }
-
-            // Event Title
-            card.appendChild(element('div', 'agenda-event-title', ev.event));
-
-            // TV Channels
-            if (ev.channels && ev.channels.length > 0) {
-                const tvDiv = element('div', 'agenda-tv-channels');
-                ev.channels.forEach(ch => {
-                    tvDiv.appendChild(element('span', 'tv-tag', `📺 ${ch}`));
-                });
-                card.appendChild(tvDiv);
-            }
-
-            // Streams row
-            if (ev.available && ev.streams && ev.streams.length > 0) {
-                const streamsRow = element('div', 'agenda-streams-row');
-
-                let sortedStreams = (ev.streams || []).slice();
-                if (probeData) {
-                    sortedStreams.sort((a, b) => {
-                        const aLive = probeData[a.stream_id]?.alive ? 1 : 0;
-                        const bLive = probeData[b.stream_id]?.alive ? 1 : 0;
-                        return bLive - aLive;
-                    });
-                }
-
-                const primary = sortedStreams[0];
-                const pLive = probeData && probeData[primary.stream_id]?.alive;
-                const pDown = probeData && probeData[primary.stream_id]?.alive === false;
-                const primaryLiveTag = pLive ? ' 🟢 UP' : (pDown ? ' ⚪' : '');
-
-                const primaryBtn = element(
-                    'button',
-                    'stream-play-btn' + (pLive ? ' is-probed-live' : ''),
-                    `▶ Ver (${primary.quality} · ${primary.source_name}${primaryLiveTag})`
-                );
-                primaryBtn.onclick = () => playAgendaStream(primary.stream_id, primary.channel_name, sortedStreams, 0, ev.event);
-                streamsRow.appendChild(primaryBtn);
-
-                if (sortedStreams.length > 1) {
-                    sortedStreams.slice(1).forEach((st, idx) => {
-                        const sLive = probeData && probeData[st.stream_id]?.alive;
-                        const sDown = probeData && probeData[st.stream_id]?.alive === false;
-                        const optLiveTag = sLive ? ' 🟢 UP' : (sDown ? ' ⚪' : '');
-                        const optBtn = element(
-                            'button',
-                            'stream-opt-btn' + (sLive ? ' is-probed-live' : '') + (sDown ? ' is-probed-down' : ''),
-                            `${st.quality} · ${st.source_name}${optLiveTag}`
-                        );
-                        optBtn.title = st.channel_name;
-                        optBtn.onclick = () => playAgendaStream(st.stream_id, st.channel_name, sortedStreams, idx + 1, ev.event);
-                        streamsRow.appendChild(optBtn);
-                    });
-                }
-                card.appendChild(streamsRow);
-            } else {
-                const hint = element('div', 'no-stream-hint', 'No hay canales sintonizables en tu catálogo para este evento.');
-                card.appendChild(hint);
-            }
-
-            grid.appendChild(card);
-        });
-
-        section.appendChild(grid);
         container.appendChild(section);
     });
+}
+
+function renderAgendaCard(ev, day, targetContainer) {
+    const eventKey = `${day.date || ''}_${ev.time || ''}_${ev.event || ''}`;
+    const isTracked = trackedMatchEvents.has(eventKey);
+    const isProbing = probingMatches.has(eventKey);
+    const probeData = probedMatchStreams[eventKey] || null;
+
+    const diffMin = (typeof ev.starts_in_minutes === 'number')
+        ? ev.starts_in_minutes
+        : getMinutesUntilEvent(day.date, ev.time);
+    const isSoon = ev.is_soon || ev.is_live || (diffMin !== null && diffMin <= 15 && diffMin >= -135);
+
+    const card = element('div', 'agenda-card' + (ev.is_live ? ' is-live' : '') + (isTracked ? ' is-tracked' : '') + (ev.is_past ? ' is-past' : ''));
+
+    // Card Header
+    const cardHeader = element('div', 'agenda-card-header');
+
+    const timeWrapper = element('div', 'agenda-time-wrapper');
+    const starBtn = element('button', 'track-event-btn' + (isTracked ? ' active' : ''), isTracked ? '★' : '☆');
+    starBtn.title = isTracked
+        ? 'Seguimiento activo (clic para desactivar)'
+        : (isSoon
+            ? 'Marcar partido en seguimiento (comprueba señales vivas ahora)'
+            : 'Marcar partido en seguimiento (se comprobará 15 min antes del partido)');
+    starBtn.onclick = (e) => {
+        e.stopPropagation();
+        toggleTrackMatch(eventKey, ev.streams || [], isSoon);
+    };
+    timeWrapper.appendChild(starBtn);
+    timeWrapper.appendChild(element('span', 'agenda-time', `⏰ ${ev.time}`));
+    cardHeader.appendChild(timeWrapper);
+
+    const badgesDiv = element('div');
+    badgesDiv.style.display = 'flex';
+    badgesDiv.style.gap = '4px';
+    badgesDiv.style.alignItems = 'center';
+
+    if (isTracked && ev.available && ev.streams && ev.streams.length > 0) {
+        if (isSoon) {
+            const probeBtn = element(
+                'button',
+                'probe-refresh-btn',
+                isProbing ? '⏳ Probando...' : (probeData ? '⚡ Recomprobar' : '⚡ Comprobar')
+            );
+            probeBtn.title = 'Comprueba en segundo plano las señales vivas de este evento';
+            probeBtn.onclick = (e) => {
+                e.stopPropagation();
+                probeMatchStreams(eventKey, ev.streams);
+            };
+            badgesDiv.appendChild(probeBtn);
+        } else {
+            const schedPill = element('span', 'agenda-badge badge-scheduled', '⭐ Auto T-15m');
+            schedPill.title = 'Seguimiento activo: se comprobarán las señales automáticamente 15 minutos antes de la hora';
+            badgesDiv.appendChild(schedPill);
+
+            const manualBtn = element(
+                'button',
+                'probe-refresh-btn',
+                isProbing ? '⏳ Probando...' : (probeData ? '⚡ Recomprobar' : '⚡ Probar ahora')
+            );
+            manualBtn.title = 'Comprobar señales ahora de forma manual';
+            manualBtn.onclick = (e) => {
+                e.stopPropagation();
+                probeMatchStreams(eventKey, ev.streams);
+            };
+            badgesDiv.appendChild(manualBtn);
+        }
+    }
+
+    if (ev.is_live) {
+        badgesDiv.appendChild(element('span', 'agenda-badge badge-live', '⚡ En Directo'));
+    } else if (ev.is_past) {
+        badgesDiv.appendChild(element('span', 'agenda-badge badge-unavailable', 'Finalizado'));
+    } else if (ev.is_upcoming) {
+        badgesDiv.appendChild(element('span', 'agenda-badge badge-upcoming', '⏳ Próximamente'));
+    }
+
+    if (ev.available) {
+        const label = `🟢 ${ev.streams_count} señal${ev.streams_count > 1 ? 'es' : ''}`;
+        badgesDiv.appendChild(element('span', 'agenda-badge badge-available', label));
+    } else {
+        badgesDiv.appendChild(element('span', 'agenda-badge badge-unavailable', '⚪ Sin señal'));
+    }
+
+    cardHeader.appendChild(badgesDiv);
+    card.appendChild(cardHeader);
+
+    // Competition
+    if (ev.competition) {
+        const compDiv = element('div', 'agenda-competition');
+        if (ev.competition_icon) {
+            const icon = document.createElement('img');
+            icon.src = ev.competition_icon;
+            icon.className = 'agenda-comp-icon';
+            icon.alt = '';
+            compDiv.appendChild(icon);
+        } else {
+            compDiv.appendChild(element('span', '', '🏆'));
+        }
+        compDiv.appendChild(element('span', '', ev.competition));
+        card.appendChild(compDiv);
+    }
+
+    // Event Title
+    card.appendChild(element('div', 'agenda-event-title', ev.event));
+
+    // TV Channels
+    if (ev.channels && ev.channels.length > 0) {
+        const tvDiv = element('div', 'agenda-tv-channels');
+        ev.channels.forEach(ch => {
+            tvDiv.appendChild(element('span', 'tv-tag', `📺 ${ch}`));
+        });
+        card.appendChild(tvDiv);
+    }
+
+    // Streams row
+    if (ev.available && ev.streams && ev.streams.length > 0) {
+        const streamsRow = element('div', 'agenda-streams-row');
+
+        let sortedStreams = (ev.streams || []).slice();
+        if (probeData) {
+            sortedStreams.sort((a, b) => {
+                const aLive = probeData[a.stream_id]?.alive ? 1 : 0;
+                const bLive = probeData[b.stream_id]?.alive ? 1 : 0;
+                return bLive - aLive;
+            });
+        }
+
+        const primary = sortedStreams[0];
+        const pLive = probeData && probeData[primary.stream_id]?.alive;
+        const pDown = probeData && probeData[primary.stream_id]?.alive === false;
+        const primaryLiveTag = pLive ? ' 🟢 UP' : (pDown ? ' ⚪' : '');
+
+        const primaryBtn = element(
+            'button',
+            'stream-play-btn' + (pLive ? ' is-probed-live' : ''),
+            `▶ Ver (${primary.quality} · ${primary.source_name}${primaryLiveTag})`
+        );
+        primaryBtn.onclick = () => playAgendaStream(primary.stream_id, primary.channel_name, sortedStreams, 0, ev.event);
+        streamsRow.appendChild(primaryBtn);
+
+        if (sortedStreams.length > 1) {
+            sortedStreams.slice(1).forEach((st, idx) => {
+                const sLive = probeData && probeData[st.stream_id]?.alive;
+                const sDown = probeData && probeData[st.stream_id]?.alive === false;
+                const optLiveTag = sLive ? ' 🟢 UP' : (sDown ? ' ⚪' : '');
+                const optBtn = element(
+                    'button',
+                    'stream-opt-btn' + (sLive ? ' is-probed-live' : '') + (sDown ? ' is-probed-down' : ''),
+                    `${st.quality} · ${st.source_name}${optLiveTag}`
+                );
+                optBtn.title = st.channel_name;
+                optBtn.onclick = () => playAgendaStream(st.stream_id, st.channel_name, sortedStreams, idx + 1, ev.event);
+                streamsRow.appendChild(optBtn);
+            });
+        }
+        card.appendChild(streamsRow);
+    } else {
+        const hint = element('div', 'no-stream-hint', 'No hay canales sintonizables en tu catálogo para este evento.');
+        card.appendChild(hint);
+    }
+
+    targetContainer.appendChild(card);
 }
 
 function playAgendaStream(streamId, channelName, matchStreams = [], queueIndex = 0, matchTitle = '') {

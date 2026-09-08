@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.11.1
+
+- **Depuración de eventos pasados (+4h):** Los eventos deportivos que comenzaron hace más de 4 horas se purgan automáticamente de la agenda y de las listas M3U, manteniendo el catálogo limpio y actualizado.
+- **Enfoque en la hora actual y vista colapsable de eventos pasados:** Al acceder a la Agenda, la parrilla empieza directamente por los eventos en curso y futuros. Los eventos finalizados en las últimas 4 horas se agrupan en un bloque colapsable superior (`⏪ Ver X eventos anteriores de hoy`) desplegable a demanda sin forzar scroll innecesario.
+- **Ventana temporal T-15m en seguimiento:** Los partidos programados para más adelante no lanzan probes inmediatos; quedan programados con sondeo automático al entrar en los 15 minutos previos al inicio.
+
 ## v2.11.0
 
 - **Failover automático en reproductor Web:** Cuando se reproduce un partido de la Agenda, el reproductor arma una cola con todas las señales alternativas del evento. Si la señal principal tarda más de 12 segundos en arrancar, falla el flujo HLS o se congela el vídeo más de 7s, conmuta automáticamente a la siguiente señal viva sin interrumpir al usuario.

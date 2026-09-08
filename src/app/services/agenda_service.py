@@ -520,9 +520,15 @@ class AgendaService:
             enriched_events = []
 
             for ev in day.get("events", []):
-                total_events += 1
                 ev_time = ev.get("time", "")
                 is_live, is_upcoming, diff_minutes, is_soon = self._calculate_live_status(date_str, ev_time)
+
+                # Descartar eventos pasados con mas de 4 horas (-240 minutos)
+                if diff_minutes < -240:
+                    continue
+
+                total_events += 1
+                is_past = not is_live and diff_minutes < -5
 
                 matched_streams: list[dict[str, Any]] = []
                 for ch_name in ev.get("channels", []):
@@ -546,6 +552,7 @@ class AgendaService:
                     **ev,
                     "is_live": is_live,
                     "is_upcoming": is_upcoming,
+                    "is_past": is_past,
                     "starts_in_minutes": diff_minutes,
                     "is_soon": is_soon,
                     "available": has_streams,

@@ -273,3 +273,42 @@ def test_calculate_live_status_and_soon():
     )
     assert is_soon_far is False
     assert diff_far >= 150
+
+
+def test_discard_events_older_than_4_hours(monkeypatch):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        service = AgendaService(data_dir=tmpdir)
+        now = datetime.datetime.now()
+
+        # Event 5 hours ago (older than 4h) -> should be discarded
+        t_old = now - datetime.timedelta(hours=5)
+        # Event 3 hours ago (finished, >135m, but within 4h) -> should be kept as is_past
+        t_recent = now - datetime.timedelta(hours=3)
+        # Event in 2 hours -> should be kept as future
+        t_future = now + datetime.timedelta(hours=2)
+
+        fake_days = [{
+            "date": now.strftime("%d/%m/%Y"),
+            "title": "Hoy",
+            "events": [
+                {"time": t_old.strftime("%H:%M"), "event": "Old Event", "channels": []},
+                {"time": t_recent.strftime("%H:%M"), "event": "Recent Event", "channels": []},
+                {"time": t_future.strftime("%H:%M"), "event": "Future Event", "channels": []},
+            ]
+        }]
+
+        service._memory_cache = {"days": fake_days, "updated_at": "now"}
+        service._memory_cache_time = datetime.datetime.now().timestamp()
+        result = service.get_agenda(catalog_channels=[])
+
+        events_kept = result["days"][0]["events"]
+        assert len(events_kept) == 2
+        titles = [e["event"] for e in events_kept]
+        assert "Old Event" not in titles
+        assert "Recent Event" in titles
+        assert "Future Event" in titles
+        # Check is_past
+        recent_ev = next(e for e in events_kept if e["event"] == "Recent Event")
+        assert recent_ev["is_past"] is True
+        future_ev = next(e for e in events_kept if e["event"] == "Future Event")
+        assert future_ev["is_past"] is False
