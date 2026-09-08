@@ -992,6 +992,12 @@ footer {
     color: #000;
 }
 
+.badge-scheduled {
+    background: rgba(255, 170, 0, 0.2);
+    color: #ffb74d;
+    border: 1px solid rgba(255, 170, 0, 0.4);
+}
+
 .badge-available {
     background: #2e7d32;
     color: #fff;

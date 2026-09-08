@@ -1677,18 +1677,64 @@ function saveTrackedMatches() {
     } catch (e) {}
 }
 
-async function toggleTrackMatch(eventKey, streams) {
+let trackedMatchesScheduleTimer = null;
+
+function getMinutesUntilEvent(dateStr, timeStr) {
+    if (!dateStr || !timeStr) return null;
+    try {
+        const parts = dateStr.split('/');
+        const timeParts = timeStr.split(':');
+        if (parts.length < 3 || timeParts.length < 2) return null;
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        const hour = parseInt(timeParts[0], 10);
+        const min = parseInt(timeParts[1], 10);
+        const eventDate = new Date(year, month, day, hour, min);
+        const now = new Date();
+        return (eventDate.getTime() - now.getTime()) / 60000;
+    } catch (e) {
+        return null;
+    }
+}
+
+async function toggleTrackMatch(eventKey, streams, isSoon = false) {
     if (trackedMatchEvents.has(eventKey)) {
         trackedMatchEvents.delete(eventKey);
         delete probedMatchStreams[eventKey];
     } else {
         trackedMatchEvents.add(eventKey);
-        if (streams && streams.length > 0) {
+        // Solo sonda automáticamente si el partido está en vivo o arranca en <= 15 min
+        if (isSoon && streams && streams.length > 0) {
             probeMatchStreams(eventKey, streams);
         }
     }
     saveTrackedMatches();
     filterAgenda();
+}
+
+function checkTrackedMatchesSchedule() {
+    if (!agendaData || !agendaData.days) return;
+
+    agendaData.days.forEach(day => {
+        (day.events || []).forEach(ev => {
+            const eventKey = `${day.date || ''}_${ev.time || ''}_${ev.event || ''}`;
+            if (!trackedMatchEvents.has(eventKey)) return;
+
+            if (probedMatchStreams[eventKey] || probingMatches.has(eventKey)) return;
+
+            const diffMin = (typeof ev.starts_in_minutes === 'number')
+                ? ev.starts_in_minutes
+                : getMinutesUntilEvent(day.date, ev.time);
+
+            const isDue = ev.is_soon || ev.is_live || (diffMin !== null && diffMin <= 15 && diffMin >= -135);
+
+            if (isDue && ev.available && ev.streams && ev.streams.length > 0) {
+                console.log(`[Auto-Probe] Tracked match "${ev.event}" reached T-15m window (~${Math.round(diffMin || 0)}m). Probing live signals...`);
+                probeMatchStreams(eventKey, ev.streams);
+            }
+        });
+    });
 }
 
 async function probeMatchStreams(eventKey, streams) {
@@ -1780,6 +1826,11 @@ async function loadAgenda(forceRefresh = false) {
         populateCompetitionFilter();
         updateDayTabs();
         filterAgenda();
+
+        if (!trackedMatchesScheduleTimer) {
+            trackedMatchesScheduleTimer = setInterval(checkTrackedMatchesSchedule, 60000);
+        }
+        checkTrackedMatchesSchedule();
     } catch (err) {
         console.error("Error loading sports agenda:", err);
         if (container) {
@@ -1944,6 +1995,11 @@ function renderAgenda(days) {
             const isProbing = probingMatches.has(eventKey);
             const probeData = probedMatchStreams[eventKey] || null;
 
+            const diffMin = (typeof ev.starts_in_minutes === 'number')
+                ? ev.starts_in_minutes
+                : getMinutesUntilEvent(day.date, ev.time);
+            const isSoon = ev.is_soon || ev.is_live || (diffMin !== null && diffMin <= 15 && diffMin >= -135);
+
             const card = element('div', 'agenda-card' + (ev.is_live ? ' is-live' : '') + (isTracked ? ' is-tracked' : ''));
 
             // Card Header
@@ -1951,10 +2007,14 @@ function renderAgenda(days) {
 
             const timeWrapper = element('div', 'agenda-time-wrapper');
             const starBtn = element('button', 'track-event-btn' + (isTracked ? ' active' : ''), isTracked ? '★' : '☆');
-            starBtn.title = isTracked ? 'Seguimiento activo (clic para desactivar)' : 'Marcar partido en seguimiento (comprobar señales)';
+            starBtn.title = isTracked
+                ? 'Seguimiento activo (clic para desactivar)'
+                : (isSoon
+                    ? 'Marcar partido en seguimiento (comprueba señales vivas ahora)'
+                    : 'Marcar partido en seguimiento (se comprobará 15 min antes del partido)');
             starBtn.onclick = (e) => {
                 e.stopPropagation();
-                toggleTrackMatch(eventKey, ev.streams || []);
+                toggleTrackMatch(eventKey, ev.streams || [], isSoon);
             };
             timeWrapper.appendChild(starBtn);
             timeWrapper.appendChild(element('span', 'agenda-time', `⏰ ${ev.time}`));
@@ -1966,17 +2026,35 @@ function renderAgenda(days) {
             badgesDiv.style.alignItems = 'center';
 
             if (isTracked && ev.available && ev.streams && ev.streams.length > 0) {
-                const probeBtn = element(
-                    'button',
-                    'probe-refresh-btn',
-                    isProbing ? '⏳ Probando...' : (probeData ? '⚡ Recomprobar' : '⚡ Comprobar')
-                );
-                probeBtn.title = 'Comprueba en segundo plano las señales vivas de este evento';
-                probeBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    probeMatchStreams(eventKey, ev.streams);
-                };
-                badgesDiv.appendChild(probeBtn);
+                if (isSoon) {
+                    const probeBtn = element(
+                        'button',
+                        'probe-refresh-btn',
+                        isProbing ? '⏳ Probando...' : (probeData ? '⚡ Recomprobar' : '⚡ Comprobar')
+                    );
+                    probeBtn.title = 'Comprueba en segundo plano las señales vivas de este evento';
+                    probeBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        probeMatchStreams(eventKey, ev.streams);
+                    };
+                    badgesDiv.appendChild(probeBtn);
+                } else {
+                    const schedPill = element('span', 'agenda-badge badge-scheduled', '⭐ Auto T-15m');
+                    schedPill.title = 'Seguimiento activo: se comprobarán las señales automáticamente 15 minutos antes de la hora';
+                    badgesDiv.appendChild(schedPill);
+
+                    const manualBtn = element(
+                        'button',
+                        'probe-refresh-btn',
+                        isProbing ? '⏳ Probando...' : (probeData ? '⚡ Recomprobar' : '⚡ Probar ahora')
+                    );
+                    manualBtn.title = 'Comprobar señales ahora de forma manual';
+                    manualBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        probeMatchStreams(eventKey, ev.streams);
+                    };
+                    badgesDiv.appendChild(manualBtn);
+                }
             }
 
             if (ev.is_live) {

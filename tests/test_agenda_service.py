@@ -1,5 +1,6 @@
 import os
 import tempfile
+import datetime
 import pytest
 
 from app.services.agenda_service import (
@@ -251,3 +252,24 @@ def test_probe_candidate_streams():
     # Stopped as soon as 2 live streams were found, stream_3 and stream_4 were never called
     assert "stream_3" not in result["probed"]
     assert probed_calls == ["stream_1", "stream_2"]
+
+
+def test_calculate_live_status_and_soon():
+    service = AgendaService()
+    now = datetime.datetime.now()
+
+    # Event in 10 minutes (soon)
+    t_soon = now + datetime.timedelta(minutes=10)
+    is_live, is_up, diff, is_soon = service._calculate_live_status(
+        t_soon.strftime("%d/%m/%Y"), t_soon.strftime("%H:%M")
+    )
+    assert is_soon is True
+    assert 8 <= diff <= 12
+
+    # Event in 3 hours (not soon)
+    t_far = now + datetime.timedelta(hours=3)
+    is_live_far, is_up_far, diff_far, is_soon_far = service._calculate_live_status(
+        t_far.strftime("%d/%m/%Y"), t_far.strftime("%H:%M")
+    )
+    assert is_soon_far is False
+    assert diff_far >= 150

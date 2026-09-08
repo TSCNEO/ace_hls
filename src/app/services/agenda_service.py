@@ -405,11 +405,11 @@ class AgendaService:
 
         return days
 
-    def _calculate_live_status(self, event_date_str: str, event_time_str: str) -> tuple[bool, bool]:
-        """Determine if an event is currently live or upcoming within 30 min.
+    def _calculate_live_status(self, event_date_str: str, event_time_str: str) -> tuple[bool, bool, int, bool]:
+        """Determine if an event is currently live, upcoming, or starting soon (<=15m).
         
         Uses local server time (Europe/Madrid / CEST).
-        Returns (is_live, is_upcoming).
+        Returns (is_live, is_upcoming, diff_minutes, is_soon).
         """
         try:
             now = datetime.datetime.now()
@@ -418,14 +418,17 @@ class AgendaService:
             event_dt = datetime.datetime(year, month, day, hour, minute)
 
             diff = (event_dt - now).total_seconds()
+            diff_minutes = int(round(diff / 60))
 
             # Live: Started between 0 and 135 minutes ago, or starts in next 5 minutes
             is_live = -8100 <= diff <= 300
             # Upcoming: Starts in next 30 minutes
             is_upcoming = 300 < diff <= 1800
-            return is_live, is_upcoming
+            # Soon: Live now or starts in next 15 minutes (<= 900s)
+            is_soon = is_live or diff <= 900
+            return is_live, is_upcoming, diff_minutes, is_soon
         except Exception:
-            return False, False
+            return False, False, 9999, False
 
     def fetch_raw_agenda(self) -> str:
         """Fetch fresh HTML from the sports guide."""
@@ -519,7 +522,7 @@ class AgendaService:
             for ev in day.get("events", []):
                 total_events += 1
                 ev_time = ev.get("time", "")
-                is_live, is_upcoming = self._calculate_live_status(date_str, ev_time)
+                is_live, is_upcoming, diff_minutes, is_soon = self._calculate_live_status(date_str, ev_time)
 
                 matched_streams: list[dict[str, Any]] = []
                 for ch_name in ev.get("channels", []):
@@ -543,6 +546,8 @@ class AgendaService:
                     **ev,
                     "is_live": is_live,
                     "is_upcoming": is_upcoming,
+                    "starts_in_minutes": diff_minutes,
+                    "is_soon": is_soon,
                     "available": has_streams,
                     "streams_count": len(unique_streams),
                     "primary_stream_id": unique_streams[0]["stream_id"] if has_streams else None,
