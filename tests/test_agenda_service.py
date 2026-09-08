@@ -1,4 +1,5 @@
 import os
+import time
 import tempfile
 import datetime
 import pytest
@@ -288,7 +289,12 @@ def test_calculate_live_status_and_soon():
 def test_discard_events_older_than_4_hours(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         service = AgendaService(data_dir=tmpdir)
-        now = datetime.datetime.now()
+        fake_now = datetime.datetime(2026, 6, 15, 14, 0, 0)
+        monkeypatch.setattr(
+            "app.services.agenda_service.datetime.datetime",
+            type("MockDatetime", (datetime.datetime,), {"now": staticmethod(lambda *args: fake_now)})
+        )
+        now = fake_now
 
         # Event 5 hours ago (older than 4h) -> should be discarded
         t_old = now - datetime.timedelta(hours=5)
@@ -308,7 +314,7 @@ def test_discard_events_older_than_4_hours(monkeypatch):
         }]
 
         service._memory_cache = {"days": fake_days, "updated_at": "now"}
-        service._memory_cache_time = datetime.datetime.now().timestamp()
+        service._memory_cache_time = time.time() + 9999
         result = service.get_agenda(catalog_channels=[])
 
         events_kept = result["days"][0]["events"]

@@ -27,29 +27,41 @@ function triggerMatchFailover(reason) {
         return false;
     }
 
-    if (currentMatchQueueIndex + 1 < currentMatchStreamQueue.length) {
-        currentMatchQueueIndex++;
-        const nextStream = currentMatchStreamQueue[currentMatchQueueIndex];
-        console.warn(`[Failover] Switching to backup stream #${currentMatchQueueIndex + 1}: ${nextStream.channel_name} (${reason})`);
+    const nextIdx = currentMatchQueueIndex + 1;
+    if (nextIdx < currentMatchStreamQueue.length) {
+        const nextStream = currentMatchStreamQueue[nextIdx];
+        const nextDesc = nextStream.channel_name || nextStream.quality || `Señal #${nextIdx + 1}`;
         showPlayerStatus(
-            '⚡ Conmutando señal',
-            `${reason} Saltando a señal de respaldo #${currentMatchQueueIndex + 1} (${nextStream.quality} · ${nextStream.source_name})...`,
-            { icon: '🔄' }
+            'Señal inestable o no disponible',
+            `${reason} ¿Quieres probar la siguiente señal disponible?`,
+            {
+                icon: '⚠️',
+                hasNextStream: true,
+                nextStreamLabel: `Probar señal #${nextIdx + 1} (${nextStream.quality || nextStream.source_name || ''})`,
+                retry: true
+            }
         );
-
-        setTimeout(() => {
-            playAgendaStream(
-                nextStream.stream_id,
-                nextStream.channel_name,
-                currentMatchStreamQueue,
-                currentMatchQueueIndex,
-                currentMatchTitle
-            );
-        }, 800);
         return true;
     }
 
     return false;
+}
+
+function proceedToNextMatchStream() {
+    if (!currentMatchStreamQueue || currentMatchStreamQueue.length <= 1) return;
+    const nextIdx = currentMatchQueueIndex + 1;
+    if (nextIdx < currentMatchStreamQueue.length) {
+        currentMatchQueueIndex = nextIdx;
+        const nextStream = currentMatchStreamQueue[currentMatchQueueIndex];
+        hidePlayerStatus();
+        playAgendaStream(
+            nextStream.stream_id,
+            nextStream.channel_name,
+            currentMatchStreamQueue,
+            currentMatchQueueIndex,
+            currentMatchTitle
+        );
+    }
 }
 
 function absolutizeUrl(url) {
@@ -613,20 +625,34 @@ async function fetchEngineInfo(aceId, isUpdate = false) {
 
         // Engine Info
         let engineName = '';
-        if (Array.isArray(engines)) {
+        let isHealthy = true;
+        if (stream) {
+            engineName = String(stream.container_name || stream.engine_name || '');
+        }
+        if (Array.isArray(engines) && engines.length > 0) {
             const engine = engines.find(e =>
-                (stream && e.container_id === stream.container_id) ||
-                (e.streams && e.streams.some(s => s.toLowerCase().includes(aceId.toLowerCase())))
+                (stream && (
+                    (e.container_id && e.container_id === stream.container_id) ||
+                    (e.id && (e.id === stream.engine_id || e.id === stream.container_id)) ||
+                    (e.container_name && (e.container_name === stream.container_name || e.container_name === stream.engine_name))
+                )) ||
+                (e.streams && e.streams.some(s => typeof s === 'string' && s.toLowerCase().includes(aceId.toLowerCase())))
             );
             if (engine) {
-                engineName = String(engine.container_name || 'sin nombre');
-                const isHealthy = engine.health_status === 'healthy';
-                const dot = element('span', 'status-dot');
-                dot.style.cssText = `position:static; display:inline-block; margin-right:5px; background:${isHealthy ? '#2ea043' : '#da3633'}`;
-                container.append(dot, document.createTextNode('Engine: '));
-                container.appendChild(element('strong', '', String(engine.container_name || 'sin nombre')));
-                identified = true;
+                engineName = String(engine.container_name || engine.name || engineName || 'sin nombre');
+                isHealthy = engine.health_status === 'healthy';
             }
+        }
+        if (engineName) {
+            const dot = element('span', 'status-dot');
+            dot.style.cssText = `position:static; display:inline-block; margin-right:5px; background:${isHealthy ? '#2ea043' : '#da3633'}`;
+            container.append(dot, document.createTextNode('Engine: '));
+            if (engine && engine.container_name) {
+                container.appendChild(element('strong', '', String(engine.container_name || 'sin nombre')));
+            } else {
+                container.appendChild(element('strong', '', engineName));
+            }
+            identified = true;
         }
 
         const hudEngine = document.getElementById('hud-engine');
@@ -1149,6 +1175,7 @@ function showPlayerStatus(title, message, options = {}) {
     const titleEl = document.getElementById('player-error-title');
     const messageEl = document.getElementById('player-error-message');
     const retryBtn = document.getElementById('player-retry-btn');
+    const nextBtn = document.getElementById('player-next-btn');
 
     if (!box) return;
     box.style.display = 'flex';
@@ -1156,11 +1183,21 @@ function showPlayerStatus(title, message, options = {}) {
     if (titleEl) titleEl.textContent = title;
     if (messageEl) messageEl.textContent = message || '';
     if (retryBtn) retryBtn.style.display = options.retry ? 'inline-block' : 'none';
+    if (nextBtn) {
+        if (options.hasNextStream) {
+            nextBtn.textContent = options.nextStreamLabel || 'Probar siguiente señal';
+            nextBtn.style.display = 'inline-block';
+        } else {
+            nextBtn.style.display = 'none';
+        }
+    }
 }
 
 function hidePlayerStatus() {
     const box = document.getElementById('player-error');
     if (box) box.style.display = 'none';
+    const nextBtn = document.getElementById('player-next-btn');
+    if (nextBtn) nextBtn.style.display = 'none';
 }
 
 function resetPlayerEngine() {

@@ -344,11 +344,13 @@
                 <div id="player-error-icon" style="font-size:3rem; margin-bottom:10px;">⚠️</div>
                 <div id="player-error-title" style="font-size:1.2rem; font-weight:bold;">Preparando stream</div>
                 <div id="player-error-message" style="color:#aaa; margin-top:5px;">Esperando datos de AceStream...</div>
-                <div style="display:flex; gap:10px; margin-top:15px;">
-                    <button id="player-cancel-btn" class="utility-btn btn-ios" onclick="closePlayer()"
-                        style="background:#333; border:1px solid #555;">Cancelar</button>
+                <div style="display:flex; gap:10px; margin-top:15px; flex-wrap:wrap; justify-content:center;">
+                    <button id="player-next-btn" class="utility-btn btn-ios" onclick="proceedToNextMatchStream()"
+                        style="display:none; background:#238636; border:1px solid #2ea043;">Probar siguiente señal</button>
                     <button id="player-retry-btn" class="utility-btn btn-ios" onclick="retryCurrentPlayback(true)"
                         style="display:none;">Reintentar</button>
+                    <button id="player-cancel-btn" class="utility-btn btn-ios" onclick="closePlayer()"
+                        style="background:#333; border:1px solid #555;">Cancelar</button>
                 </div>
             </div>
 
