@@ -293,7 +293,7 @@ class HLSManager:
 
             # Global HLS Flags
             hls_flags = "delete_segments+independent_segments" if is_recode_profile else "delete_segments"
-            cmd.extend(["-hls_time", "4", "-hls_list_size", "16", "-hls_flags", hls_flags])
+            cmd.extend(["-hls_time", "4", "-hls_list_size", "6", "-hls_flags", hls_flags])
 
             if is_recode_profile:
                 cmd.extend([

@@ -768,16 +768,12 @@ def _is_orchestrator_downloading(ace_id):
         pass
     return False
 
-def _wait_for_upstream_media(ace_id, timeout=25, identifier_type='id'):
+def _wait_for_upstream_media(ace_id, timeout=15, identifier_type='id'):
     deadline = time.time() + timeout
     while time.time() < deadline:
         if _upstream_has_media(ace_id, identifier_type):
             return True
-        if _is_orchestrator_downloading(ace_id):
-            deadline = max(deadline, time.time() + 15)
-            if deadline - time.time() > 45:
-                deadline = time.time() + 45
-        time.sleep(2)
+        time.sleep(1.5)
     return False
 
 def _internal_stream_url(ace_id, identifier_type='id'):
@@ -845,11 +841,7 @@ def _start_hls_with_retries(
         )
         last_effective_id = effective_id
 
-        actual_wait = wait_timeout
-        if _is_orchestrator_downloading(ace_id):
-            actual_wait = max(wait_timeout, 45)
-
-        if success and _wait_for_ready_manifest(effective_id, actual_wait):
+        if success and _wait_for_ready_manifest(effective_id, wait_timeout):
             return {
                 "status": "ok",
                 "url": f"/hls/{effective_id}/index.m3u8",
