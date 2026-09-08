@@ -564,7 +564,9 @@ function isIOS() {
     ].includes(navigator.platform) || (navigator.userAgent.includes("Mac") && "ontouchend" in document);
 }
 
-let loadTimeout;
+let loadTimeout = null;
+let stallTimer = null;
+let hasPlayedSuccessfully = false;
 let statsInterval;
 let engineInfoInterval;
 
@@ -737,9 +739,14 @@ function hidePlayerStatus() {
 }
 
 function resetPlayerEngine() {
+    hasPlayedSuccessfully = false;
     if (loadTimeout) {
         clearTimeout(loadTimeout);
         loadTimeout = null;
+    }
+    if (stallTimer) {
+        clearTimeout(stallTimer);
+        stallTimer = null;
     }
 
     if (hlsInstance) {
@@ -782,38 +789,79 @@ function attachHlsToPlayer(player, streamUrl, aceId, profile, generation) {
             console.warn(data.fatal ? 'Fatal hls.js error:' : 'hls.js warning:', data);
             if (!data.fatal) return;
 
-            if (triggerMatchFailover('Fallo crítico en flujo HLS.')) {
-                return;
-            }
-
+            // 1. Recover media errors (PTS discontinuities / buffer holes)
             if (data.type === Hls.ErrorTypes.MEDIA_ERROR && hlsInstance) {
-                showPlayerStatus('Recuperando reproducción', 'hls.js detectó un error de medio. Reintentando...');
+                console.log('[Player] Recovering media error...');
                 hlsInstance.recoverMediaError();
                 setTimeout(() => {
-                    const stillStalled = player.readyState < 2 || player.paused;
+                    const stillStalled = player.readyState < 2 || (player.paused && hasPlayedSuccessfully);
                     if (stillStalled && generation === playbackGeneration && currentAceId === aceId) {
-                        recoverPlayback('El reproductor no pudo recuperarse.', true);
+                        recoverPlayback('El reproductor no pudo recuperarse del fallo de medio.', true);
                     }
-                }, 4000);
+                }, 5000);
                 return;
             }
 
-            recoverPlayback('El stream HLS falló durante la reproducción.', true);
+            // 2. Recover network errors (transient segment delays)
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR && hlsInstance) {
+                console.log('[Player] Recovering network error...');
+                hlsInstance.startLoad();
+                setTimeout(() => {
+                    if (player.readyState < 2 && generation === playbackGeneration && currentAceId === aceId) {
+                        recoverPlayback('Corte de red en el flujo HLS.', true);
+                    }
+                }, 6000);
+                return;
+            }
+
+            // 3. Any other non-recoverable error triggers recovery/failover
+            recoverPlayback('Fallo crítico en flujo HLS.', true);
         });
 
-        // Detect frozen / stalled stream during playback
-        let stallTimer = null;
+        // Detect frozen / stalled stream during active playback
+        let lastPlayheadPosition = 0;
+        const clearStall = () => {
+            if (stallTimer) {
+                clearTimeout(stallTimer);
+                stallTimer = null;
+            }
+        };
+
         const handleStall = () => {
-            if (stallTimer) clearTimeout(stallTimer);
+            clearStall();
+            // Don't trigger stall failover before video has actually begun playing
+            if (!hasPlayedSuccessfully) return;
+
             stallTimer = setTimeout(() => {
                 if (player && !player.paused && player.readyState < 3 && generation === playbackGeneration && currentAceId === aceId) {
-                    console.warn("Video stalled for > 7s, triggering failover");
-                    triggerMatchFailover("Transmisión congelada o sin datos.");
+                    console.warn('[Player] Video frozen for > 16s during active playback, triggering failover');
+                    triggerMatchFailover('Transmisión congelada o sin datos por más de 16s.');
                 }
-            }, 7500);
+            }, 16000);
         };
+
         player.addEventListener('waiting', handleStall);
         player.addEventListener('stalled', handleStall);
+
+        const onProgressing = () => {
+            clearStall();
+            if (loadTimeout) {
+                clearTimeout(loadTimeout);
+                loadTimeout = null;
+            }
+            if (player.currentTime > 0.1) {
+                hasPlayedSuccessfully = true;
+            }
+            hidePlayerStatus();
+        };
+
+        player.addEventListener('playing', onProgressing);
+        player.addEventListener('timeupdate', () => {
+            if (player.currentTime !== lastPlayheadPosition) {
+                lastPlayheadPosition = player.currentTime;
+                onProgressing();
+            }
+        });
 
         hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
             hidePlayerStatus();
@@ -824,7 +872,7 @@ function attachHlsToPlayer(player, streamUrl, aceId, profile, generation) {
         });
 
         hlsInstance.on(Hls.Events.FRAG_LOADED, () => {
-            if (stallTimer) clearTimeout(stallTimer);
+            clearStall();
             hidePlayerStatus();
         });
 
@@ -896,19 +944,27 @@ async function startPlayback(aceId, profile, options = {}) {
                 vlcBtn.removeAttribute('href'); // Ensure it's a button behavior
             }
 
-            // Timeout Logic (12 seconds) - Trigger failover if slow
+            // Timeout Logic (28 seconds) - Trigger failover ONLY if completely unresponsive on startup
             if (loadTimeout) clearTimeout(loadTimeout);
             loadTimeout = setTimeout(() => {
-                if ((player.readyState < 2 || player.paused) && currentAceId === aceId) {
-                    console.warn("Stream startup timeout in 12s");
-                    recoverPlayback('La señal tardó más de 12s en arrancar.', true);
+                if (!hasPlayedSuccessfully && (player.readyState < 2 || player.paused) && currentAceId === aceId) {
+                    console.warn("[Player] Stream startup timeout in 28s without playable frames");
+                    recoverPlayback('La señal tardó más de 28s en arrancar.', true);
                 }
-            }, 12000);
+            }, 28000);
 
-            player.addEventListener('playing', () => {
-                if (loadTimeout) clearTimeout(loadTimeout);
+            const onStarted = () => {
+                if (loadTimeout) {
+                    clearTimeout(loadTimeout);
+                    loadTimeout = null;
+                }
+                hasPlayedSuccessfully = true;
                 hidePlayerStatus();
-            }, { once: true });
+            };
+            player.addEventListener('playing', onStarted, { once: true });
+            player.addEventListener('timeupdate', () => {
+                if (player.currentTime > 0.1) onStarted();
+            });
 
         } else {
             if (triggerMatchFailover("Señal no disponible o sin peers.")) {

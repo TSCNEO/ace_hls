@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.11.2
+
+- **Blindaje contra falsos positivos de failover:**
+  - `Hls.Events.ERROR`: se prioriza la recuperación automática nativa de Hls.js (`recoverMediaError`) ante discontinuidades iniciales de PTS o timestamp en streams P2P, evitando que un salto de medio inicial fuerce la conmutación de canal prematura.
+  - `stallTimer`: ampliado de 7.5s a 16s y acotado estrictamente a reproducción activa (`hasPlayedSuccessfully = true`), ignorando el buffer previo al primer fotograma.
+  - `loadTimeout`: ampliado de 12s a 28s para respetar el tiempo normal de conexión P2P de AceStream (10-20s), cancelándose inmediatamente al avanzar `timeupdate` o `playing`.
+
 ## v2.11.1
 
 - **Depuración de eventos pasados (+4h):** Los eventos deportivos que comenzaron hace más de 4 horas se purgan automáticamente de la agenda y de las listas M3U, manteniendo el catálogo limpio y actualizado.
