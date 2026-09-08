@@ -14,7 +14,7 @@
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="style.css?v=v2.11.3">
+    <link rel="stylesheet" href="style.css?v=v2.12.0">
 </head>
 
 <body>
@@ -345,7 +345,32 @@
                     style="display:none; margin-top:15px;">Reintentar</button>
             </div>
 
-            <video id="player" title="AceHLS Stream" controls playsinline webkit-playsinline></video>
+            <div class="player-video-wrapper" id="player-video-wrapper">
+                <video id="player" title="AceHLS Stream" controls playsinline webkit-playsinline></video>
+
+                <!-- Stats for Nerds HUD Overlay -->
+                <div id="player-stats-overlay" class="player-stats-hud" style="display:none;">
+                    <div class="stats-hud-header">
+                        <span>📊 ESTADÍSTICAS EN VIVO</span>
+                        <button type="button" class="stats-hud-close" onclick="toggleStatsHud()">&times;</button>
+                    </div>
+                    <div class="stats-hud-grid">
+                        <div class="stats-hud-row"><span class="stats-label">P2P Motor:</span><span id="hud-engine" class="stats-val">—</span></div>
+                        <div class="stats-hud-row"><span class="stats-label">P2P Swarm:</span><span id="hud-swarm" class="stats-val">—</span></div>
+                        <div class="stats-hud-row"><span class="stats-label">Resolución:</span><span id="hud-res" class="stats-val">—</span></div>
+                        <div class="stats-hud-row"><span class="stats-label">Fluidez:</span><span id="hud-fps" class="stats-val stats-highlight">—</span></div>
+                        <div class="stats-hud-row"><span class="stats-label">Buffer Cliente:</span><span id="hud-buffer" class="stats-val">—</span></div>
+                        <div class="stats-hud-row"><span class="stats-label">Latencia Directo:</span><span id="hud-latency" class="stats-val">—</span></div>
+                        <div class="stats-hud-row"><span class="stats-label">Frames Caídos:</span><span id="hud-dropped" class="stats-val">—</span></div>
+                    </div>
+                </div>
+
+                <!-- Double-Tap Gesture Ripples -->
+                <div id="gesture-overlay" class="gesture-overlay">
+                    <div id="ripple-left" class="gesture-ripple ripple-left"><span class="ripple-icon">⏪</span><span class="ripple-text">-10s</span></div>
+                    <div id="ripple-right" class="gesture-ripple ripple-right"><span class="ripple-icon">⏩</span><span class="ripple-text">+10s</span></div>
+                </div>
+            </div>
 
             <div class="utility-box">
                 <div class="feedback-controls"
@@ -360,6 +385,16 @@
 
                 <!-- Options Row -->
                 <div class="utility-options-row">
+                    <!-- Live Edge Jump Button -->
+                    <button id="btn-live-edge" class="utility-btn btn-live-edge" onclick="jumpToLiveEdge()" title="Saltar al directo" style="display:none;">
+                        <span class="live-dot"></span> Directo
+                    </button>
+
+                    <!-- Audio Track Selector -->
+                    <select id="audio-selector" class="utility-btn utility-select" onchange="changeAudioTrack(this.value)" style="display:none;" title="Pistas de audio">
+                        <option value="0">📻 Audio Principal</option>
+                    </select>
+
                     <!-- Quality Selector -->
                     <select id="quality-selector" onchange="changeQuality(this.value)"
                         class="utility-btn utility-select">
@@ -368,6 +403,9 @@
                         <option value="720p">720p (Transcode)</option>
                         <option value="480p">480p (Transcode)</option>
                     </select>
+
+                    <!-- Stats Button -->
+                    <button id="btn-stats" class="utility-btn" onclick="toggleStatsHud()" title="Ver estadísticas y FPS">📊 Stats</button>
 
                     <!-- iOS Native Button -->
                     <button id="ios-btn" class="utility-btn btn-ios" onclick="playNativeIOS()" style="display:none;">
@@ -397,7 +435,7 @@
 
     <!-- Custom Scripts -->
     <script src="vendor/hls.min.js?v=1.5.18"></script>
-    <script src="script.js?v=v2.11.3"></script>
+    <script src="script.js?v=v2.12.0"></script>
 </body>
 
 </html>

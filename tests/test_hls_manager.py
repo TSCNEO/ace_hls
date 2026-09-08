@@ -72,7 +72,7 @@ def test_force_request_reuses_preparing_session():
     process.terminate.assert_not_called()
 
 
-def test_ffprobe_reads_local_ts_segment_instead_of_upstream(tmp_path):
+def test_analyze_stream_validates_session_without_server_ffprobe(tmp_path):
     manager = bare_manager()
     stream_id = "c" * 40
     stream_dir = tmp_path / stream_id
@@ -84,43 +84,26 @@ def test_ffprobe_reads_local_ts_segment_instead_of_upstream(tmp_path):
     manager.processes[stream_id] = running_process()
     manager.activity[stream_id] = time.time()
     manager.start_times[stream_id] = time.time()
-    probe_result = Mock(
-        returncode=0,
-        stdout=json.dumps(
-            {
-                "streams": [
-                    {
-                        "codec_type": "video",
-                        "width": 1920,
-                        "height": 1080,
-                        "codec_name": "h264",
-                        "r_frame_rate": "25/1",
-                    },
-                    {"codec_type": "audio", "codec_name": "aac"},
-                ]
-            }
-        ),
-    )
 
-    with patch.object(Config, "HLS_DIR", str(tmp_path)):
-        with patch("app.services.hls_manager.stats_manager.get_stats", return_value=None):
-            with patch("app.services.hls_manager.subprocess.run", return_value=probe_result) as run:
-                with patch("app.services.hls_manager.stats_manager.update_channel_success") as update:
-                    manager._analyze_stream(stream_id)
-
-    command = run.call_args.args[0]
-    assert command[-1] == str(stream_dir / "index0.ts")
-    assert not command[-1].startswith("http")
-    update.assert_called_once_with(
-        stream_id,
-        {
+    cached_stats = {
+        "tech_info": {
             "width": 1920,
             "height": 1080,
             "vcodec": "h264",
-            "fps": 25,
+            "fps": 50,
             "acodec": "aac",
-        },
-    )
+        }
+    }
+
+    with patch.object(Config, "HLS_DIR", str(tmp_path)):
+        with patch("app.services.hls_manager.stats_manager.get_stats", return_value=cached_stats):
+            with patch("app.services.hls_manager.subprocess.run") as run:
+                with patch("app.services.hls_manager.stats_manager.update_channel_success") as update:
+                    manager._analyze_stream(stream_id)
+
+    run.assert_not_called()
+    assert stream_id in manager.validated_sessions
+    update.assert_called_once_with(stream_id, cached_stats["tech_info"])
 
 
 def test_local_fmp4_probe_uses_init_segment(tmp_path):

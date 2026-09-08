@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.12.0
+
+- **Guía electrónica de programación (EPG XMLTV estándar):**
+  - Generador automático `/epg.xml` y `/api/agenda/epg.xml` en formato XMLTV estándar a partir de los eventos deportivos y señales descubiertas.
+  - Inyección de cabecera `url-tvg` y `x-tvg-url` en todas las listas M3U (`/agenda.m3u`, `/playlist.m3u`, `/api/playlist/all.m3u` y `ace_hls.m3u`) para carga automática en TiviMate, Jellyfin y reproductores IPTV.
+- **HUD de Estadísticas en Vivo y Medidor de FPS:**
+  - Overlay flotante "Stats for Nerds" con telemetría integrada: motor P2P, enjambre/peers, velocidad de bajada, resolución, **fluidez real en FPS (50 fps vs 25 fps)**, buffer cliente y frames caídos.
+  - Calibración rápida de FPS en el arranque con paso automático a modo reposo para ahorrar CPU y batería.
+- **Alivio de Servidor (Eliminación de ffprobe):**
+  - Eliminado el subproceso bloqueante `ffprobe` y el bucle de espera de disco en el backend.
+  - Endpoint `POST /api/channels/<ace_id>/tech_info` para actualización ligera de metadatos desde el navegador.
+- **Selector de pistas de audio (Multi-Audio / Radio):**
+  - Detección y selector dinámico de pistas de audio secundarias (carrusel de radio, sonido ambiente, idiomas alternativos).
+- **Gestos táctiles y salto al directo:**
+  - Doble tap en pantalla (izquierda -10s / derecha +10s) con animación visual de ondas.
+  - Botón de salto rápido al directo (`⚡ Directo`) cuando el vídeo acumula desfase.
+
 ## v2.11.3
 
 - **Eliminación de falsas conmutaciones durante la reproducción:**

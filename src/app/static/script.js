@@ -94,12 +94,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const player = getPlayerElement();
     if (player) {
-        player.addEventListener('playing', hidePlayerStatus);
-        player.addEventListener('loadedmetadata', hidePlayerStatus);
+        player.addEventListener('playing', () => {
+            hidePlayerStatus();
+            updateLiveEdgeVisibility();
+            startFpsCalibration();
+        });
+        player.addEventListener('loadedmetadata', () => {
+            hidePlayerStatus();
+            setupAudioTracks();
+            updateLiveEdgeVisibility();
+        });
         player.addEventListener('canplay', hidePlayerStatus);
+        player.addEventListener('timeupdate', updateLiveEdgeVisibility);
+        player.addEventListener('pause', updateLiveEdgeVisibility);
         player.addEventListener('error', () => {
             if (currentAceId && !suppressPlayerErrors) recoverPlayback('El reproductor nativo emitió un error.', true);
         });
+        setupVideoGestures();
     }
 
     // Keep browser back navigation in sync with the player modal.
@@ -601,12 +612,14 @@ async function fetchEngineInfo(aceId, isUpdate = false) {
         ) : null;
 
         // Engine Info
+        let engineName = '';
         if (Array.isArray(engines)) {
             const engine = engines.find(e =>
                 (stream && e.container_id === stream.container_id) ||
                 (e.streams && e.streams.some(s => s.toLowerCase().includes(aceId.toLowerCase())))
             );
             if (engine) {
+                engineName = String(engine.container_name || 'sin nombre');
                 const isHealthy = engine.health_status === 'healthy';
                 const dot = element('span', 'status-dot');
                 dot.style.cssText = `position:static; display:inline-block; margin-right:5px; background:${isHealthy ? '#2ea043' : '#da3633'}`;
@@ -616,6 +629,9 @@ async function fetchEngineInfo(aceId, isUpdate = false) {
             }
         }
 
+        const hudEngine = document.getElementById('hud-engine');
+        if (hudEngine) hudEngine.textContent = engineName || 'No identificado';
+
         // Stream Stats
         if (stream) {
             const peers = stream.peers !== undefined ? stream.peers : 0;
@@ -624,6 +640,9 @@ async function fetchEngineInfo(aceId, isUpdate = false) {
             stats.style.cssText = 'margin-left:10px; opacity:0.8;';
             container.appendChild(stats);
             identified = true;
+
+            const hudSwarm = document.getElementById('hud-swarm');
+            if (hudSwarm) hudSwarm.textContent = `👤 ${peers} | ⬇️ ${downVal} KB/s`;
         }
 
         if (!identified) container.textContent = 'Motor no identificado';
@@ -632,6 +651,365 @@ async function fetchEngineInfo(aceId, isUpdate = false) {
         console.error("Engine info error", e);
         container.textContent = '';
     }
+}
+
+// =========================================================================
+// HUD Stats, FPS Monitoring, Multi-Audio & Mobile Gestures
+// =========================================================================
+
+let statsHudInterval = null;
+let lastVideoFrameCount = 0;
+let lastVideoSampleTime = 0;
+let currentMeasuredFps = 0;
+let techInfoReportedForAceId = null;
+let fpsCalibrationTimer = null;
+let fpsCalibrationCount = 0;
+
+function toggleStatsHud() {
+    const overlay = document.getElementById('player-stats-overlay');
+    if (!overlay) return;
+    const isHidden = overlay.style.display === 'none' || !overlay.style.display;
+    if (isHidden) {
+        overlay.style.display = 'block';
+        updateStatsHud(false);
+        if (statsHudInterval) clearInterval(statsHudInterval);
+        // Refresh every 3.5s when open to save CPU while keeping buffer/latency live
+        statsHudInterval = setInterval(() => updateStatsHud(false), 3500);
+    } else {
+        overlay.style.display = 'none';
+        if (statsHudInterval) {
+            clearInterval(statsHudInterval);
+            statsHudInterval = null;
+        }
+    }
+}
+
+function startFpsCalibration() {
+    if (fpsCalibrationTimer) clearTimeout(fpsCalibrationTimer);
+    fpsCalibrationCount = 0;
+    lastVideoFrameCount = 0;
+    lastVideoSampleTime = performance.now();
+    runFpsCalibrationStep();
+}
+
+function runFpsCalibrationStep() {
+    fpsCalibrationTimer = setTimeout(() => {
+        const player = getPlayerElement();
+        if (!player || player.paused || player.readyState < 2) {
+            if (fpsCalibrationCount < 8) runFpsCalibrationStep();
+            return;
+        }
+
+        updateStatsHud(true);
+        fpsCalibrationCount++;
+
+        // Run up to 3 calibration samples to lock cadence, then stop timer to save CPU!
+        if (fpsCalibrationCount < 3 || currentMeasuredFps === 0) {
+            runFpsCalibrationStep();
+        } else {
+            fpsCalibrationTimer = null;
+        }
+    }, 1000);
+}
+
+function updateStatsHud(isCalibration = false) {
+    const player = getPlayerElement();
+    const overlay = document.getElementById('player-stats-overlay');
+    if (!player) return;
+    if (!isCalibration && (!overlay || overlay.style.display === 'none')) return;
+
+    const now = performance.now();
+    const deltaMs = lastVideoSampleTime > 0 ? (now - lastVideoSampleTime) : 1000;
+
+    const width = player.videoWidth || 0;
+    const height = player.videoHeight || 0;
+    const resEl = document.getElementById('hud-res');
+    if (resEl) {
+        resEl.textContent = (width && height) ? `${width}x${height}` : 'Detectando...';
+    }
+
+    let currentFrames = 0;
+    let droppedFrames = 0;
+    let totalFrames = 0;
+
+    if (typeof player.getVideoPlaybackQuality === 'function') {
+        const q = player.getVideoPlaybackQuality();
+        currentFrames = q.totalVideoFrames;
+        totalFrames = q.totalVideoFrames;
+        droppedFrames = q.droppedVideoFrames;
+    } else if (player.webkitDecodedFrameCount !== undefined) {
+        currentFrames = player.webkitDecodedFrameCount;
+        totalFrames = player.webkitDecodedFrameCount;
+        droppedFrames = player.webkitDroppedFrameCount || 0;
+    }
+
+    if (currentFrames > 0 && lastVideoFrameCount > 0 && deltaMs >= 650) {
+        const diffFrames = currentFrames - lastVideoFrameCount;
+        const calcFps = Math.round(diffFrames / (deltaMs / 1000));
+        if (calcFps > 0 && calcFps <= 120) {
+            currentMeasuredFps = calcFps;
+        }
+        lastVideoFrameCount = currentFrames;
+        lastVideoSampleTime = now;
+    } else if (currentFrames > 0 && lastVideoFrameCount === 0) {
+        lastVideoFrameCount = currentFrames;
+        lastVideoSampleTime = now;
+    }
+
+    const fpsEl = document.getElementById('hud-fps');
+    if (fpsEl) {
+        if (currentMeasuredFps > 0) {
+            const is50p = currentMeasuredFps >= 45;
+            fpsEl.textContent = `${currentMeasuredFps} fps ${is50p ? '⚡ (50p Fluido)' : '⚠️ (25p Estándar)'}`;
+            fpsEl.style.color = is50p ? '#3fb950' : '#d29922';
+        } else {
+            fpsEl.textContent = 'Midiendo...';
+            fpsEl.style.color = '#8b949e';
+        }
+    }
+
+    const bufferEl = document.getElementById('hud-buffer');
+    if (bufferEl) {
+        let forwardBuffer = 0;
+        const ct = player.currentTime;
+        if (player.buffered && player.buffered.length > 0) {
+            for (let i = 0; i < player.buffered.length; i++) {
+                if (player.buffered.start(i) <= ct && ct <= player.buffered.end(i)) {
+                    forwardBuffer = player.buffered.end(i) - ct;
+                    break;
+                }
+            }
+        }
+        bufferEl.textContent = `${forwardBuffer.toFixed(1)}s`;
+        bufferEl.style.color = forwardBuffer >= 4 ? '#3fb950' : (forwardBuffer >= 1.5 ? '#d29922' : '#f85149');
+    }
+
+    const latencyEl = document.getElementById('hud-latency');
+    if (latencyEl) {
+        let lat = 0;
+        if (hlsInstance && typeof hlsInstance.liveSyncPosition === 'number' && hlsInstance.liveSyncPosition > 0) {
+            lat = Math.max(0, hlsInstance.liveSyncPosition - player.currentTime);
+            latencyEl.textContent = `${lat.toFixed(1)}s`;
+        } else if (player.buffered && player.buffered.length > 0) {
+            const end = player.buffered.end(player.buffered.length - 1);
+            lat = Math.max(0, end - player.currentTime);
+            latencyEl.textContent = `${lat.toFixed(1)}s`;
+        } else {
+            latencyEl.textContent = '—';
+        }
+    }
+
+    const droppedEl = document.getElementById('hud-dropped');
+    if (droppedEl) {
+        const dropPct = totalFrames > 0 ? ((droppedFrames / totalFrames) * 100).toFixed(1) : '0.0';
+        droppedEl.textContent = `${droppedFrames} / ${totalFrames} (${dropPct}%)`;
+        droppedEl.style.color = droppedFrames > 15 ? '#f85149' : '#8b949e';
+    }
+
+    // Report detected tech info to server once per playback
+    if (width > 0 && height > 0 && currentMeasuredFps > 0 && currentAceId && techInfoReportedForAceId !== currentAceId) {
+        techInfoReportedForAceId = currentAceId;
+        const techData = {
+            width: width,
+            height: height,
+            fps: currentMeasuredFps,
+            vcodec: 'h264',
+            acodec: 'aac'
+        };
+        updatePlayerTechBadge(techData);
+        fetch(`/api/channels/${encodeURIComponent(currentAceId)}/tech_info`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(techData)
+        }).catch(() => {});
+    }
+}
+
+function setupAudioTracks() {
+    const selector = document.getElementById('audio-selector');
+    if (!selector) return;
+
+    selector.replaceChildren();
+    let tracks = [];
+
+    if (hlsInstance && Array.isArray(hlsInstance.audioTracks) && hlsInstance.audioTracks.length > 1) {
+        tracks = hlsInstance.audioTracks.map((t, idx) => ({
+            id: idx,
+            name: t.name || t.lang || `Pista ${idx + 1}`,
+            lang: t.lang || '',
+            active: idx === hlsInstance.audioTrack,
+        }));
+    } else {
+        const player = getPlayerElement();
+        if (player && player.audioTracks && player.audioTracks.length > 1) {
+            for (let i = 0; i < player.audioTracks.length; i++) {
+                const t = player.audioTracks[i];
+                tracks.push({
+                    id: i,
+                    name: t.label || t.language || `Pista ${i + 1}`,
+                    lang: t.language || '',
+                    active: t.enabled,
+                });
+            }
+        }
+    }
+
+    if (tracks.length <= 1) {
+        selector.style.display = 'none';
+        return;
+    }
+
+    tracks.forEach((t) => {
+        const opt = document.createElement('option');
+        opt.value = String(t.id);
+        const label = formatTrackLabel(t.name, t.lang, t.id);
+        opt.textContent = `📻 ${label}`;
+        if (t.active) opt.selected = true;
+        selector.appendChild(opt);
+    });
+
+    selector.style.display = 'inline-block';
+}
+
+function formatTrackLabel(name, lang, index) {
+    let clean = (name || '').trim();
+    if (/radio|cope|ser|onda/i.test(clean)) return clean;
+    if (lang) {
+        const l = lang.toLowerCase();
+        if (['es', 'spa', 'spanish', 'castellano'].includes(l)) return 'Español' + (clean ? ` (${clean})` : '');
+        if (['en', 'eng', 'english'].includes(l)) return 'Inglés' + (clean ? ` (${clean})` : '');
+        if (['qaa', 'vo', 'orig'].includes(l)) return 'V.O. Original';
+    }
+    return clean || `Audio ${index + 1}`;
+}
+
+function changeAudioTrack(trackId) {
+    const idx = parseInt(trackId, 10);
+    if (isNaN(idx)) return;
+
+    if (hlsInstance && Array.isArray(hlsInstance.audioTracks) && hlsInstance.audioTracks.length > idx) {
+        console.log(`[Audio] Switching Hls.js audio track to ${idx}`);
+        hlsInstance.audioTrack = idx;
+        return;
+    }
+
+    const player = getPlayerElement();
+    if (player && player.audioTracks && player.audioTracks.length > idx) {
+        for (let i = 0; i < player.audioTracks.length; i++) {
+            player.audioTracks[i].enabled = (i === idx);
+        }
+    }
+}
+
+function jumpToLiveEdge() {
+    const player = getPlayerElement();
+    if (!player) return;
+    if (hlsInstance && typeof hlsInstance.liveSyncPosition === 'number' && hlsInstance.liveSyncPosition > 0) {
+        player.currentTime = Math.max(0, hlsInstance.liveSyncPosition - 1);
+    } else if (player.buffered && player.buffered.length > 0) {
+        const end = player.buffered.end(player.buffered.length - 1);
+        player.currentTime = Math.max(0, end - 1.5);
+    }
+    const p = player.play();
+    if (p) p.catch(() => {});
+    updateLiveEdgeVisibility();
+}
+
+function updateLiveEdgeVisibility() {
+    const player = getPlayerElement();
+    const btn = document.getElementById('btn-live-edge');
+    if (!player || !btn) return;
+
+    let lag = 0;
+    if (player.buffered && player.buffered.length > 0) {
+        const end = player.buffered.end(player.buffered.length - 1);
+        lag = end - player.currentTime;
+    }
+    if (lag > 6 || player.paused) {
+        btn.style.display = 'inline-flex';
+    } else {
+        btn.style.display = 'none';
+    }
+}
+
+let lastTapTimestamp = 0;
+let lastTapClientX = 0;
+
+function setupVideoGestures() {
+    const player = getPlayerElement();
+    if (!player) return;
+
+    function onDoubleTap(clientX, width) {
+        if (clientX < width * 0.38) {
+            player.currentTime = Math.max(0, player.currentTime - 10);
+            showGestureRipple('ripple-left');
+        } else if (clientX > width * 0.62) {
+            const maxSeek = (player.buffered && player.buffered.length > 0)
+                ? player.buffered.end(player.buffered.length - 1)
+                : player.currentTime + 10;
+            player.currentTime = Math.min(maxSeek, player.currentTime + 10);
+            showGestureRipple('ripple-right');
+        }
+    }
+
+    player.addEventListener('dblclick', (e) => {
+        const rect = player.getBoundingClientRect();
+        const clientX = e.clientX - rect.left;
+        onDoubleTap(clientX, rect.width);
+    });
+
+    player.addEventListener('touchend', (e) => {
+        const now = performance.now();
+        const touch = e.changedTouches && e.changedTouches[0];
+        if (!touch) return;
+
+        const rect = player.getBoundingClientRect();
+        const clientX = touch.clientX - rect.left;
+        const timeDiff = now - lastTapTimestamp;
+
+        if (timeDiff > 60 && timeDiff < 350 && Math.abs(touch.clientX - lastTapClientX) < 80) {
+            onDoubleTap(clientX, rect.width);
+            lastTapTimestamp = 0;
+            return;
+        }
+
+        lastTapTimestamp = now;
+        lastTapClientX = touch.clientX;
+    }, { passive: true });
+}
+
+function showGestureRipple(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.opacity = '1';
+    setTimeout(() => {
+        el.style.opacity = '0';
+    }, 450);
+}
+
+function resetPlayerOverlays() {
+    if (statsHudInterval) {
+        clearInterval(statsHudInterval);
+        statsHudInterval = null;
+    }
+    if (fpsCalibrationTimer) {
+        clearTimeout(fpsCalibrationTimer);
+        fpsCalibrationTimer = null;
+    }
+    const hudOverlay = document.getElementById('player-stats-overlay');
+    if (hudOverlay) hudOverlay.style.display = 'none';
+    const audioSel = document.getElementById('audio-selector');
+    if (audioSel) {
+        audioSel.replaceChildren();
+        audioSel.style.display = 'none';
+    }
+    const liveBtn = document.getElementById('btn-live-edge');
+    if (liveBtn) liveBtn.style.display = 'none';
+    techInfoReportedForAceId = null;
+    fpsCalibrationCount = 0;
+    currentMeasuredFps = 0;
+    lastVideoFrameCount = 0;
+    lastVideoSampleTime = 0;
 }
 
 async function playChannel(channel) {
@@ -650,7 +1028,9 @@ async function playChannel(channel) {
     // Append ID to title for visibility
     document.getElementById('player-title').textContent = `${channel.name} [${channel.id.slice(-4)}]`;
 
-    document.getElementById('player-tech-info').innerHTML = '';
+    const techInfoEl = document.getElementById('player-tech-info');
+    if (techInfoEl) techInfoEl.replaceChildren();
+    resetPlayerOverlays();
 
     // Reset Quality Selector to Original
     const qualitySel = document.getElementById('quality-selector');
@@ -697,9 +1077,11 @@ async function playChannel(channel) {
 
     modal.style.display = 'flex';
 
-    // Start Polling for Stats (Tech Info)
-    if (statsInterval) clearInterval(statsInterval);
-    statsInterval = setInterval(() => pollStats(channel.id), 5000);
+    if (statsInterval) {
+        clearInterval(statsInterval);
+        statsInterval = null;
+    }
+    startFpsCalibration();
 
     // Initial Play
     const startProfile = getInitialPlaybackProfile();
@@ -831,8 +1213,12 @@ function attachHlsToPlayer(player, streamUrl, aceId, profile, generation) {
             }
         });
 
+        hlsInstance.on(Hls.Events.AUDIO_TRACKS_UPDATED, setupAudioTracks);
+        hlsInstance.on(Hls.Events.AUDIO_TRACK_SWITCHED, setupAudioTracks);
+
         hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
             hidePlayerStatus();
+            setupAudioTracks();
             const playPromise = player.play();
             if (playPromise) playPromise.catch(() => {
                 hidePlayerStatus();
@@ -1039,6 +1425,7 @@ function closePlayer(fromHistory = false) {
     currentProfile = 'original';
     playbackGeneration++;
     resetPlayerEngine();
+    resetPlayerOverlays();
     document.getElementById('player-modal').style.display = 'none';
     if (statsInterval) clearInterval(statsInterval);
     if (engineInfoInterval) clearInterval(engineInfoInterval);

@@ -371,82 +371,16 @@ class HLSManager:
         return streams
 
     def _analyze_stream(self, playback_id, raw_id=None):
-        """Probe generated HLS files without opening a second upstream client."""
-        
-        # Identify Raw ID (Source) from Playback ID (Process key)
-        # Acestream IDs are 40 chars. playback_id might have suffixes.
+        """Validate stream session and apply cached tech info without spawning server ffprobe."""
         raw_id = raw_id or playback_id[:40]
-
-        # Check cache first to avoid redundant probes/timeouts
-        # Cache expires after 24h (86400s) to refresh technical info
-        now = time.time()
         stats = stats_manager.get_stats(raw_id)
-        cached = None
         if stats and stats.get('tech_info'):
-            last_ok = stats.get('last_ok', 0)
-            if (now - last_ok) < 86400: # 24h validity
-                cached = stats
-        
-        if cached:
-            logger.info(f"Skipping probe for {raw_id} (playing {playback_id}), using cached tech info (Age: {int(now - cached.get('last_ok',0))}s).")
-            # Mark raw_id as active/valid
-            stats_manager.update_channel_success(raw_id, cached['tech_info'])
-            
-            with self.lock:
-                self.validated_sessions.add(playback_id)
-            return
+            stats_manager.update_channel_success(raw_id, stats['tech_info'])
+        else:
+            stats_manager.update_channel_success(raw_id)
 
-        probe_target = self._wait_for_local_probe_target(playback_id, timeout=30)
-        if not probe_target:
-            logger.warning("No local media available for ffprobe: %s", playback_id)
-            return
-
-        logger.info("Analyzing local HLS output for %s via %s", raw_id, probe_target)
-        try:
-            cmd = [
-                "ffprobe", 
-                "-v", "quiet", 
-                "-print_format", "json", 
-                "-show_streams", 
-                "-show_format",
-                probe_target,
-            ]
-            # Timeout is important to avoid hanging threads
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-            if result.returncode == 0:
-                data = json.loads(result.stdout)
-                
-                tech_info = {}
-                for stream in data.get('streams', []):
-                    if stream['codec_type'] == 'video':
-                        tech_info['width'] = stream.get('width')
-                        tech_info['height'] = stream.get('height')
-                        tech_info['vcodec'] = stream.get('codec_name')
-                        # FPS calculation can be tricky ("50/1" or "50")
-                        fps_str = stream.get('r_frame_rate')
-                        if fps_str:
-                            try:
-                                num, den = map(int, fps_str.split('/'))
-                                if den > 0:
-                                    tech_info['fps'] = round(num / den)
-                            except:
-                                pass
-                                
-                    elif stream['codec_type'] == 'audio':
-                        tech_info['acodec'] = stream.get('codec_name')
-                
-                if tech_info:
-                    logger.info(f"Analysis success for {raw_id}: {tech_info}")
-                    # Update stats for the RAW SOURCE ID so all profiles share it
-                    stats_manager.update_channel_success(raw_id, tech_info)
-                    
-                    # Also mark as validated since it responded to ffprobe
-                    with self.lock:
-                        self.validated_sessions.add(playback_id)
-            else:
-                logger.warning("ffprobe failed for %s (exit_code=%s)", raw_id, result.returncode)
-        except Exception as e:
-            logger.error(f"Error analyzing stream {raw_id}: {e}")
+        with self.lock:
+            self.validated_sessions.add(playback_id)
 
     def _wait_for_local_probe_target(self, playback_id, timeout=30):
         deadline = time.time() + timeout

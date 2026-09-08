@@ -118,3 +118,24 @@ def test_manifest_wait_refreshes_stream_activity():
                     assert routes._wait_for_ready_manifest("stream-id", timeout=1)
 
     assert update_activity.call_count == 2
+
+
+def test_channel_tech_info_endpoint():
+    app = Flask(__name__)
+    app.register_blueprint(routes.main_bp)
+
+    with patch("app.routes.stats_manager.update_channel_success") as update_mock:
+        client = app.test_client()
+        res = client.post(
+            "/api/channels/test-channel-id/tech_info",
+            json={"width": 1920, "height": 1080, "fps": 50, "vcodec": "h264"},
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["status"] == "ok"
+        assert data["tech_info"]["fps"] == 50
+        assert data["tech_info"]["height"] == 1080
+        update_mock.assert_called_once_with(
+            "test-channel-id",
+            {"width": 1920, "height": 1080, "fps": 50, "vcodec": "h264", "acodec": "aac"},
+        )

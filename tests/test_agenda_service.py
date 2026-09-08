@@ -218,6 +218,16 @@ def test_generate_agenda_m3u(monkeypatch):
         assert 'group-title="⚽ Hoy · HLS Original"' in m3u_all
         assert 'group-title="⚽ Hoy · HLS 720p"' in m3u_all
 
+        # 3. XMLTV Generation
+        xmltv_text = service.generate_xmltv(catalog_channels=catalog)
+        assert xmltv_text.startswith('<?xml version="1.0" encoding="UTF-8"?>')
+        assert '<tv generator-info-name="AceHLS">' in xmltv_text
+        assert 'channel id="stream_laliga_1080"' in xmltv_text
+        assert '<programme ' in xmltv_text
+        assert '<title lang="es">Real Madrid - Barcelona</title>' in xmltv_text
+        assert '<category lang="es">Deportes</category>' in xmltv_text
+        assert '</tv>' in xmltv_text
+
 
 def test_probe_candidate_streams():
     service = AgendaService()

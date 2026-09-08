@@ -231,6 +231,37 @@ def get_channels():
     response.headers["Expires"] = "0"
     return response
 
+@main_bp.route('/api/channels/<ace_id>/tech_info', methods=['POST'])
+def update_channel_tech_info(ace_id):
+    data = request.get_json(silent=True) or {}
+    width = data.get('width')
+    height = data.get('height')
+    fps = data.get('fps')
+    vcodec = data.get('vcodec', 'h264')
+    acodec = data.get('acodec', 'aac')
+
+    tech_info = {}
+    if width and height:
+        try:
+            tech_info['width'] = int(width)
+            tech_info['height'] = int(height)
+        except Exception:
+            pass
+    if fps:
+        try:
+            tech_info['fps'] = int(fps)
+        except Exception:
+            pass
+    if vcodec:
+        tech_info['vcodec'] = str(vcodec)
+    if acodec:
+        tech_info['acodec'] = str(acodec)
+
+    if tech_info:
+        stats_manager.update_channel_success(ace_id, tech_info)
+        return jsonify({"status": "ok", "tech_info": tech_info})
+    return jsonify({"error": "no_data"}), 400
+
 @main_bp.route('/api/agenda', methods=['GET'])
 def get_agenda():
     force = request.args.get('refresh', '').lower() in ('true', '1')
@@ -345,6 +376,23 @@ def get_agenda_playlist():
 
     response = Response(m3u_text, mimetype='audio/x-mpegurl')
     response.headers["Content-Disposition"] = "attachment; filename=agenda.m3u"
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return response
+
+@main_bp.route('/epg.xml')
+@main_bp.route('/api/agenda/epg.xml')
+def get_agenda_epg():
+    channels_data = []
+    if os.path.exists(Config.JSON_FILE):
+        try:
+            with open(Config.JSON_FILE, 'r', encoding='utf-8') as f:
+                channels_data = json.load(f)
+        except Exception:
+            pass
+
+    xml_text = agenda_service.generate_xmltv(catalog_channels=channels_data)
+    response = Response(xml_text, mimetype='application/xml')
+    response.headers["Content-Disposition"] = "inline; filename=epg.xml"
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return response
 
@@ -923,8 +971,9 @@ def get_playlist():
     if not os.path.exists(Config.JSON_FILE):
         channel_manager.update_channels()
 
-    host = request.headers.get('Host')
-    m3u_content = ["#EXTM3U"]
+    host = request.headers.get('Host') or request.host
+    tvg_url = f"http://{host}/epg.xml" if host else "/epg.xml"
+    m3u_content = [f'#EXTM3U url-tvg="{tvg_url}" x-tvg-url="{tvg_url}"']
     
     try:
         with open(Config.JSON_FILE, 'r') as f:
@@ -967,8 +1016,9 @@ def get_playlist_all():
     if not os.path.exists(Config.JSON_FILE):
         channel_manager.update_channels()
 
-    host = request.headers.get('Host')
-    m3u_content = ["#EXTM3U"]
+    host = request.headers.get('Host') or request.host
+    tvg_url = f"http://{host}/epg.xml" if host else "/epg.xml"
+    m3u_content = [f'#EXTM3U url-tvg="{tvg_url}" x-tvg-url="{tvg_url}"']
     
     try:
         with open(Config.JSON_FILE, 'r') as f:

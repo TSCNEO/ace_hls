@@ -296,7 +296,7 @@ class ChannelManager:
 
     @staticmethod
     def _render_direct_m3u(channels: list[dict]) -> str:
-        lines = ["#EXTM3U"]
+        lines = ['#EXTM3U url-tvg="/epg.xml" x-tvg-url="/epg.xml"']
         for channel in channels:
             name = _safe_m3u_value(channel.get("name") or "Unknown")
             logo = _safe_m3u_value(channel.get("logo"), strip_quotes=True)

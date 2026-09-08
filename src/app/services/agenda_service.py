@@ -222,6 +222,19 @@ def _clean_html_text(s: str | None) -> str:
     return " ".join(s.split()).strip()
 
 
+def _xml_escape(val: Any) -> str:
+    if val is None:
+        return ""
+    s = str(val)
+    return (
+        s.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&apos;")
+    )
+
+
 class AgendaService:
     def __init__(self, data_dir: str | None = None) -> None:
         self.data_dir = data_dir or Config.DATA_DIR
@@ -302,6 +315,8 @@ class AgendaService:
                         "quality": q,
                         "quality_score": quality_order.get(q, 0),
                         "type": ch.get("type", "acestream"),
+                        "catalog_id": ch.get("id"),
+                        "tvg_id": ch.get("tvg_id"),
                     })
 
         # Sort streams by quality descending (1080p before 720p before SD)
@@ -593,7 +608,8 @@ class AgendaService:
     ) -> str:
         """Generate dynamic M3U playlist from current sports agenda with multi-origin signals."""
         agenda = self.get_agenda(catalog_channels=catalog_channels)
-        lines = ["#EXTM3U"]
+        tvg_url = f"http://{host}/epg.xml" if host else "/epg.xml"
+        lines = [f'#EXTM3U url-tvg="{tvg_url}" x-tvg-url="{tvg_url}"']
 
         profiles_to_render = (
             ["direct", "original", "max_compat", "720p"]
@@ -680,6 +696,158 @@ class AgendaService:
                         )
                         lines.append(link)
 
+        return "\n".join(lines)
+
+    def generate_xmltv(
+        self,
+        catalog_channels: list[dict[str, Any]] | None = None,
+    ) -> str:
+        """Generate standard XMLTV EPG feed from current sports agenda."""
+        agenda = self.get_agenda(catalog_channels=catalog_channels)
+
+        try:
+            import zoneinfo
+            tz = zoneinfo.ZoneInfo("Europe/Madrid")
+        except Exception:
+            tz = datetime.timezone(datetime.timedelta(hours=2))
+
+        channels_map: dict[str, dict[str, str]] = {}
+        programmes: list[dict[str, Any]] = []
+
+        for day in agenda.get("days", []):
+            date_str = str(day.get("date") or "")
+            d, m, y = None, None, None
+            date_m = re.search(r"(\d{2})/(\d{2})/(\d{4})", date_str)
+            if date_m:
+                d, m, y = map(int, date_m.groups())
+            else:
+                iso_m = re.search(r"(\d{4})-(\d{2})-(\d{2})", date_str)
+                if iso_m:
+                    y, m, d = map(int, iso_m.groups())
+
+            if not (d and m and y):
+                now_es = datetime.datetime.now(tz)
+                d, m, y = now_es.day, now_es.month, now_es.year
+
+            for ev in day.get("events", []):
+                time_str = str(ev.get("time") or "")
+                time_m = re.search(r"(\d{1,2}):(\d{2})", time_str)
+                if not time_m:
+                    continue
+                hh, mm = map(int, time_m.groups())
+
+                try:
+                    start_dt = datetime.datetime(y, m, d, hh, mm, tzinfo=tz)
+                except Exception:
+                    continue
+
+                stop_dt = start_dt + datetime.timedelta(hours=2)
+                start_xml = start_dt.strftime("%Y%m%d%H%M%S %z")
+                stop_xml = stop_dt.strftime("%Y%m%d%H%M%S %z")
+
+                title = ev.get("event") or "Evento deportivo"
+                comp = ev.get("competition") or ""
+                channels_orig = ", ".join(ev.get("channels", []))
+                desc = (
+                    f"Competición: {comp}. Emisión: {channels_orig}"
+                    if channels_orig
+                    else f"Competición: {comp}"
+                )
+                icon = ev.get("competition_icon") or ev.get("local_icon") or ""
+
+                for st in ev.get("streams", []):
+                    sid = str(st.get("stream_id") or "")
+                    if not sid:
+                        continue
+                    cname = st.get("channel_name") or sid
+
+                    if sid not in channels_map:
+                        channels_map[sid] = {
+                            "name": cname,
+                            "icon": icon,
+                        }
+                    programmes.append({
+                        "channel": sid,
+                        "start": start_xml,
+                        "stop": stop_xml,
+                        "title": title,
+                        "sub_title": comp,
+                        "desc": desc,
+                        "category": "Deportes",
+                        "icon": icon,
+                    })
+
+                    cat_id = str(st.get("catalog_id") or "")
+                    if cat_id and cat_id not in channels_map:
+                        channels_map[cat_id] = {
+                            "name": cname,
+                            "icon": icon,
+                        }
+                        programmes.append({
+                            "channel": cat_id,
+                            "start": start_xml,
+                            "stop": stop_xml,
+                            "title": title,
+                            "sub_title": comp,
+                            "desc": desc,
+                            "category": "Deportes",
+                            "icon": icon,
+                        })
+
+                    tvg_id = str(st.get("tvg_id") or "")
+                    if tvg_id and tvg_id not in channels_map and tvg_id != sid and tvg_id != cat_id:
+                        channels_map[tvg_id] = {
+                            "name": cname,
+                            "icon": icon,
+                        }
+                        programmes.append({
+                            "channel": tvg_id,
+                            "start": start_xml,
+                            "stop": stop_xml,
+                            "title": title,
+                            "sub_title": comp,
+                            "desc": desc,
+                            "category": "Deportes",
+                            "icon": icon,
+                        })
+
+        lines = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<!DOCTYPE tv SYSTEM "xmltv.dtd">',
+            '<tv generator-info-name="AceHLS">',
+        ]
+
+        for cid, info in sorted(channels_map.items()):
+            safe_cid = _xml_escape(cid)
+            safe_name = _xml_escape(info["name"])
+            safe_icon = _xml_escape(info["icon"])
+            lines.append(f'  <channel id="{safe_cid}">')
+            lines.append(f'    <display-name>{safe_name}</display-name>')
+            if safe_icon:
+                lines.append(f'    <icon src="{safe_icon}" />')
+            lines.append('  </channel>')
+
+        for p in programmes:
+            safe_ch = _xml_escape(p["channel"])
+            safe_title = _xml_escape(p["title"])
+            safe_sub = _xml_escape(p["sub_title"])
+            safe_desc = _xml_escape(p["desc"])
+            safe_cat = _xml_escape(p["category"])
+            safe_icon = _xml_escape(p["icon"])
+
+            lines.append(f'  <programme start="{p["start"]}" stop="{p["stop"]}" channel="{safe_ch}">')
+            lines.append(f'    <title lang="es">{safe_title}</title>')
+            if safe_sub:
+                lines.append(f'    <sub-title lang="es">{safe_sub}</sub-title>')
+            if safe_desc:
+                lines.append(f'    <desc lang="es">{safe_desc}</desc>')
+            if safe_cat:
+                lines.append(f'    <category lang="es">{safe_cat}</category>')
+            if safe_icon:
+                lines.append(f'    <icon src="{safe_icon}" />')
+            lines.append('  </programme>')
+
+        lines.append('</tv>')
         return "\n".join(lines)
 
     def _load_default_channels(self) -> list[dict[str, Any]]:

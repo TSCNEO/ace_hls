@@ -40,11 +40,25 @@ def test_api_agenda_routes():
         assert res_m3u.status_code == 200
         assert res_m3u.mimetype == "audio/x-mpegurl"
         assert b"#EXTM3U" in res_m3u.data
+        assert b'url-tvg="http://localhost/epg.xml"' in res_m3u.data
 
         res_api_m3u = client.get("/api/agenda/playlist.m3u?profile=all")
         assert res_api_m3u.status_code == 200
         assert res_api_m3u.mimetype == "audio/x-mpegurl"
         assert b"#EXTM3U" in res_api_m3u.data
+        assert b'url-tvg="http://localhost/epg.xml"' in res_api_m3u.data
+
+        # 5b. GET /epg.xml and /api/agenda/epg.xml
+        res_epg = client.get("/epg.xml")
+        assert res_epg.status_code == 200
+        assert res_epg.mimetype == "application/xml"
+        assert b'<?xml version="1.0" encoding="UTF-8"?>' in res_epg.data
+        assert b'<tv generator-info-name="AceHLS">' in res_epg.data
+
+        res_api_epg = client.get("/api/agenda/epg.xml")
+        assert res_api_epg.status_code == 200
+        assert res_api_epg.mimetype == "application/xml"
+        assert b'<tv generator-info-name="AceHLS">' in res_api_epg.data
 
         # 6. POST /api/agenda/probe
         with patch("app.services.agenda_service.agenda_service.probe_candidate_streams") as mock_probe:

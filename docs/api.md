@@ -20,6 +20,7 @@ Todas las respuestas de gestión son JSON salvo las listas M3U, logs y archivos 
 | Método | Ruta | Resultado |
 |---|---|---|
 | `GET` | `/api/channels` | Canales normalizados con URL reproducible. Query opcional: `source` (`all`, ID de fuente o `custom`). Si se omite o es `all`, devuelve el mix global deduplicado; si se especifica una fuente, devuelve los canales crudos de esa fuente sin deduplicar. |
+| `POST` | `/api/channels/<ace_id>/tech_info` | Reporta métricas técnicas medidas en cliente (resolución, fps reales, codecs) para actualizar estadísticas del canal sin requerir ffprobe en servidor. |
 | `GET` | `/api/sources` | Fuentes registradas y estado de validación/refresh. |
 | `POST` | `/api/sources` | Valida y crea una fuente; devuelve 201. |
 | `DELETE` | `/api/sources` | Compatibilidad v2.5.x: elimina por cuerpo `{"url":"…"}`. |
@@ -42,8 +43,10 @@ Todas las respuestas de gestión son JSON salvo las listas M3U, logs y archivos 
 | `GET` | `/api/agenda/live` | Eventos deportivos en directo en la franja horaria actual. Query opcional: `available_only`. |
 | `POST` | `/api/agenda/refresh` | Fuerza el refresco de la agenda deportiva desde la fuente oficial. |
 | `POST` | `/api/agenda/probe` | Sondea de forma secuencial y ligera hasta 3 streams candidatos de un evento para verificar disponibilidad en vivo sin saturar el motor. |
-| `GET` | `/agenda.m3u` | Lista M3U dinámica con eventos deportivos y sus canales disponibles. Query: `profile` (`original`, `direct`, `max_compat`, `720p`, `all`), `live_only`. |
+| `GET` | `/agenda.m3u` | Lista M3U dinámica con eventos deportivos y sus canales disponibles. Query: `profile` (`original`, `direct`, `max_compat`, `720p`, `all`), `live_only`. Incluye cabecera con `url-tvg`. |
 | `GET` | `/api/agenda/playlist.m3u` | Alias de `/agenda.m3u`. |
+| `GET` | `/epg.xml` | Guía electrónica de programación (EPG) en formato estándar XMLTV generada desde la agenda deportiva con mapeo a canales y señales disponibles. |
+| `GET` | `/api/agenda/epg.xml` | Alias de `/epg.xml`. |
 
 Para guardar una fuente inválida desactivada, `POST` o `PATCH` debe incluir `"allow_invalid_disabled":true`. Los errores habituales usan 400, 404, 409 o 422 con `error` y `code`.
 
