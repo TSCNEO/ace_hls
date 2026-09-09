@@ -626,11 +626,12 @@ async function fetchEngineInfo(aceId, isUpdate = false) {
         // Engine Info
         let engineName = '';
         let isHealthy = true;
+        let engine = null;
         if (stream) {
             engineName = String(stream.container_name || stream.engine_name || '');
         }
         if (Array.isArray(engines) && engines.length > 0) {
-            const engine = engines.find(e =>
+            engine = engines.find(e =>
                 (stream && (
                     (e.container_id && e.container_id === stream.container_id) ||
                     (e.id && (e.id === stream.engine_id || e.id === stream.container_id)) ||
