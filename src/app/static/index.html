@@ -14,7 +14,7 @@
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
 
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="style.css?v=v2.12.5">
+    <link rel="stylesheet" href="style.css?v=v2.12.6">
 </head>
 
 <body>
@@ -429,9 +429,14 @@
                             🔗 Copiar...
                         </button>
                         <div id="copy-dropdown" class="dropdown-content"
-                            style="min-width:200px; right:0; left:auto; bottom:100%; top:auto;">
-                            <a href="#" onclick="copyLinkAction('hls'); return false;">📋 Copiar HLS (Perfil)</a>
-                            <a href="#" onclick="copyLinkAction('direct'); return false;">⚙️ Copiar Motor (Directo)</a>
+                            style="min-width:240px; right:0; left:auto; bottom:100%; top:auto; margin-bottom:6px;">
+                            <a href="#" onclick="copyLinkAction('current'); return false;">📋 Copiar Perfil Actual</a>
+                            <div class="divider"></div>
+                            <a href="#" onclick="copyLinkAction('direct'); return false;">⚙️ MPEG-TS Directo (Motor)</a>
+                            <a href="#" onclick="copyLinkAction('original'); return false;">📺 HLS Original (Passthrough)</a>
+                            <a href="#" onclick="copyLinkAction('max_compat'); return false;">🔄 HLS Compatibilidad (Recode)</a>
+                            <a href="#" onclick="copyLinkAction('720p'); return false;">📱 HLS 720p (Transcode)</a>
+                            <a href="#" onclick="copyLinkAction('480p'); return false;">📼 HLS 480p (Transcode)</a>
                         </div>
                     </div>
                 </div>
@@ -446,7 +451,7 @@
     <!-- Custom Scripts -->
     <script src="vendor/hls.min.js?v=1.5.18"></script>
     <script src="vendor/mpegts.min.js?v=1.7.3"></script>
-    <script src="script.js?v=v2.12.5"></script>
+    <script src="script.js?v=v2.12.6"></script>
 </body>
 
 </html>

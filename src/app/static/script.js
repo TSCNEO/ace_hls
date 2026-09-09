@@ -1882,30 +1882,50 @@ function toggleCopyMenu() {
 let activeDirectUrl = ""; // Stores the raw engine URL
 
 function copyLinkAction(type) {
-    const vlcBtn = document.getElementById('vlc-link');
-    let urlToCopy = "";
-    let msg = "";
+    if (!currentAceId) {
+        toggleCopyMenu();
+        return;
+    }
+    const proto = window.location.protocol;
+    const host = window.location.host;
+    const isInfohash = currentIdentifierType === 'infohash';
+    const prefix = isInfohash ? 'ih-' : '';
+    const id = currentAceId;
 
-    if (type === 'hls') {
-        urlToCopy = vlcBtn.getAttribute('data-url'); // Already absolute from startPlayback
-        msg = "🔗 Enlace HLS copiado";
+    let urlToCopy = "";
+
+    if (type === 'current' || type === 'hls') {
+        const prof = currentProfile || 'original';
+        if (prof === 'original') {
+            urlToCopy = `${proto}//${host}/hls/${prefix}${id}/index.m3u8`;
+        } else {
+            urlToCopy = `${proto}//${host}/hls/${prefix}${id}_${prof}/index.m3u8`;
+        }
     } else if (type === 'direct') {
-        urlToCopy = activeDirectUrl;
-        msg = "⚙️ Enlace Motor copiado";
+        urlToCopy = `${proto}//${host}/api/stream/direct/${id}${isInfohash ? '?identifier_type=infohash' : ''}`;
+    } else if (type === 'original') {
+        urlToCopy = `${proto}//${host}/hls/${prefix}${id}/index.m3u8`;
+    } else if (type === 'max_compat') {
+        urlToCopy = `${proto}//${host}/hls/${prefix}${id}_max_compat/index.m3u8`;
+    } else if (type === '720p') {
+        urlToCopy = `${proto}//${host}/hls/${prefix}${id}_720p/index.m3u8`;
+    } else if (type === '480p') {
+        urlToCopy = `${proto}//${host}/hls/${prefix}${id}_480p/index.m3u8`;
     }
 
     if (urlToCopy) {
-        // Secure Context (HTTPS/Localhost)
+        const onSuccess = () => {
+            showCopyFeedback();
+        };
         if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(urlToCopy).then(() => {
-                showCopyFeedback();
-            }).catch(err => {
+            navigator.clipboard.writeText(urlToCopy).then(onSuccess).catch(err => {
                 console.error('Clipboard API failed, trying fallback:', err);
                 fallbackCopy(urlToCopy);
+                onSuccess();
             });
         } else {
-            // Unsecure Context (HTTP) fallback
             fallbackCopy(urlToCopy);
+            onSuccess();
         }
     }
     toggleCopyMenu(); // Close

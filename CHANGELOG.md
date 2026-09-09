@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.12.6
+
+- **Optimización de Transcoding / Recode y Menú de Copia Multisuperficie en el Player:**
+  - Eliminado el empaquetado fragmentado fMP4 (`.m4s` / `init.mp4`) en perfiles de recodificación (`max_compat`, `720p`, `480p`), unificando todos los perfiles en MPEG-TS (`.ts`). Esto elimina los errores de `Packet duration out of range`, falta de sincronización y parones recurrentes en VLC iOS y Safari.
+  - Añadido `-g 50 -keyint_min 50 -bf 0` a todos los perfiles de transcodificación para garantizar keyframes cada 1-2 segundos sin retardo de reordenación B-frame. Los cortes de segmentos HLS son ahora limpios a 4 segundos exactos y el arranque es inmediato.
+  - Forzado `h264_vaapi` y `-bsf:v dump_extra` en recode para asegurar decodificación por hardware compatible universalmente (especialmente Apple VideoToolbox).
+  - Renovado el menú `🔗 Copiar...` en el reproductor web para permitir copiar con un clic cualquier superficie del canal activo: Perfil Actual, MPEG-TS Directo, HLS Original, HLS Compatibilidad, HLS 720p o HLS 480p.
+
 ## v2.12.5
 
 - **Estabilidad de HLS contra microcortes y 404 en VLC/iOS:**

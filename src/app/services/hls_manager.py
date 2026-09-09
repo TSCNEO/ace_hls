@@ -230,26 +230,28 @@ class HLSManager:
                     cmd.insert(5, "-hwaccel_output_format")
                     cmd.insert(6, "vaapi")
                     
-                    # Codec Selection (VAAPI)
-                    vcodec = "h264_vaapi" if video_codec == 'h264' else "hevc_vaapi"
+                    # For maximum device compatibility (iOS, Safari, VLC), use h264_vaapi
+                    vcodec = "h264_vaapi"
                     
                     # Filters Construction
                     filters = []
                     if deinterlace:
                         filters.append("deinterlace_vaapi")
                     
+                    buf_720 = str(int(bitrate_720p.replace('k', '')) * 2) + "k"
+                    buf_480 = str(int(bitrate_480p.replace('k', '')) * 2) + "k"
+
                     if profile == '720p':
                         filters.append("scale_vaapi=w=-2:h=720:format=nv12")
-                        cmd.extend(["-c:v", vcodec, "-b:v", bitrate_720p])
+                        cmd.extend(["-c:v", vcodec, "-b:v", bitrate_720p, "-maxrate", bitrate_720p, "-bufsize", buf_720, "-g", "50", "-keyint_min", "50", "-bf", "0"])
                     elif profile == '480p':
                         filters.append("scale_vaapi=w=-2:h=480:format=nv12")
-                        cmd.extend(["-c:v", vcodec, "-b:v", bitrate_480p])
+                        cmd.extend(["-c:v", vcodec, "-b:v", bitrate_480p, "-maxrate", bitrate_480p, "-bufsize", buf_480, "-g", "50", "-keyint_min", "50", "-bf", "0"])
                     elif profile == 'max_compat':
                         # Max Compatibility: Same Resolution but Force Re-encode to H.264
                         # Use ACP/QP instead of fixed bitrate to respect CRF setting.
-                        # VAAPI uses -qp for Constant Quantization Parameter (similar to CRF)
                         filters.append("scale_vaapi=format=nv12")
-                        cmd.extend(["-c:v", "h264_vaapi", "-qp", str(crf_compat), "-g", "50", "-bf", "0"])
+                        cmd.extend(["-c:v", "h264_vaapi", "-qp", str(crf_compat), "-g", "50", "-keyint_min", "50", "-bf", "0"])
                     
                     if filters:
                         cmd.extend(["-vf", ",".join(filters)])
@@ -258,8 +260,7 @@ class HLSManager:
                     # CPU Fallback
                     logger.warning(f"No HW Accel detected. CPU transcoding for {profile}!")
                     
-                    # Codec Selection (CPU)
-                    vcodec = "libx264" if video_codec == 'h264' else "libx265"
+                    vcodec = "libx264"
                     
                     # Filters Construction
                     filters = []
@@ -268,23 +269,19 @@ class HLSManager:
                         
                     if profile == '720p':
                         filters.append("scale=-2:720")
-                        cmd.extend(["-c:v", "libx264", "-preset", preset, "-b:v", bitrate_720p])
+                        cmd.extend(["-c:v", "libx264", "-preset", preset, "-b:v", bitrate_720p, "-g", "50", "-keyint_min", "50", "-bf", "0", "-pix_fmt", "yuv420p"])
                     elif profile == '480p':
                         filters.append("scale=-2:480")
-                        cmd.extend(["-c:v", "libx264", "-preset", preset, "-b:v", bitrate_480p])
+                        cmd.extend(["-c:v", "libx264", "-preset", preset, "-b:v", bitrate_480p, "-g", "50", "-keyint_min", "50", "-bf", "0", "-pix_fmt", "yuv420p"])
                     elif profile == 'max_compat':
-                        cmd.extend(["-c:v", "libx264", "-preset", preset, "-crf", crf_compat, "-g", "50"])
+                        cmd.extend(["-c:v", "libx264", "-preset", preset, "-crf", crf_compat, "-g", "50", "-keyint_min", "50", "-bf", "0", "-pix_fmt", "yuv420p"])
                     
                     if filters:
                         cmd.extend(["-vf", ",".join(filters)])
                 
-                # Audio Encoding (Common)
+                # Audio Encoding & Video bitstream filter (Common)
                 cmd.extend([
-                    "-pix_fmt", "yuv420p",
-                    "-profile:v", "main",
-                    "-level", "4.1",
-                    "-sc_threshold", "0",
-                    "-keyint_min", "50",
+                    "-bsf:v", "dump_extra",
                     "-c:a", "aac",
                     "-ac", "2",
                     "-ar", "48000",
@@ -300,13 +297,6 @@ class HLSManager:
                 "-hls_delete_threshold", "6",
                 "-hls_flags", hls_flags
             ])
-
-            if is_recode_profile:
-                cmd.extend([
-                    "-hls_segment_type", "fmp4",
-                    "-hls_fmp4_init_filename", "init.mp4",
-                    "-hls_segment_filename", os.path.join(stream_dir, "index%d.m4s")
-                ])
 
             cmd.append(output_file)
             
