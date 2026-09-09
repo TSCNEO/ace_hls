@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.12.2
+
+- **Corrección de SPS/PPS (`dump_extra`) para reproducción fluida en decodificador nativo iOS:**
+  - Restaurado el bitstream filter `-bsf:v dump_extra` y `-hls_flags delete_segments+independent_segments` en el passthrough HLS.
+  - Esto inyecta cabeceras SPS/PPS en el inicio de cada fragmento `.ts`, permitiendo a AVFoundation (Safari iOS) decodificar todos los fotogramas (25/50 fps) en vez de congelarse en 1 fotograma estático cada 6 segundos.
+  - Bump a `v2.12.2` con renovación forzada del Service Worker (`acehls-v2.12.2`).
+
 ## v2.12.1
 
 - **Restauración de línea base HLS probada (v2.9.0):**
