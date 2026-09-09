@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.12.1
+
+- **Restauración de línea base HLS probada (v2.9.0):**
+  - Recuperado `-fflags +genpts+igndts` y HLS v3 estándar (`-hls_flags delete_segments`) en FFmpeg passthrough para evitar microcortes y congelaciones en el decodificador AVFoundation de Apple.
+  - Eliminada la reescritura invasiva del overlay en `fetchEngineInfo` y simplificado el temporizador de carga del reproductor.
+  - Priorización directa de HLS nativo en iOS Safari (`player.src = streamUrl`) con recarga forzada de Service Worker (`acehls-v2.12.1`).
+
 ## v2.12.0
 
 - **Guía electrónica de programación (EPG XMLTV estándar y dinámico con soporte HTTPS):**
