@@ -15,6 +15,14 @@ def test_hls_worker_is_disabled_for_extension_compatibility():
     assert "enableWorker: false" in script
 
 
+def test_mpegts_vendor_library_present_and_linked():
+    assert (STATIC_DIR / "vendor" / "mpegts.min.js").is_file()
+    index = (STATIC_DIR / "index.html").read_text()
+    sw = (STATIC_DIR / "sw.js").read_text()
+    assert "vendor/mpegts.min.js" in index
+    assert "/vendor/mpegts.min.js" in sw
+
+
 def test_frontend_cache_versions_match_application_version():
     version = VERSION_FILE.read_text().strip()
     index = (STATIC_DIR / "index.html").read_text()

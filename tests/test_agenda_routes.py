@@ -1,14 +1,15 @@
 import json
 from unittest.mock import patch
 from app import create_app
-from tests.test_agenda_service import SAMPLE_HTML
+from tests.test_agenda_service import SAMPLE_HTML, FixedDatetime
 
 
 def test_api_agenda_routes():
     app = create_app()
     client = app.test_client()
 
-    with patch("app.services.agenda_service.agenda_service.fetch_raw_agenda", return_value=SAMPLE_HTML):
+    with patch("app.services.agenda_service.datetime.datetime", FixedDatetime), \
+         patch("app.services.agenda_service.agenda_service.fetch_raw_agenda", return_value=SAMPLE_HTML):
         # 1. GET /api/agenda?refresh=1
         res = client.get("/api/agenda?refresh=1")
         assert res.status_code == 200

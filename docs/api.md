@@ -59,6 +59,7 @@ Un canal personalizado requiere `name` y `stream_id`; admite `group`, `logo` y `
 | `GET` | `/api/hls/start/<ace_id>` | Inicia o reutiliza una sesión. Query: `profile`, `force`, `identifier_type`. |
 | `GET` | `/api/hls/stop/<ace_id>` | Detiene una sesión. Query: `profile`, `identifier_type`. |
 | `GET` | `/hls/<path:filename>` | Manifiestos y segmentos generados. |
+| `GET` | `/api/stream/direct/<ace_id>` | Proxy de streaming continuo MPEG-TS para reproductores compatibles (mpegts.js / MSE). Query: `identifier_type`. |
 | `GET` | `/proxy/hls/<ace_id>/index.m3u8` | Proxy de manifiesto HLS real. |
 | `GET` | `/proxy/hls/<ace_id>/segment.ts` | Proxy de segmento. |
 | `GET` | `/stream/<ace_id>.m3u8` | Redirección/arranque HLS para clientes externos. |

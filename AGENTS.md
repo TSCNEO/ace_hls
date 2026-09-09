@@ -117,6 +117,7 @@ http_api:
   hls_start: /api/hls/start/{ace_id}
   hls_stop: /api/hls/stop/{ace_id}
   hls_files: /hls/{stream_id}/{filename}
+  direct_stream: /api/stream/direct/{ace_id}
   orchestrator: [/api/orchestrator/status, /api/orchestrator/streams, /api/orchestrator/overview, /api/orchestrator/metrics, /api/orchestrator/config]
   health: /health
 flows:

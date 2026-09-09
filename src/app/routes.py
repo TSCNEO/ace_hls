@@ -957,6 +957,49 @@ def proxy_upstream_segment(ace_id):
     return response
 
 
+@main_bp.route('/api/stream/direct/<ace_id>')
+def direct_stream(ace_id):
+    identifier_type = _request_identifier_type()
+    upstream_url = _internal_stream_url(ace_id, identifier_type)
+
+    try:
+        upstream = requests.get(
+            upstream_url,
+            stream=True,
+            timeout=(10, 45),
+        )
+        upstream.raise_for_status()
+    except requests.RequestException as e:
+        if current_app:
+            current_app.logger.warning("Failed to connect to direct stream %s: %s", ace_id, e)
+        return jsonify({
+            "error": "upstream_error",
+            "message": f"No se pudo conectar con el motor AceStream: {e}"
+        }), 502
+
+    def generate():
+        try:
+            for chunk in upstream.iter_content(chunk_size=64 * 1024):
+                if chunk:
+                    yield chunk
+        except GeneratorExit:
+            pass
+        except Exception as err:
+            if current_app:
+                current_app.logger.info("Direct stream disconnected for %s: %s", ace_id, err)
+        finally:
+            upstream.close()
+
+    response = Response(generate(), mimetype='video/mp2t')
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    response.headers["X-Accel-Buffering"] = "no"
+    return response
+
+
 @main_bp.route('/hls/<path:filename>')
 def serve_hls(filename):
     # filename might be "ace_id/index.m3u8" or "ace_id/segment.ts"

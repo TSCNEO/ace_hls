@@ -5,6 +5,7 @@ let currentAceId = null;
 let currentIdentifierType = 'id';
 let currentAbortController = null;
 let hlsInstance = null;
+let mpegtsPlayer = null;
 let currentProfile = 'original';
 let playbackGeneration = 0;
 let playbackRetryCount = 0;
@@ -587,6 +588,13 @@ function isIOS() {
     ].includes(navigator.platform) || (navigator.userAgent.includes("Mac") && "ontouchend" in document);
 }
 
+function useMpegtsDirectPlayback(profile) {
+    if (profile !== 'original') return false;
+    if (isIOS()) return false;
+    if (typeof mpegts === 'undefined') return false;
+    return mpegts.isSupported();
+}
+
 let loadTimeout = null;
 let hasPlayedSuccessfully = false;
 let statsInterval;
@@ -841,7 +849,12 @@ function updateStatsHud(isCalibration = false) {
     const latencyEl = document.getElementById('hud-latency');
     if (latencyEl) {
         let lat = 0;
-        if (hlsInstance && typeof hlsInstance.liveSyncPosition === 'number' && hlsInstance.liveSyncPosition > 0) {
+        if (mpegtsPlayer && player.buffered && player.buffered.length > 0) {
+            // mpegts.js: buffered end approximates live edge
+            const end = player.buffered.end(player.buffered.length - 1);
+            lat = Math.max(0, end - player.currentTime);
+            latencyEl.textContent = `${lat.toFixed(1)}s`;
+        } else if (hlsInstance && typeof hlsInstance.liveSyncPosition === 'number' && hlsInstance.liveSyncPosition > 0) {
             lat = Math.max(0, hlsInstance.liveSyncPosition - player.currentTime);
             latencyEl.textContent = `${lat.toFixed(1)}s`;
         } else if (player.buffered && player.buffered.length > 0) {
@@ -850,6 +863,20 @@ function updateStatsHud(isCalibration = false) {
             latencyEl.textContent = `${lat.toFixed(1)}s`;
         } else {
             latencyEl.textContent = '—';
+        }
+    }
+
+    const motorEl = document.getElementById('hud-motor');
+    if (motorEl) {
+        if (mpegtsPlayer) {
+            motorEl.textContent = 'MPEG-TS (mpegts.js)';
+            motorEl.style.color = '#58a6ff';
+        } else if (hlsInstance) {
+            motorEl.textContent = 'HLS (hls.js)';
+            motorEl.style.color = '#8b949e';
+        } else {
+            motorEl.textContent = 'Nativo';
+            motorEl.style.color = '#8b949e';
         }
     }
 
@@ -1208,6 +1235,16 @@ function resetPlayerEngine() {
         loadTimeout = null;
     }
 
+    if (mpegtsPlayer) {
+        try {
+            mpegtsPlayer.pause();
+            mpegtsPlayer.unload();
+            mpegtsPlayer.detachMediaElement();
+            mpegtsPlayer.destroy();
+        } catch (_e) { /* ignore cleanup errors */ }
+        mpegtsPlayer = null;
+    }
+
     if (hlsInstance) {
         hlsInstance.destroy();
         hlsInstance = null;
@@ -1330,11 +1367,101 @@ function attachHlsToPlayer(player, streamUrl, aceId, profile, generation) {
     showPlayerStatus('Player no compatible', 'Este navegador no soporta HLS y hls.js no está disponible.', { icon: '⚠️', retry: true });
 }
 
+function attachMpegtsToPlayer(player, directStreamUrl, aceId, profile, generation) {
+    if (mpegtsPlayer) {
+        try {
+            mpegtsPlayer.pause();
+            mpegtsPlayer.unload();
+            mpegtsPlayer.detachMediaElement();
+            mpegtsPlayer.destroy();
+        } catch (_e) { /* ignore cleanup errors */ }
+        mpegtsPlayer = null;
+    }
+
+    mpegtsPlayer = mpegts.createPlayer({
+        type: 'mse',
+        isLive: true,
+        url: directStreamUrl,
+    }, {
+        enableWorker: true,
+        liveBufferLatencyChasing: true,
+        liveBufferLatencyMaxLatency: 1.5,
+        liveBufferLatencyMinRemain: 0.3,
+        stashInitialSize: 128 * 1024,
+        autoCleanupSourceBuffer: true,
+        autoCleanupMaxBackwardDuration: 30,
+        autoCleanupMinBackwardDuration: 15,
+    });
+
+    mpegtsPlayer.on(mpegts.Events.ERROR, (errorType, errorDetail, errorInfo) => {
+        if (generation !== playbackGeneration || currentAceId !== aceId) return;
+        console.warn('[mpegts.js] Error:', errorType, errorDetail, errorInfo);
+
+        if (hasPlayedSuccessfully) {
+            console.log('[mpegts.js] Stream was playing, attempting HLS fallback...');
+            fallbackToHls(player, aceId, profile, generation);
+        }
+    });
+
+    mpegtsPlayer.on(mpegts.Events.LOADING_COMPLETE, () => {
+        if (generation !== playbackGeneration) return;
+        console.log('[mpegts.js] Loading complete (stream ended)');
+    });
+
+    const onProgressing = () => {
+        if (loadTimeout) {
+            clearTimeout(loadTimeout);
+            loadTimeout = null;
+        }
+        if (player.currentTime > 0.1) {
+            hasPlayedSuccessfully = true;
+        }
+        hidePlayerStatus();
+    };
+
+    player.addEventListener('playing', onProgressing);
+    player.addEventListener('canplay', () => {
+        hidePlayerStatus();
+        if (player.paused && !hasPlayedSuccessfully) {
+            const p = player.play();
+            if (p) p.catch(() => {});
+        }
+    });
+    player.addEventListener('timeupdate', () => {
+        if (player.currentTime > 0.1) {
+            onProgressing();
+        }
+    });
+
+    mpegtsPlayer.attachMediaElement(player);
+    mpegtsPlayer.load();
+    const playPromise = player.play();
+    if (playPromise) playPromise.catch(() => {});
+}
+
+function fallbackToHls(player, aceId, profile, generation) {
+    console.log('[Player] Falling back from mpegts.js to HLS...');
+
+    if (mpegtsPlayer) {
+        try {
+            mpegtsPlayer.pause();
+            mpegtsPlayer.unload();
+            mpegtsPlayer.detachMediaElement();
+            mpegtsPlayer.destroy();
+        } catch (_e) { /* ignore */ }
+        mpegtsPlayer = null;
+    }
+
+    showPlayerStatus('Motor alternativo', 'Cambiando de MPEG-TS directo a HLS...', { icon: '🔄' });
+    startPlayback(aceId, profile, { force: false, resetRetries: true, forceHls: true });
+}
+
 async function startPlayback(aceId, profile, options = {}) {
     const player = getPlayerElement();
     if (!player) return;
 
     const force = options.force === true;
+    const forceHls = options.forceHls === true;
     const resetRetries = options.resetRetries !== false;
     if (resetRetries) playbackRetryCount = 0;
     currentProfile = profile || 'original';
@@ -1350,6 +1477,57 @@ async function startPlayback(aceId, profile, options = {}) {
     if (engineInfoInterval) clearInterval(engineInfoInterval);
     fetchEngineInfo(aceId);
     engineInfoInterval = setInterval(() => fetchEngineInfo(aceId, true), 2500);
+
+    // --- MPEG-TS direct path (no FFmpeg, no HLS) ---
+    if (!forceHls && useMpegtsDirectPlayback(currentProfile)) {
+        let directUrl = `/api/stream/direct/${aceId}`;
+        if (currentIdentifierType === 'infohash') directUrl += '?identifier_type=infohash';
+
+        showPlayerStatus('Preparando stream', 'MPEG-TS directo — conectando con AceStream...');
+        player.muted = true;
+        player.playsInline = true;
+        player.autoplay = true;
+        currentStreamUrl = directUrl;
+
+        attachMpegtsToPlayer(player, directUrl, aceId, currentProfile, generation);
+
+        // Enable Copy Button
+        const vlcBtn = document.getElementById('vlc-link');
+        if (vlcBtn) {
+            vlcBtn.setAttribute('data-url', absolutizeUrl(directUrl));
+            vlcBtn.disabled = false;
+            vlcBtn.innerHTML = "🔗 Copiar...";
+            vlcBtn.style.pointerEvents = "auto";
+            vlcBtn.style.opacity = "1";
+            vlcBtn.onclick = toggleCopyMenu;
+            vlcBtn.removeAttribute('href');
+        }
+
+        // Startup timeout — fallback to HLS if mpegts.js doesn't start in 30s
+        if (loadTimeout) clearTimeout(loadTimeout);
+        loadTimeout = setTimeout(() => {
+            if (!hasPlayedSuccessfully && currentAceId === aceId && generation === playbackGeneration) {
+                console.warn('[Player] MPEG-TS direct startup timeout, falling back to HLS');
+                fallbackToHls(player, aceId, currentProfile, generation);
+            }
+        }, 30000);
+
+        const onStarted = () => {
+            if (loadTimeout) {
+                clearTimeout(loadTimeout);
+                loadTimeout = null;
+            }
+            hasPlayedSuccessfully = true;
+            hidePlayerStatus();
+        };
+        player.addEventListener('playing', onStarted, { once: true });
+        player.addEventListener('timeupdate', () => {
+            if (player.currentTime > 0.1) onStarted();
+        });
+        return;
+    }
+
+    // --- HLS path (original flow) ---
     showPlayerStatus('Preparando stream', force ? 'Reiniciando AceStream y esperando segmentos...' : 'Conectando con AceStream...');
 
     try {

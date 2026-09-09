@@ -5,6 +5,7 @@ const urlsToCache = [
     '/style.css',
     '/script.js',
     '/vendor/hls.min.js',
+    '/vendor/mpegts.min.js',
     '/placeholder.svg'
 ];
 

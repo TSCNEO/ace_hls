@@ -4,11 +4,20 @@ import tempfile
 import datetime
 import pytest
 
+from app.services import agenda_service
 from app.services.agenda_service import (
     AgendaService,
     canonical_tokens,
     extract_stream_quality,
 )
+
+class FixedDatetime(datetime.datetime):
+    @classmethod
+    def now(cls, tz=None):
+        fixed = datetime.datetime(2026, 9, 8, 20, 0, 0)
+        if tz:
+            return fixed.replace(tzinfo=tz)
+        return fixed
 
 SAMPLE_HTML = """
 <!DOCTYPE html>
@@ -162,6 +171,7 @@ def test_strict_number_channel_matching():
 
 
 def test_get_agenda_enrichment_and_caching(monkeypatch):
+    monkeypatch.setattr(agenda_service.datetime, "datetime", FixedDatetime)
     with tempfile.TemporaryDirectory() as tmpdir:
         service = AgendaService(data_dir=tmpdir)
         monkeypatch.setattr(service, "fetch_raw_agenda", lambda: SAMPLE_HTML)
@@ -189,6 +199,7 @@ def test_get_agenda_enrichment_and_caching(monkeypatch):
 
 
 def test_generate_agenda_m3u(monkeypatch):
+    monkeypatch.setattr(agenda_service.datetime, "datetime", FixedDatetime)
     with tempfile.TemporaryDirectory() as tmpdir:
         service = AgendaService(data_dir=tmpdir)
         monkeypatch.setattr(service, "fetch_raw_agenda", lambda: SAMPLE_HTML)
