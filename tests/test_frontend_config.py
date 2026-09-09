@@ -41,3 +41,12 @@ def test_version_endpoint_is_independent_of_working_directory(tmp_path, monkeypa
         response = routes.version()
 
     assert response.get_json()['version'] == VERSION_FILE.read_text().strip()
+
+
+def test_ios_safari_false_error_guard_present():
+    script = (STATIC_DIR / "script.js").read_text()
+    assert "hasPlayedSuccessfully" in script
+    assert "currentTime > 0" in script
+    assert "recoverPlayback" in script
+    assert "MEDIA_ERR_ABORTED" in script or "error.code === 1" in script
+    assert "suppressPlayerErrors" in script

@@ -121,12 +121,16 @@ document.addEventListener('DOMContentLoaded', () => {
         player.addEventListener('timeupdate', updateLiveEdgeVisibility);
         player.addEventListener('pause', updateLiveEdgeVisibility);
         player.addEventListener('error', () => {
-            // En iOS Safari, player.load() tras reset emite error transitorio si el vídeo
-            // ya estaba reproduciéndose con éxito (currentTime > 0 && hasPlayedSuccessfully).
-            // Solo suprimir recovery en ese caso; en cualquier otro error, reportar.
-            if (currentAceId && !suppressPlayerErrors && !(player.currentTime > 0 && hasPlayedSuccessfully))
-                recoverPlayback('El reproductor nativo emitió un error.', true);
-            });
+            if (suppressPlayerErrors) return;
+            if (!currentAceId) return;
+            // En iOS Safari, ignorar errores de aborto por reset o si el player no tiene src
+            if (!player.src && !player.currentSrc) return;
+            if (player.error && player.error.code === 1) return; // MEDIA_ERR_ABORTED
+            // Si ya estaba reproduciéndose con éxito, ignorar transitorios
+            if (player.currentTime > 0 && hasPlayedSuccessfully) return;
+
+            recoverPlayback('El reproductor nativo emitió un error.', true);
+        });
         setupVideoGestures();
     }
 
@@ -1260,7 +1264,6 @@ function resetPlayerEngine() {
         player.pause();
         player.removeAttribute('src');
         player.load();
-        setTimeout(() => { suppressPlayerErrors = false; }, 250);
     }
 }
 
@@ -1353,6 +1356,7 @@ function attachHlsToPlayer(player, streamUrl, aceId, profile, generation) {
 
         hlsInstance.on(Hls.Events.MEDIA_ATTACHED, () => {
             hlsInstance.loadSource(streamUrl);
+            setTimeout(() => { suppressPlayerErrors = false; }, 400);
         });
         hlsInstance.attachMedia(player);
         return;
@@ -1360,6 +1364,7 @@ function attachHlsToPlayer(player, streamUrl, aceId, profile, generation) {
 
     if (player.canPlayType('application/vnd.apple.mpegurl') || player.canPlayType('application/x-mpegURL')) {
         player.src = streamUrl;
+        setTimeout(() => { suppressPlayerErrors = false; }, 400);
         const playPromise = player.play();
         hidePlayerStatus();
         if (playPromise) playPromise.catch(() => {
@@ -1438,6 +1443,7 @@ function attachMpegtsToPlayer(player, directStreamUrl, aceId, profile, generatio
     });
 
     mpegtsPlayer.attachMediaElement(player);
+    setTimeout(() => { suppressPlayerErrors = false; }, 400);
     mpegtsPlayer.load();
     const playPromise = player.play();
     if (playPromise) playPromise.catch(() => {});
