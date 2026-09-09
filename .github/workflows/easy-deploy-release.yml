@@ -29,7 +29,21 @@ jobs:
       - name: Verificar imagen Docker publicada
         run: |
           tag="${GITHUB_REF_NAME#v}"
-          docker buildx imagetools inspect "tscneo/ace-hls-viewer:${tag}"
+          echo "Buscando imagen tscneo/ace-hls-viewer:${tag} en Docker Hub..."
+          found=0
+          for i in {1..30}; do
+            if docker buildx imagetools inspect "tscneo/ace-hls-viewer:${tag}" >/dev/null 2>&1; then
+              echo "✓ Imagen tscneo/ace-hls-viewer:${tag} encontrada en Docker Hub"
+              found=1
+              break
+            fi
+            echo "Esperando a que la imagen esté disponible en Docker Hub (intento ${i}/30)..."
+            sleep 10
+          done
+          if [ "${found}" -eq 0 ]; then
+            echo "ERROR: La imagen tscneo/ace-hls-viewer:${tag} no apareció en Docker Hub tras 5 minutos." >&2
+            exit 1
+          fi
 
       - name: Generar ZIP Easy Deploy
         run: python scripts/package_easy_deploy.py
