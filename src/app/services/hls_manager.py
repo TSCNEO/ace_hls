@@ -291,9 +291,15 @@ class HLSManager:
                     "-b:a", audio_bitrate
                 ])
 
-            # Global HLS Flags
+            # Global HLS Flags: 8 segments in playlist + keep 6 extra on disk before deletion
+            # This prevents 404s and buffering on VLC/iOS players when lagging behind live edge.
             hls_flags = "delete_segments+independent_segments"
-            cmd.extend(["-hls_time", "4", "-hls_list_size", "6", "-hls_flags", hls_flags])
+            cmd.extend([
+                "-hls_time", "4",
+                "-hls_list_size", "8",
+                "-hls_delete_threshold", "6",
+                "-hls_flags", hls_flags
+            ])
 
             if is_recode_profile:
                 cmd.extend([

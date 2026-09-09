@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.12.5
+
+- **Estabilidad de HLS contra microcortes y 404 en VLC/iOS:**
+  - Ampliada ventana de playlist HLS (`-hls_list_size`) de 6 a 8 segmentos (32s).
+  - Añadido umbral de retención en disco (`-hls_delete_threshold 6`): los segmentos obsoletos se mantienen en disco durante 6 ciclos adicionales antes de borrarse. Esto elimina los errores 404 cuando clientes como VLC o Safari van con 10-20s de búfer detrás del live edge.
+  - El manifiesto inicial espera ahora a tener al menos 2 segmentos completos (`min_segments=2`, 8s) antes de declararse listo, proporcionando un colchón de búfer seguro desde el primer segundo.
+
 ## v2.12.4
 
 - **Auto-arranque bajo demanda en rutas `/hls/<stream_id>/index.m3u8` y copiado directo:**

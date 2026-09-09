@@ -652,7 +652,7 @@ def _normalize_hls_profile(profile):
         return 'original'
     return profile
 
-def _manifest_has_segment(manifest_path):
+def _manifest_has_segment(manifest_path, min_segments=2):
     if not os.path.exists(manifest_path):
         return False
 
@@ -663,14 +663,20 @@ def _manifest_has_segment(manifest_path):
     except OSError:
         return False
 
+    valid_count = 0
     for line in lines:
         if not line or line.startswith('#'):
             continue
         if line.startswith(('http://', 'https://')):
-            return True
+            valid_count += 1
+            if valid_count >= min_segments:
+                return True
+            continue
         segment_path = os.path.join(stream_dir, line.split('?')[0])
         if os.path.exists(segment_path) and os.path.getsize(segment_path) > 0:
-            return True
+            valid_count += 1
+            if valid_count >= min_segments:
+                return True
     return False
 
 def _wait_for_ready_manifest(effective_id, timeout=45):
