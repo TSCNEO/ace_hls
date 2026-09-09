@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.12.7
+
+- **Control de Bitrate Estricto en Perfil max_compat (1080p):**
+  - Eliminado el parámetro `-qp 18` sin límite de tasa en VAAPI que disparaba el bitrate a más de 44 Mbps (segmentos de 21 MB) provocando asfixia de buffer en VLC y bloqueos inmediatos en iOS Safari.
+  - Fijado bitrate estricto a 5000 kbps (`-b:v 5000k -maxrate 5000k -bufsize 10000k`) tanto en VAAPI como en CPU. Los segmentos pesan ahora ~2.5 MB, garantizando fluidez continua sin parones en todos los clientes.
+
 ## v2.12.6
 
 - **Optimización de Transcoding / Recode y Menú de Copia Multisuperficie en el Player:**

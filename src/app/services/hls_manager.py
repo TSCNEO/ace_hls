@@ -240,6 +240,8 @@ class HLSManager:
                     
                     buf_720 = str(int(bitrate_720p.replace('k', '')) * 2) + "k"
                     buf_480 = str(int(bitrate_480p.replace('k', '')) * 2) + "k"
+                    bitrate_compat = settings.get('transcode_compat_bitrate', '5000k')
+                    buf_compat = str(int(bitrate_compat.replace('k', '')) * 2) + "k"
 
                     if profile == '720p':
                         filters.append("scale_vaapi=w=-2:h=720:format=nv12")
@@ -248,10 +250,10 @@ class HLSManager:
                         filters.append("scale_vaapi=w=-2:h=480:format=nv12")
                         cmd.extend(["-c:v", vcodec, "-b:v", bitrate_480p, "-maxrate", bitrate_480p, "-bufsize", buf_480, "-g", "50", "-keyint_min", "50", "-bf", "0"])
                     elif profile == 'max_compat':
-                        # Max Compatibility: Same Resolution but Force Re-encode to H.264
-                        # Use ACP/QP instead of fixed bitrate to respect CRF setting.
+                        # Max Compatibility: Same Resolution (1080p) but Force Re-encode to standard H.264
+                        # Use a strictly capped bitrate (5000k) so segments stay ~2.5MB and never overwhelm client buffers.
                         filters.append("scale_vaapi=format=nv12")
-                        cmd.extend(["-c:v", "h264_vaapi", "-qp", str(crf_compat), "-g", "50", "-keyint_min", "50", "-bf", "0"])
+                        cmd.extend(["-c:v", "h264_vaapi", "-b:v", bitrate_compat, "-maxrate", bitrate_compat, "-bufsize", buf_compat, "-g", "50", "-keyint_min", "50", "-bf", "0"])
                     
                     if filters:
                         cmd.extend(["-vf", ",".join(filters)])
@@ -267,6 +269,9 @@ class HLSManager:
                     if deinterlace:
                         filters.append("yadif")
                         
+                    bitrate_compat = settings.get('transcode_compat_bitrate', '5000k')
+                    buf_compat = str(int(bitrate_compat.replace('k', '')) * 2) + "k"
+
                     if profile == '720p':
                         filters.append("scale=-2:720")
                         cmd.extend(["-c:v", "libx264", "-preset", preset, "-b:v", bitrate_720p, "-g", "50", "-keyint_min", "50", "-bf", "0", "-pix_fmt", "yuv420p"])
@@ -274,7 +279,7 @@ class HLSManager:
                         filters.append("scale=-2:480")
                         cmd.extend(["-c:v", "libx264", "-preset", preset, "-b:v", bitrate_480p, "-g", "50", "-keyint_min", "50", "-bf", "0", "-pix_fmt", "yuv420p"])
                     elif profile == 'max_compat':
-                        cmd.extend(["-c:v", "libx264", "-preset", preset, "-crf", crf_compat, "-g", "50", "-keyint_min", "50", "-bf", "0", "-pix_fmt", "yuv420p"])
+                        cmd.extend(["-c:v", "libx264", "-preset", preset, "-b:v", bitrate_compat, "-maxrate", bitrate_compat, "-bufsize", buf_compat, "-g", "50", "-keyint_min", "50", "-bf", "0", "-pix_fmt", "yuv420p"])
                     
                     if filters:
                         cmd.extend(["-vf", ",".join(filters)])
