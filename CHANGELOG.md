@@ -2,20 +2,34 @@
 
 ## v2.12.0
 
-- **Guía electrónica de programación (EPG XMLTV estándar):**
+- **Guía electrónica de programación (EPG XMLTV estándar y dinámico con soporte HTTPS):**
   - Generador automático `/epg.xml` y `/api/agenda/epg.xml` en formato XMLTV estándar a partir de los eventos deportivos y señales descubiertas.
-  - Inyección de cabecera `url-tvg` y `x-tvg-url` en todas las listas M3U (`/agenda.m3u`, `/playlist.m3u`, `/api/playlist/all.m3u` y `ace_hls.m3u`) para carga automática en TiviMate, Jellyfin y reproductores IPTV.
-- **HUD de Estadísticas en Vivo y Medidor de FPS:**
-  - Overlay flotante "Stats for Nerds" con telemetría integrada: motor P2P, enjambre/peers, velocidad de bajada, resolución, **fluidez real en FPS (50 fps vs 25 fps)**, buffer cliente y frames caídos.
-  - Calibración rápida de FPS en el arranque con paso automático a modo reposo para ahorrar CPU y batería.
+  - Inyección dinámica de esquemas (`http://` o `https://`) y cabecera `Host` respetando `X-Forwarded-Proto` en todas las listas M3U (`/agenda.m3u`, `/playlist.m3u`, `/api/playlist/all.m3u` y `ace_hls.m3u`) para despliegues con proxy inverso SSL (Traefik, Nginx, Caddy, Cloudflare).
+- **Player Inteligente / Heartbeat Guard consciente del Orquestador:**
+  - Monitorización en tiempo real del enjambre P2P a través del orquestador (`/api/orchestrator/streams`).
+  - Si el enjambre está descargando activamente (`speed_down > 20 KB/s` o `peers > 0`), el reproductor y el backend renuevan el temporizador de carga, evitando abortar sesiones sanas durante el prebuffering inicial.
+  - Telemetría en vivo de conexión en la pantalla de preparación (`👤 X peers | ⬇️ Y KB/s`).
+- **Conmutación a Backup 100% Opcional y Manual:**
+  - Eliminados los saltos automáticos forzados a señales de respaldo: el usuario mantiene el control total.
+  - Aviso interactivo ante señales inestables con opciones claras: `[ Probar señal #N ]`, `[ Reintentar ]` y `[ Cancelar ]`.
+  - Botón visible de "Cancelar" y aspa de cierre en el diálogo de preparación para abortar sin bloqueos.
+- **Corrección Crítica de Fluidez de Vídeo (Eliminación del bug de 2 fps en Directo):**
+  - Inyección del bitstream filter `-bsf:v dump_extra` en modo passthrough (`-c copy`), garantizando que cada segmento `.ts` comience con sus parámetros de decodificación SPS/PPS para que el navegador decodifique todos los fotogramas sin descartes.
+  - Emisión de la etiqueta HLS `#EXT-X-INDEPENDENT-SEGMENTS` en todas las listas para asegurar que cada fragmento es autónomo.
+  - Eliminación de `+igndts` y adopción de `+discardcorrupt` en FFmpeg, corrigiendo el desorden de timestamps en streams con B-frames y garantizando cadencia perfecta a 25.0 / 50.0 fps con 0 frames caídos.
+  - Calibración de FPS en frontend blindada: mide en régimen permanente (`currentTime >= 1.2s`), eliminando el bloqueo en lecturas transitorias de arranque.
+- **Identificación Robusta del Motor AceStream:**
+  - Detección directa del contenedor (`container_name`) desde el propio stream en el orquestador, eliminando el fallo que mostraba "Motor no identificado" en el HUD.
+- **HUD de Estadísticas en Vivo ("Stats for Nerds"):**
+  - Overlay flotante con telemetría unificada: motor P2P, enjambre/peers, velocidad de bajada, resolución, **fluidez real en FPS** (cifra verde `50 fps` o amarilla `25 fps`), buffer cliente y fotogramas caídos.
 - **Alivio de Servidor (Eliminación de ffprobe):**
-  - Eliminado el subproceso bloqueante `ffprobe` y el bucle de espera de disco en el backend.
-  - Endpoint `POST /api/channels/<ace_id>/tech_info` para actualización ligera de metadatos desde el navegador.
+  - Eliminado el subproceso bloqueante `ffprobe` y el sondeo de segmentos en disco en el backend.
+  - Endpoint `POST /api/channels/<ace_id>/tech_info` para reporte asíncrono y nativo desde el navegador.
 - **Selector de pistas de audio (Multi-Audio / Radio):**
   - Detección y selector dinámico de pistas de audio secundarias (carrusel de radio, sonido ambiente, idiomas alternativos).
 - **Gestos táctiles y salto al directo:**
-  - Doble tap en pantalla (izquierda -10s / derecha +10s) con animación visual de ondas.
-  - Botón de salto rápido al directo (`⚡ Directo`) cuando el vídeo acumula desfase.
+  - Doble tap en pantalla (izquierda -10s / derecha +10s) con animación de ondas táctiles.
+  - Botón de sincronización rápida al directo (`⚡ Directo`) con histéresis estable (se muestra con retardo > 15s, se oculta con < 5s).
 
 ## v2.11.3
 
