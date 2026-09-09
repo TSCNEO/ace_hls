@@ -8,6 +8,7 @@ let hlsInstance = null;
 let mpegtsPlayer = null;
 let currentProfile = 'original';
 let playbackGeneration = 0;
+let playbackStartTime = 0;
 let playbackRetryCount = 0;
 let suppressPlayerErrors = false;
 const MAX_PLAYBACK_RECOVERY_ATTEMPTS = 2;
@@ -686,6 +687,32 @@ async function fetchEngineInfo(aceId, isUpdate = false) {
 
             const hudSwarm = document.getElementById('hud-swarm');
             if (hudSwarm) hudSwarm.textContent = `👤 ${peers} | ⬇️ ${downVal} KB/s`;
+
+            // Live buffer feedback en pantalla durante la preparación
+            if (!hasPlayedSuccessfully && currentAceId === aceId) {
+                const errOverlay = document.getElementById('player-error');
+                if (errOverlay && errOverlay.style.display !== 'none') {
+                    const errMsg = document.getElementById('player-error-message');
+                    if (errMsg) {
+                        const elapsed = Math.max(1, Math.round((Date.now() - playbackStartTime) / 1000));
+                        if (downVal > 0 || peers > 0) {
+                            const speedMb = downVal > 1024 ? `${(downVal / 1024).toFixed(1)} MB/s` : `${downVal} KB/s`;
+                            errMsg.textContent = `Descargando búfer inicial (👤 ${peers} peers | ⬇️ ${speedMb})... [${elapsed}s]`;
+                        } else {
+                            errMsg.textContent = `Conectando con el enjambre P2P... [${elapsed}s]`;
+                        }
+                    }
+                }
+            }
+        } else if (!hasPlayedSuccessfully && currentAceId === aceId) {
+            const errOverlay = document.getElementById('player-error');
+            if (errOverlay && errOverlay.style.display !== 'none') {
+                const errMsg = document.getElementById('player-error-message');
+                if (errMsg) {
+                    const elapsed = Math.max(1, Math.round((Date.now() - playbackStartTime) / 1000));
+                    errMsg.textContent = `Conectando con AceStream... [${elapsed}s]`;
+                }
+            }
         }
 
         if (!identified) container.textContent = 'Motor no identificado';
@@ -1463,6 +1490,7 @@ async function startPlayback(aceId, profile, options = {}) {
     if (resetRetries) playbackRetryCount = 0;
     currentProfile = profile || 'original';
     const generation = ++playbackGeneration;
+    playbackStartTime = Date.now();
 
     // Abort previous request if any
     if (currentAbortController) {

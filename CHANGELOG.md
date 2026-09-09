@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.12.3
+
+- **Optimización de tiempo de arranque y Live Buffer en preparación:**
+  - Reducida sonda FFmpeg (`-analyzeduration` y `-probesize`) de 10M a 3M en HLS, recortando ~2.2s de análisis de flujo en cada arranque.
+  - Reducido intervalo de sondeo de upstream en `routes.py` de 1.5s a 0.75s para detección más rápida de datos listos.
+  - Indicador de "Live Buffer" en el overlay de preparación (`#player-error-message`): muestra segundos transcurridos, peers conectados y velocidad real de descarga del enjambre P2P (MB/s).
+  - Renovación de Service Worker (`acehls-v2.12.3`).
+
 ## v2.12.2
 
 - **Corrección de SPS/PPS (`dump_extra`) para reproducción fluida en decodificador nativo iOS:**

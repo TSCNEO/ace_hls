@@ -205,9 +205,9 @@ class HLSManager:
             client_id = uuid.uuid4().hex
             user_agent = f"AceHLS-FFmpeg/{effective_id}/{client_id}"
 
-            # Generous probing handles slow AceStream startup.
+            # Fast probing handles AceStream streams cleanly without waiting 10s.
             cmd = ["ffmpeg", 
-                   "-analyzeduration", "10000000", "-probesize", "10000000", # 10s buffer for analysis
+                   "-analyzeduration", "3000000", "-probesize", "3000000", # 3s/3MB buffer for fast startup
                    "-rw_timeout", str(Config.FFMPEG_RW_TIMEOUT * 1_000_000),
                    "-user_agent", user_agent,
                    "-fflags", "+genpts+discardcorrupt", "-i", start_url]

@@ -773,7 +773,7 @@ def _wait_for_upstream_media(ace_id, timeout=15, identifier_type='id'):
     while time.time() < deadline:
         if _upstream_has_media(ace_id, identifier_type):
             return True
-        time.sleep(1.5)
+        time.sleep(0.75)
     return False
 
 def _internal_stream_url(ace_id, identifier_type='id'):
