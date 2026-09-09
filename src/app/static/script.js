@@ -121,8 +121,12 @@ document.addEventListener('DOMContentLoaded', () => {
         player.addEventListener('timeupdate', updateLiveEdgeVisibility);
         player.addEventListener('pause', updateLiveEdgeVisibility);
         player.addEventListener('error', () => {
-            if (currentAceId && !suppressPlayerErrors) recoverPlayback('El reproductor nativo emitió un error.', true);
-        });
+            // En iOS Safari, player.load() tras reset emite error transitorio si el vídeo
+            // ya estaba reproduciéndose con éxito (currentTime > 0 && hasPlayedSuccessfully).
+            // Solo suprimir recovery en ese caso; en cualquier otro error, reportar.
+            if (currentAceId && !suppressPlayerErrors && !(player.currentTime > 0 && hasPlayedSuccessfully))
+                recoverPlayback('El reproductor nativo emitió un error.', true);
+            });
         setupVideoGestures();
     }
 
