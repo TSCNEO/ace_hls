@@ -210,13 +210,13 @@ class HLSManager:
                    "-analyzeduration", "10000000", "-probesize", "10000000", # 10s buffer for analysis
                    "-rw_timeout", str(Config.FFMPEG_RW_TIMEOUT * 1_000_000),
                    "-user_agent", user_agent,
-                   "-fflags", "+genpts+igndts", "-i", start_url]
+                   "-fflags", "+genpts+discardcorrupt", "-i", start_url]
             
             is_recode_profile = Config.ENABLE_TRANSCODE and profile and profile != 'original'
 
             if not Config.ENABLE_TRANSCODE or not profile or profile == 'original':
-                # True original passthrough. The web UI normally uses the upstream proxy for this.
-                cmd.extend(["-c", "copy"])
+                # True original passthrough.
+                cmd.extend(["-c", "copy", "-bsf:v", "dump_extra"])
             else:
                 # Transcoding: Strict mapping
                 cmd.extend(["-map", "0:v:0", "-map", "0:a:0?", "-sn", "-dn", "-ignore_unknown"])
@@ -292,7 +292,7 @@ class HLSManager:
                 ])
 
             # Global HLS Flags
-            hls_flags = "delete_segments+independent_segments" if is_recode_profile else "delete_segments"
+            hls_flags = "delete_segments+independent_segments"
             cmd.extend(["-hls_time", "4", "-hls_list_size", "6", "-hls_flags", hls_flags])
 
             if is_recode_profile:

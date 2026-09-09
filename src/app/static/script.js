@@ -748,16 +748,16 @@ function startFpsCalibration() {
 function runFpsCalibrationStep() {
     fpsCalibrationTimer = setTimeout(() => {
         const player = getPlayerElement();
-        if (!player || player.paused || player.readyState < 2) {
-            if (fpsCalibrationCount < 8) runFpsCalibrationStep();
+        if (!player || player.paused || player.readyState < 2 || player.currentTime < 1.2) {
+            if (fpsCalibrationCount < 12) runFpsCalibrationStep();
             return;
         }
 
         updateStatsHud(true);
         fpsCalibrationCount++;
 
-        // Run up to 3 calibration samples to lock cadence, then stop timer to save CPU!
-        if (fpsCalibrationCount < 3 || currentMeasuredFps === 0) {
+        // Keep sampling until playback is steady and we have a valid broadcast cadence (>= 20 fps)
+        if (fpsCalibrationCount < 4 || (currentMeasuredFps < 20 && fpsCalibrationCount < 10)) {
             runFpsCalibrationStep();
         } else {
             fpsCalibrationTimer = null;
