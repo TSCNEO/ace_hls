@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.12.4
+
+- **Auto-arranque bajo demanda en rutas `/hls/<stream_id>/index.m3u8` y copiado directo:**
+  - El endpoint `/hls/<stream_id>/index.m3u8` ahora inicia automáticamente el motor AceStream y FFmpeg si el stream no está corriendo en disco en lugar de devolver 404.
+  - Añadido botón rápido `🔗` en cada tarjeta de canal para copiar el enlace HLS directamente al portapapeles sin necesidad de abrir el reproductor.
+  - Los enlaces copiados desde el player o desde las tarjetas arrancan el motor de forma autónoma al ser reproducidos en VLC, Safari, Infuse, o cualquier cliente IPTV.
+  - Renovación de Service Worker (`acehls-v2.12.4`).
+
 ## v2.12.3
 
 - **Optimización de tiempo de arranque y Live Buffer en preparación:**

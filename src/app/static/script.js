@@ -513,7 +513,13 @@ function renderChannels(channelsToRender) {
         const isFav = favorites.has(ch.id);
         const starBtn = element('button', `star-btn ${isFav ? 'active' : ''}`, isFav ? '★' : '☆');
         starBtn.type = 'button';
+        starBtn.title = isFav ? 'Quitar de favoritos' : 'Añadir a favoritos';
         starBtn.addEventListener('click', event => toggleFavorite(event, ch.id));
+
+        const copyBtn = element('button', 'card-copy-btn', '🔗');
+        copyBtn.type = 'button';
+        copyBtn.title = 'Copiar enlace HLS';
+        copyBtn.addEventListener('click', event => copyCardLink(event, ch));
 
         const statusDot = element('span', 'status-dot dot-grey');
         statusDot.title = 'Nunca visto';
@@ -561,7 +567,7 @@ function renderChannels(channelsToRender) {
         if (nameLen > 40) nameStyle = "font-size: 0.75rem;";
         else if (nameLen > 25) nameStyle = "font-size: 0.8rem;";
 
-        card.append(starBtn, statusDot);
+        card.append(starBtn, copyBtn, statusDot);
         const logoUrl = safeLogoUrl(ch.logo);
         if (logoUrl) {
             const image = element('img', 'channel-logo');
@@ -1903,6 +1909,35 @@ function copyLinkAction(type) {
         }
     }
     toggleCopyMenu(); // Close
+}
+
+function copyCardLink(event, ch) {
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    const btn = event ? event.currentTarget : null;
+    const proto = window.location.protocol;
+    const host = window.location.host;
+    const url = `${proto}//${host}/hls/${ch.id}/index.m3u8`;
+
+    const onSuccess = () => {
+        if (btn) {
+            const orig = btn.textContent;
+            btn.textContent = '✅';
+            setTimeout(() => { btn.textContent = orig; }, 1800);
+        }
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(onSuccess).catch(() => {
+            fallbackCopy(url);
+            onSuccess();
+        });
+    } else {
+        fallbackCopy(url);
+        onSuccess();
+    }
 }
 
 function showCopyFeedback() {

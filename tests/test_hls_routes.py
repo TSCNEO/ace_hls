@@ -139,3 +139,32 @@ def test_channel_tech_info_endpoint():
             "test-channel-id",
             {"width": 1920, "height": 1080, "fps": 50, "vcodec": "h264", "acodec": "aac"},
         )
+
+
+def test_hls_serve_manifest_autostarts_cold_stream(tmp_path, monkeypatch):
+    app = Flask(__name__)
+    app.register_blueprint(routes.main_bp)
+
+    hls_dir = tmp_path / "hls"
+    hls_dir.mkdir()
+    monkeypatch.setattr(routes.Config, "HLS_DIR", str(hls_dir))
+
+    stream_id = "test-auto-start-channel"
+    stream_dir = hls_dir / stream_id
+    manifest_file = stream_dir / "index.m3u8"
+
+    def fake_start(*args, **kwargs):
+        stream_dir.mkdir(parents=True, exist_ok=True)
+        manifest_file.write_text("#EXTM3U\n#EXTINF:4,\nindex0.ts\n")
+        return {"status": "ok", "url": f"/hls/{stream_id}/index.m3u8"}
+
+    with patch.object(routes, "_probe_upstream_media", return_value="stream"):
+        with patch.object(routes, "_start_hls_with_retries", side_effect=fake_start) as start_mock:
+            client = app.test_client()
+            res = client.get(f"/hls/{stream_id}/index.m3u8")
+
+            assert res.status_code == 200
+            assert "application/vnd.apple.mpegurl" in res.content_type
+            assert b"#EXTM3U" in res.data
+            start_mock.assert_called_once()
+

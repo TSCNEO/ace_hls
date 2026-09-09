@@ -1000,14 +1000,57 @@ def direct_stream(ace_id):
     return response
 
 
+def _parse_playback_stream_id(stream_id):
+    if not stream_id or stream_id == 'index.m3u8':
+        return None, 'id', 'original'
+
+    profile = 'original'
+    base = stream_id
+    for known_profile in ('720p', '480p', 'max_compat'):
+        if base.endswith(f'_{known_profile}'):
+            profile = known_profile
+            base = base[:-len(known_profile)-1]
+            break
+
+    if base.startswith('ih-'):
+        identifier_type = 'infohash'
+        ace_id = base[3:]
+    else:
+        identifier_type = 'id'
+        ace_id = base
+
+    return ace_id, identifier_type, profile
+
+
 @main_bp.route('/hls/<path:filename>')
 def serve_hls(filename):
     # filename might be "ace_id/index.m3u8" or "ace_id/segment.ts"
     # or "ace_id_720p/index.m3u8"
     
     parts = filename.split('/')
-    if len(parts) > 0:
-        stream_id = parts[0]
+    stream_id = parts[0] if len(parts) > 0 else ''
+
+    manifest_path = os.path.join(Config.HLS_DIR, filename)
+    if filename.endswith('index.m3u8') and not os.path.exists(manifest_path):
+        ace_id, identifier_type, profile = _parse_playback_stream_id(stream_id)
+        if ace_id:
+            upstream_kind = _probe_upstream_media(ace_id, identifier_type)
+            if profile == 'original' and upstream_kind == 'hls':
+                suffix = '?identifier_type=infohash' if identifier_type == 'infohash' else ''
+                return current_app.redirect(f"/proxy/hls/{ace_id}/index.m3u8{suffix}")
+
+            result = _start_hls_with_retries(
+                ace_id,
+                profile,
+                attempts=3,
+                wait_timeout=30,
+                upstream_ready=upstream_kind is not None,
+                identifier_type=identifier_type,
+            )
+            if result.get("status") != "ok":
+                return result.get("message", "Stream unavailable"), 504
+
+    if stream_id:
         hls_manager.update_activity(stream_id)
         
     response = send_from_directory(Config.HLS_DIR, filename)
