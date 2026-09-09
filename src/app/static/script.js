@@ -1273,6 +1273,20 @@ function attachHlsToPlayer(player, streamUrl, aceId, profile, generation) {
         hlsInstance = null;
     }
 
+    // En iOS / iPadOS Safari, priorizar SIEMPRE el reproductor nativo de Apple (AVFoundation).
+    // En iOS 17+, Hls.isSupported() puede devolver true por MSE experimental, pero MSE en
+    // WebKit móvil no soporta demuxar MPEG-TS en vivo y deja el player colgado en buffer.
+    if (isIOS() && (player.canPlayType('application/vnd.apple.mpegurl') || player.canPlayType('application/x-mpegURL'))) {
+        player.src = streamUrl;
+        setTimeout(() => { suppressPlayerErrors = false; }, 400);
+        const playPromise = player.play();
+        hidePlayerStatus();
+        if (playPromise) playPromise.catch(() => {
+            hidePlayerStatus();
+        });
+        return;
+    }
+
     if (window.Hls && Hls.isSupported()) {
         hlsInstance = new Hls({
             // Some browser extensions wrap Worker message listeners and throw
