@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.12.8
+
+- **Cosecha de procesos FFmpeg (sin zombis `defunct`):**
+  - Nuevo método `HLSManager._reap_process()` que garantiza que todo proceso hijo de FFmpeg queda completamente recolectado (`wait()`) tras `terminate()`.
+  - Cuando un proceso ignora `SIGTERM`, ahora se fuerza con `SIGKILL` seguido de un segundo `wait()`. Sin esa segunda espera el hijo quedaba en estado *defunct* (zombi) y filtraba un PID durante toda la vida del contenedor.
+  - `stop_stream()` y `_cleanup_stream_locked()` usan el mismo camino de recolección, eliminando los zombis que se acumulaban al parar o limpiar emisiones.
+  - Añadida cobertura de tests con procesos hijos reales (uno cooperativo y otro que ignora `SIGTERM`) que verifican directamente `/proc/<pid>/stat`.
+
+
 ## v2.12.7
 
 - **Control de Bitrate Estricto en Perfil max_compat (1080p):**
