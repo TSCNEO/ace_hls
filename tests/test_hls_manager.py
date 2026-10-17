@@ -1,7 +1,12 @@
 import json
+import os
+import signal
+import subprocess
 import threading
 import time
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
+
+import pytest
 
 from app.config import Config
 from app.services.hls_manager import HLSManager
@@ -22,6 +27,51 @@ def running_process():
     process = Mock(returncode=None)
     process.poll.return_value = None
     return process
+
+
+def stubborn_process():
+    """Alive process whose wait() times out after terminate() and works after kill()."""
+    process = running_process()
+    process.wait.side_effect = [
+        subprocess.TimeoutExpired(cmd="ffmpeg", timeout=2),
+        0,
+    ]
+    return process
+
+
+def spawn_sigterm_ignoring_child():
+    """Real child process that ignores SIGTERM so only SIGKILL can stop it.
+
+    The child announces readiness on stdout so the caller never signals it
+    before the SIGTERM handler is actually installed.
+    """
+    proc = subprocess.Popen(
+        [
+            "python3",
+            "-c",
+            (
+                "import signal, sys, time\n"
+                "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+                "sys.stdout.write('ready\\n')\n"
+                "sys.stdout.flush()\n"
+                "time.sleep(120)\n"
+            ),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    assert proc.stdout.readline().strip() == "ready"
+    return proc
+
+
+def running_child():
+    """Real child process that exits normally on SIGTERM."""
+    return subprocess.Popen(
+        ["python3", "-c", "import time; time.sleep(120)"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 
 def test_ffmpeg_uses_unique_upstream_identity(tmp_path):
@@ -137,3 +187,123 @@ def test_active_stream_info_exposes_real_request_idle_time(tmp_path):
     assert stream["process_alive"] is True
     assert 6 <= stream["idle_seconds"] <= 8
     assert stream["manifest_age_seconds"] is not None
+
+
+def test_cleanup_harvests_process_after_force_kill(tmp_path):
+    """A process that ignores SIGTERM must be killed AND reaped, never left defunct."""
+    manager = bare_manager()
+    stream_id = "f" * 40
+    process = stubborn_process()
+    manager.processes[stream_id] = process
+    manager.activity[stream_id] = time.time()
+
+    with patch.object(Config, "HLS_DIR", str(tmp_path)):
+        manager._cleanup_stream_locked(stream_id)
+
+    process.terminate.assert_called_once()
+    process.kill.assert_called_once()
+    # First wait() timed out; a second wait() is mandatory to harvest the zombie.
+    assert process.wait.call_count == 2
+    assert process.wait.call_args_list[1] == call(timeout=2)
+    assert stream_id not in manager.processes
+
+
+def test_reap_process_returns_true_after_sigkill(tmp_path):
+    """_reap_process must force-kill and harvest a SIGTERM-ignoring child."""
+    manager = bare_manager()
+    proc = spawn_sigterm_ignoring_child()
+    try:
+        assert proc.poll() is None
+        assert manager._reap_process(proc, timeout=1.0) is True
+        assert proc.returncode == -signal.SIGKILL
+        # A reaped child can no longer be waited for -> no defunct entry left behind.
+        with pytest.raises(ChildProcessError):
+            os.waitpid(proc.pid, os.WNOHANG)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=5)
+
+
+def test_reap_process_terminates_cooperative_child_without_kill():
+    """Cooperative children must exit via SIGTERM; kill() is a last resort."""
+    manager = bare_manager()
+    proc = running_child()
+    try:
+        assert manager._reap_process(proc, timeout=5.0) is True
+        assert proc.returncode == -signal.SIGTERM
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=5)
+
+
+def test_reap_process_skips_already_dead_process():
+    """Already-exited processes are harvested without signals."""
+    manager = bare_manager()
+    process = Mock(returncode=0)
+    process.poll.return_value = 0
+
+    assert manager._reap_process(process) is True
+    process.terminate.assert_not_called()
+    process.kill.assert_not_called()
+    process.wait.assert_called_once()
+
+
+def test_stop_stream_reaps_force_killed_process(tmp_path):
+    """stop_stream must leave no zombie behind for a SIGTERM-ignoring stream."""
+    manager = bare_manager()
+    stream_id = "g" * 40
+    process = stubborn_process()
+    manager.processes[stream_id] = process
+    manager.activity[stream_id] = time.time()
+
+    with patch.object(Config, "HLS_DIR", str(tmp_path)):
+        manager.stop_stream(stream_id, reason="test")
+
+    process.kill.assert_called_once()
+    assert process.wait.call_count == 2
+    assert stream_id not in manager.processes
+
+
+def test_cleanup_leaves_no_defunct_child_in_process_table(tmp_path):
+    """End-to-end: a real SIGTERM-ignoring child must not survive as a zombie."""
+    manager = bare_manager()
+    stream_id = "h" * 40
+    proc = spawn_sigterm_ignoring_child()
+    manager.processes[stream_id] = proc
+    manager.activity[stream_id] = time.time()
+    manager.start_times[stream_id] = time.time()
+
+    try:
+        with patch.object(Config, "HLS_DIR", str(tmp_path)):
+            manager._cleanup_stream_locked(stream_id)
+
+        assert stream_id not in manager.processes
+
+        # Inspect /proc straight away: Popen.poll() would itself reap the child
+        # and hide a leaked zombie, so it must not run before this check.
+        state = read_process_state(proc.pid)
+        assert state is None, (
+            f"child {proc.pid} still present in the process table "
+            f"with state {state!r} after cleanup"
+        )
+
+        # A fully reaped child can no longer be waited on.
+        with pytest.raises(ChildProcessError):
+            os.waitpid(proc.pid, os.WNOHANG)
+        assert proc.poll() is not None
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=5)
+
+
+def read_process_state(pid):
+    """Return the single-letter state from /proc/<pid>/stat, or None if gone."""
+    try:
+        with open(f"/proc/{pid}/stat", "r") as handle:
+            fields = handle.read().rsplit(")", 1)[1].split()
+    except OSError:
+        return None
+    return fields[0] if fields else None
