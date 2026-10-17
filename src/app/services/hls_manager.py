@@ -119,13 +119,7 @@ class HLSManager:
             del self.activity[stream_id]
 
         if stream_id in self.processes:
-            proc = self.processes[stream_id]
-            if proc.poll() is None:
-                proc.terminate()
-                try:
-                    proc.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
+            self._reap_process(self.processes[stream_id])
             del self.processes[stream_id]
 
         if stream_id in self.start_times:
@@ -137,6 +131,56 @@ class HLSManager:
             stream_dir = os.path.join(Config.HLS_DIR, stream_id)
             if os.path.exists(stream_dir):
                 shutil.rmtree(stream_dir)
+
+    def _reap_process(self, proc, timeout=2.0):
+        """Terminate a child process and guarantee it is fully reaped.
+
+        A process that ignores SIGTERM is force-killed and then waited for a
+        second time; without that second ``wait()`` the child stays defunct
+        (zombie) and leaks a PID for the lifetime of the container.
+
+        Returns True when the process is confirmed reaped, False if it is
+        still alive after SIGKILL (should not happen on Linux).
+        """
+        if proc is None:
+            return True
+
+        pid = getattr(proc, "pid", None)
+
+        try:
+            if proc.poll() is not None:
+                proc.wait()
+                return True
+
+            try:
+                proc.terminate()
+            except OSError:
+                # Race: the child exited between poll() and terminate().
+                proc.wait()
+                return True
+
+            try:
+                proc.wait(timeout=timeout)
+                return True
+            except subprocess.TimeoutExpired:
+                logger.warning(
+                    "Process %s ignored SIGTERM after %.1fs; force killing.",
+                    pid,
+                    timeout,
+                )
+                proc.kill()
+
+            try:
+                proc.wait(timeout=timeout)
+                return True
+            except subprocess.TimeoutExpired:
+                logger.error(
+                    "Process %s survived SIGKILL; could not reap child.", pid
+                )
+                return False
+        except ChildProcessError:
+            # Already reaped by another path; nothing left to harvest.
+            return True
 
     @staticmethod
     def playback_id(ace_id, identifier_type="id", profile=None):
