@@ -538,8 +538,8 @@ class AgendaService:
                 ev_time = ev.get("time", "")
                 is_live, is_upcoming, diff_minutes, is_soon = self._calculate_live_status(date_str, ev_time)
 
-                # Descartar eventos pasados con mas de 4 horas (-240 minutos)
-                if diff_minutes < -240:
+                # Descartar eventos pasados con mas de 6 horas (-360 minutos)
+                if diff_minutes < -360:
                     continue
 
                 total_events += 1
@@ -622,27 +622,22 @@ class AgendaService:
         )
 
         for day in agenda.get("days", []):
-            date_str = day.get("date", "")
-            day_title = day.get("title") or date_str or "Eventos"
-            day_label = (
-                "Hoy"
-                if "hoy" in day_title.lower()
-                else ("Mañana" if "mañana" in day_title.lower() else date_str)
-            )
-
             for ev in day.get("events", []):
                 if live_only and not ev.get("is_live"):
                     continue
                 if not ev.get("available") or not ev.get("streams"):
                     continue
 
+                diff = ev.get("starts_in_minutes")
+                # Filtro temporal estricto: -6 horas (-360m) hasta +2 horas (+120m), o en directo
+                if diff is not None and not (-360 <= diff <= 120 or ev.get("is_live")):
+                    continue
+
                 event_title = ev.get("event", "Evento deportivo")
                 time_str = ev.get("time", "")
-                is_live = ev.get("is_live", False)
                 comp = ev.get("competition", "")
+                clean_comp = comp.split("|")[0].strip() if comp and comp.strip() else "Deportes"
                 logo = ev.get("competition_icon") or ev.get("local_icon") or ""
-
-                live_tag = "[⚡ VIVO] " if is_live else ""
 
                 for st in ev["streams"]:
                     sid = st.get("stream_id")
@@ -651,25 +646,19 @@ class AgendaService:
                     q = st.get("quality", "SD")
                     src = st.get("source_name", "AceHLS")
                     ident_type = st.get("identifier_type", "id")
+                    short_id = sid[-4:] if len(sid) >= 4 else sid
 
                     for p in profiles_to_render:
-                        if profile == "all":
-                            surface_name = {
-                                "direct": "Directo",
-                                "original": "HLS Original",
-                                "max_compat": "HLS Compatible",
-                                "720p": "HLS 720p",
-                                "480p": "HLS 480p",
-                            }.get(p, p)
-                            group = f"⚽ {day_label} · {surface_name}"
-                        else:
-                            group = (
-                                f"⚽ {day_label} - {comp}"
-                                if comp
-                                else f"⚽ {day_label}"
-                            )
+                        surface_name = {
+                            "direct": "Directo",
+                            "original": "HLS Original",
+                            "max_compat": "HLS Compatible",
+                            "720p": "HLS 720p",
+                            "480p": "HLS 480p",
+                        }.get(p, p)
 
-                        display_name = f"{live_tag}[{time_str}] {event_title} ({q} · {src})"
+                        group = f"[{clean_comp}] [{time_str}] {event_title} [{surface_name}]"
+                        display_name = f"[{time_str}] {event_title} {q} ({src} · {short_id})"
 
                         if p == "direct":
                             from app import utils

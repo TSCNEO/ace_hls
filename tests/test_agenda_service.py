@@ -216,9 +216,10 @@ def test_generate_agenda_m3u(monkeypatch):
             catalog_channels=catalog,
         )
         assert m3u_text.startswith("#EXTM3U")
-        assert "Real Madrid - Barcelona (1080p · Fuente A)" in m3u_text
-        assert "Real Madrid - Barcelona (720p · Fuente B)" in m3u_text
+        assert "[21:00] Real Madrid - Barcelona 1080p (Fuente A · 1080)" in m3u_text
+        assert 'group-title="[LaLiga EA Sports] [21:00] Real Madrid - Barcelona [HLS Original]"' in m3u_text
         assert "http://127.0.0.1:8088/stream/stream_laliga_1080.m3u8" in m3u_text
+        assert "[21:00] Real Madrid - Barcelona 720p (Fuente B · _720)" in m3u_text
 
         # 2. Multi-surface "all" profile M3U
         m3u_all = service.generate_agenda_m3u(
@@ -226,9 +227,9 @@ def test_generate_agenda_m3u(monkeypatch):
             profile="all",
             catalog_channels=catalog,
         )
-        assert 'group-title="⚽ Hoy · Directo"' in m3u_all
-        assert 'group-title="⚽ Hoy · HLS Original"' in m3u_all
-        assert 'group-title="⚽ Hoy · HLS 720p"' in m3u_all
+        assert 'group-title="[LaLiga EA Sports] [21:00] Real Madrid - Barcelona [Directo]"' in m3u_all
+        assert 'group-title="[LaLiga EA Sports] [21:00] Real Madrid - Barcelona [HLS Original]"' in m3u_all
+        assert 'group-title="[LaLiga EA Sports] [21:00] Real Madrid - Barcelona [HLS 720p]"' in m3u_all
 
         # 3. XMLTV Generation
         xmltv_text = service.generate_xmltv(catalog_channels=catalog)
@@ -239,6 +240,62 @@ def test_generate_agenda_m3u(monkeypatch):
         assert '<title lang="es">Real Madrid - Barcelona</title>' in xmltv_text
         assert '<category lang="es">Deportes</category>' in xmltv_text
         assert '</tv>' in xmltv_text
+
+
+def test_generate_agenda_m3u_time_window_filter(monkeypatch):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        service = AgendaService(data_dir=tmpdir)
+        fake_now = datetime.datetime(2026, 6, 15, 14, 0, 0)
+        monkeypatch.setattr(
+            "app.services.agenda_service.datetime.datetime",
+            type("MockDatetime", (datetime.datetime,), {"now": staticmethod(lambda *args: fake_now)})
+        )
+        now = fake_now
+
+        # -5h (kept), -7h (discarded by get_agenda), +1h (kept), +3h (filtered out from M3U)
+        t_kept_past = now - datetime.timedelta(hours=5)
+        t_kept_future = now + datetime.timedelta(hours=1)
+        t_far_future = now + datetime.timedelta(hours=3)
+
+        fake_days = [{
+            "date": now.strftime("%d/%m/%Y"),
+            "title": "Hoy",
+            "events": [
+                {
+                    "time": t_kept_past.strftime("%H:%M"),
+                    "event": "Past Match",
+                    "competition": "Premier League",
+                    "channels": ["Ch1"],
+                },
+                {
+                    "time": t_kept_future.strftime("%H:%M"),
+                    "event": "Soon Match",
+                    "competition": "La Liga",
+                    "channels": ["Ch2"],
+                },
+                {
+                    "time": t_far_future.strftime("%H:%M"),
+                    "event": "Far Future Match",
+                    "competition": "Serie A",
+                    "channels": ["Ch3"],
+                },
+            ]
+        }]
+
+        service._memory_cache = {"days": fake_days, "updated_at": "now"}
+        service._memory_cache_time = time.time() + 9999
+        catalog = [
+            {"name": "Ch1", "stream_id": "sid_1111", "source_name": "Src1", "quality": "1080p"},
+            {"name": "Ch2", "stream_id": "sid_2222", "source_name": "Src2", "quality": "720p"},
+            {"name": "Ch3", "stream_id": "sid_3333", "source_name": "Src3", "quality": "1080p"},
+        ]
+
+        m3u = service.generate_agenda_m3u(host="tv:8088", profile="original", catalog_channels=catalog)
+        assert "Past Match" in m3u
+        assert "Soon Match" in m3u
+        assert "Far Future Match" not in m3u
+        assert 'group-title="[Premier League] [' in m3u
+        assert 'group-title="[La Liga] [' in m3u
 
 
 def test_probe_candidate_streams():
@@ -297,7 +354,7 @@ def test_calculate_live_status_and_soon():
     assert diff_far >= 150
 
 
-def test_discard_events_older_than_4_hours(monkeypatch):
+def test_discard_events_older_than_6_hours(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         service = AgendaService(data_dir=tmpdir)
         fake_now = datetime.datetime(2026, 6, 15, 14, 0, 0)
@@ -307,10 +364,10 @@ def test_discard_events_older_than_4_hours(monkeypatch):
         )
         now = fake_now
 
-        # Event 5 hours ago (older than 4h) -> should be discarded
-        t_old = now - datetime.timedelta(hours=5)
-        # Event 3 hours ago (finished, >135m, but within 4h) -> should be kept as is_past
-        t_recent = now - datetime.timedelta(hours=3)
+        # Event 7 hours ago (older than 6h) -> should be discarded
+        t_old = now - datetime.timedelta(hours=7)
+        # Event 4 hours ago (finished, >135m, but within 6h) -> should be kept as is_past
+        t_recent = now - datetime.timedelta(hours=4)
         # Event in 2 hours -> should be kept as future
         t_future = now + datetime.timedelta(hours=2)
 
