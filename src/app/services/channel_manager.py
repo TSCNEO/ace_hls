@@ -121,19 +121,41 @@ class ChannelManager:
                     source_manager.record_refresh(source["id"], validation=validation, success=True)
                     continue
 
-            snapshots.append(cached_channels)
-            if cached_channels:
-                cached_sources += 1
-            source_manager.record_refresh(
-                source["id"],
-                validation=validation,
-                using_cache=bool(cached_channels),
-                error=validation.error,
-            )
-            logger.warning("Source refresh failed for %s: %s", source["url"], validation.error)
+            # Validation failed! Check cache age (TTL)
+            is_expired = self._is_cache_expired(source, validation.error)
+            if is_expired:
+                updated_at = self._get_source_cache_updated_at(source)
+                hours_ago = round((time.time() - updated_at) / 3600, 1) if updated_at else 0
+                logger.warning(
+                    "Source cache for %s (%s) expired after %.1fh; pruning channels: %s",
+                    source.get("name") or source.get("id"),
+                    source.get("url"),
+                    hours_ago,
+                    validation.error,
+                )
+                source_manager.record_refresh(
+                    source["id"],
+                    validation=validation,
+                    using_cache=False,
+                    error=f"{validation.error} [Caché expirada > {hours_ago}h]",
+                )
+            else:
+                snapshots.append(cached_channels)
+                if cached_channels:
+                    cached_sources += 1
+                source_manager.record_refresh(
+                    source["id"],
+                    validation=validation,
+                    using_cache=bool(cached_channels),
+                    error=validation.error,
+                )
+                logger.warning("Source refresh failed for %s: %s", source["url"], validation.error)
 
         channels = self._merge_source_snapshots(snapshots)
-        if enabled_sources and successful_sources == 0 and os.path.exists(Config.JSON_FILE):
+        all_expired = enabled_sources and all(
+            self._is_cache_expired(src) for src in enabled_sources
+        )
+        if enabled_sources and successful_sources == 0 and not all_expired and os.path.exists(Config.JSON_FILE):
             logger.error("All enabled sources failed; preserving the current global cache.")
             return False
         return self._save_global_outputs(
@@ -258,13 +280,50 @@ class ChannelManager:
         ]
         return ChannelManager._with_source_identity(matched, source)
 
+    def _get_source_cache_updated_at(self, source: dict) -> float | None:
+        try:
+            path = self._source_cache_path(source)
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as handle:
+                    payload = json.load(handle)
+                return float(payload.get("updated_at") or os.path.getmtime(path))
+            last_ok = source.get("refresh", {}).get("last_success_at")
+            if last_ok:
+                return float(last_ok)
+            if os.path.exists(Config.JSON_FILE):
+                return float(os.path.getmtime(Config.JSON_FILE))
+            return None
+        except Exception:
+            return None
+
+    def _is_cache_expired(self, source: dict, error_message: str | None = None) -> bool:
+        """Determines if a cached source snapshot has exceeded its time-to-live.
+        
+        Uses Config.SOURCE_CACHE_404_TTL (default 6h) for 404/Not Found,
+        and Config.SOURCE_CACHE_TTL (default 24h) for other errors (timeouts, 429, etc.).
+        """
+        updated_at = self._get_source_cache_updated_at(source)
+        if not updated_at:
+            return False
+
+        err_text = str(error_message or "").lower()
+        is_404 = "404" in err_text or "not found" in err_text or "no existe" in err_text
+        ttl = Config.SOURCE_CACHE_404_TTL if is_404 else Config.SOURCE_CACHE_TTL
+
+        age = time.time() - updated_at
+        return age > ttl
+
     def rebuild_from_cache(self) -> bool:
         from app.services.source_manager import source_manager
 
         snapshots = [custom_channel_manager.normalized_channels()]
         for source in source_manager.get_sources():
             if source.get("enabled", True):
-                snapshots.append(self._load_source_cache(source))
+                last_err = source.get("refresh", {}).get("last_error")
+                if not self._is_cache_expired(source, last_err):
+                    snapshots.append(self._load_source_cache(source))
+                else:
+                    logger.info("Skipping expired cache for source %s", source.get("name") or source.get("id"))
         return self._save_global_outputs(self._merge_source_snapshots(snapshots))
 
     def accept_validated_source(self, source: dict, validation) -> bool:

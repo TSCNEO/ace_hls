@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.12.9
+
+- **Agrupación y Filtrado Dinámico de Agenda M3U (`/agenda.m3u`):**
+  - Formato de grupos por evento individual: `[{Competición}] [{HH:MM}] {Evento} [{Perfil}]` (ej. `[La Liga EA Sports] [14:00] Rayo Vallecano - Elche [HLS Original]`).
+  - Formato de canales unificado con fuente y últimos 4 caracteres del hash P2P para desambiguación rápida: `[{HH:MM}] {Evento} {Calidad} ({Fuente} · {ID[-4:]})`.
+  - Filtro temporal estricto de eventos: ventana entre -6 horas (en juego o finalizados recientemente) y +2 horas (próximos a empezar), evitando saturar reproductores IPTV.
+- **Caducidad y Purga Automática de Fuentes Caídas (Cache TTL):**
+  - Implementado TTL configurable para la caché de fuentes remotas en `channel_manager`:
+    - `SOURCE_CACHE_TTL` (predeterminado 24 horas): ventana de gracia para fallos temporales (rate limits 429 de IPFS, microcortes, timeouts).
+    - `SOURCE_CACHE_404_TTL` (predeterminado 6 horas): caducidad acelerada para errores definitivos 404/Not Found.
+  - Al expirar el TTL sin refrescos exitosos, los canales obsoletos se purgan automáticamente de `channels.json` y de las listas M3U sin requerir intervención manual.
+
 ## v2.12.8
 
 - **Cosecha de procesos FFmpeg (sin zombis `defunct`):**

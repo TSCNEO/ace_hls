@@ -143,3 +143,7 @@ class Config:
     MYLINKPASTE_DOMAIN_SUFFIX = os.environ.get("MYLINKPASTE_DOMAIN_SUFFIX", "elcano.top").strip().lstrip(".")
     MYLINKPASTE_DOH_PRIMARY = os.environ.get("MYLINKPASTE_DOH_PRIMARY", "https://dns.google/resolve").strip()
     MYLINKPASTE_DOH_BACKUP = os.environ.get("MYLINKPASTE_DOH_BACKUP", "https://cloudflare-dns.com/dns-query").strip()
+
+    # Source Cache TTL settings (seconds)
+    SOURCE_CACHE_TTL = int(os.environ.get("SOURCE_CACHE_TTL", 86400))  # 24 hours
+    SOURCE_CACHE_404_TTL = int(os.environ.get("SOURCE_CACHE_404_TTL", 21600))  # 6 hours for 404/Not Found

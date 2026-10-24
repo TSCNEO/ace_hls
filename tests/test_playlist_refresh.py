@@ -242,3 +242,88 @@ def test_hash_check_not_modified_reuses_cache(tmp_path):
     assert len(channels) == 1
     assert channels[0]["name"] == "Initial"
     assert cache["content_hash"] == "hash_12345"
+
+
+def test_expired_source_cache_prunes_channels_after_ttl(tmp_path):
+    configured_source = source("https://broken/dead_source.m3u", "dead")
+    with configure_paths(tmp_path):
+        manager = ChannelManager()
+        # Save a snapshot that was updated 25 hours ago (>24h TTL)
+        old_time = time.time() - (25 * 3600)
+        manager.save_source_snapshot(
+            configured_source,
+            [{"id": "dead_stream_1", "name": "Dead Channel", "source": configured_source["url"]}],
+        )
+        cache_file = tmp_path / "source_cache" / "src-dead.json"
+        data = json.loads(cache_file.read_text())
+        data["updated_at"] = old_time
+        cache_file.write_text(json.dumps(data))
+
+        # Refresh fails with generic error (timeout / offline)
+        fail_res = failed_result(configured_source["url"])
+        contexts = refresh_context([configured_source], [fail_res])
+        with contexts[0], contexts[1], contexts[2], contexts[3]:
+            manager.update_channels()
+
+        channels = json.loads((tmp_path / "channels.json").read_text())
+        # The channels from the expired source must be pruned
+        assert len(channels) == 0
+
+
+def test_expired_404_source_cache_prunes_channels_after_6h(tmp_path):
+    configured_source = source("https://broken/not_found.m3u", "not_found")
+    with configure_paths(tmp_path):
+        manager = ChannelManager()
+        # Save a snapshot that was updated 7 hours ago (>6h 404 TTL)
+        old_time = time.time() - (7 * 3600)
+        manager.save_source_snapshot(
+            configured_source,
+            [{"id": "nf_stream_1", "name": "404 Channel", "source": configured_source["url"]}],
+        )
+        cache_file = tmp_path / "source_cache" / "src-not_found.json"
+        data = json.loads(cache_file.read_text())
+        data["updated_at"] = old_time
+        cache_file.write_text(json.dumps(data))
+
+        # Refresh fails with 404 Not Found
+        res_404 = ValidationResult(
+            False,
+            "unreachable",
+            "m3u",
+            configured_source["url"],
+            error_code="http_error",
+            error="404 Client Error: Not Found",
+        )
+        contexts = refresh_context([configured_source], [res_404])
+        with contexts[0], contexts[1], contexts[2], contexts[3]:
+            manager.update_channels()
+
+        channels = json.loads((tmp_path / "channels.json").read_text())
+        # The channels from the 404 expired source must be pruned
+        assert len(channels) == 0
+
+
+def test_unexpired_source_cache_retains_channels_during_glitch(tmp_path):
+    configured_source = source("https://glitch/temp.m3u", "glitch")
+    with configure_paths(tmp_path):
+        manager = ChannelManager()
+        # Save a snapshot that was updated 2 hours ago (<24h TTL)
+        recent_time = time.time() - (2 * 3600)
+        manager.save_source_snapshot(
+            configured_source,
+            [{"id": "temp_stream_1", "name": "Glitch Channel", "source": configured_source["url"]}],
+        )
+        cache_file = tmp_path / "source_cache" / "src-glitch.json"
+        data = json.loads(cache_file.read_text())
+        data["updated_at"] = recent_time
+        cache_file.write_text(json.dumps(data))
+
+        # Refresh fails temporarily
+        contexts = refresh_context([configured_source], [failed_result(configured_source["url"])])
+        with contexts[0], contexts[1], contexts[2], contexts[3]:
+            manager.update_channels()
+
+        channels = json.loads((tmp_path / "channels.json").read_text())
+        # The channels must be retained within the grace period
+        assert len(channels) == 1
+        assert channels[0]["id"] == "temp_stream_1"
