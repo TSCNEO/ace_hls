@@ -538,8 +538,8 @@ class AgendaService:
                 ev_time = ev.get("time", "")
                 is_live, is_upcoming, diff_minutes, is_soon = self._calculate_live_status(date_str, ev_time)
 
-                # Descartar eventos pasados con mas de 6 horas (-360 minutos)
-                if diff_minutes < -360:
+                # Descartar eventos pasados con mas de 3 horas (-180 minutos)
+                if diff_minutes < -180:
                     continue
 
                 total_events += 1
@@ -621,6 +621,7 @@ class AgendaService:
             else [profile]
         )
 
+        candidate_events: list[dict[str, Any]] = []
         for day in agenda.get("days", []):
             for ev in day.get("events", []):
                 if live_only and not ev.get("is_live"):
@@ -629,26 +630,38 @@ class AgendaService:
                     continue
 
                 diff = ev.get("starts_in_minutes")
-                # Filtro temporal estricto: -6 horas (-360m) hasta +2 horas (+120m), o en directo
-                if diff is not None and not (-360 <= diff <= 120 or ev.get("is_live")):
+                # Filtro temporal estricto: -3 horas (-180m) hasta +2 horas (+120m), o en directo
+                if diff is not None and not (-180 <= diff <= 120 or ev.get("is_live")):
                     continue
+                candidate_events.append(ev)
 
-                event_title = ev.get("event", "Evento deportivo")
-                time_str = ev.get("time", "")
-                comp = ev.get("competition", "")
-                clean_comp = comp.split("|")[0].strip() if comp and comp.strip() else "Deportes"
-                logo = ev.get("competition_icon") or ev.get("local_icon") or ""
+        # Ordenar cronológicamente por hora (HH:MM) y luego por competición
+        candidate_events.sort(
+            key=lambda e: (
+                e.get("time", ""),
+                e.get("competition", ""),
+                e.get("event", ""),
+            )
+        )
 
-                for st in ev["streams"]:
-                    sid = st.get("stream_id")
-                    if not sid:
-                        continue
-                    q = st.get("quality", "SD")
-                    src = st.get("source_name", "AceHLS")
-                    ident_type = st.get("identifier_type", "id")
-                    short_id = sid[-4:] if len(sid) >= 4 else sid
+        for ev in candidate_events:
+            event_title = ev.get("event", "Evento deportivo")
+            time_str = ev.get("time", "")
+            comp = ev.get("competition", "")
+            clean_comp = comp.split("|")[0].strip() if comp and comp.strip() else "Deportes"
+            logo = ev.get("competition_icon") or ev.get("local_icon") or ""
 
-                    for p in profiles_to_render:
+            for st in ev["streams"]:
+                sid = st.get("stream_id")
+                if not sid:
+                    continue
+                q = st.get("quality", "SD")
+                src = st.get("source_name", "AceHLS")
+                ident_type = st.get("identifier_type", "id")
+                short_id = sid[-4:] if len(sid) >= 4 else sid
+
+                for p in profiles_to_render:
+                    if profile == "all":
                         surface_name = {
                             "direct": "Directo",
                             "original": "HLS Original",
@@ -656,38 +669,40 @@ class AgendaService:
                             "720p": "HLS 720p",
                             "480p": "HLS 480p",
                         }.get(p, p)
+                        group = f"[{time_str}] [{clean_comp}] {event_title} [{surface_name}]"
+                    else:
+                        group = f"[{time_str}] [{clean_comp}] {event_title}"
 
-                        group = f"[{clean_comp}] [{time_str}] {event_title} [{surface_name}]"
-                        display_name = f"[{time_str}] {event_title} {q} ({src} · {short_id})"
+                    display_name = f"[{time_str}] {event_title} {q} ({src} · {short_id})"
 
-                        if p == "direct":
-                            from app import utils
-                            link = utils.get_stream_url_for_client(host, sid, ident_type)
-                        else:
-                            type_suffix = (
-                                "&identifier_type=infohash"
+                    if p == "direct":
+                        from app import utils
+                        link = utils.get_stream_url_for_client(host, sid, ident_type)
+                    else:
+                        type_suffix = (
+                            "&identifier_type=infohash"
+                            if ident_type == "infohash"
+                            else ""
+                        )
+                        suffix = (
+                            f"?profile={p}{type_suffix}"
+                            if p and p != "original"
+                            else (
+                                f"?identifier_type=infohash"
                                 if ident_type == "infohash"
                                 else ""
                             )
-                            suffix = (
-                                f"?profile={p}{type_suffix}"
-                                if p and p != "original"
-                                else (
-                                    f"?identifier_type=infohash"
-                                    if ident_type == "infohash"
-                                    else ""
-                                )
-                            )
-                            link = f"{scheme}://{host}/stream/{sid}.m3u8{suffix}"
-
-                        safe_title = str(display_name).replace("\r", " ").replace("\n", " ")
-                        safe_group = str(group).replace('"', "'").replace("\r", " ").replace("\n", " ")
-                        safe_logo = str(logo).replace('"', "'").replace("\r", " ").replace("\n", " ")
-
-                        lines.append(
-                            f'#EXTINF:-1 tvg-id="{sid}" tvg-name="{safe_title}" tvg-logo="{safe_logo}" group-title="{safe_group}",{safe_title}'
                         )
-                        lines.append(link)
+                        link = f"{scheme}://{host}/stream/{sid}.m3u8{suffix}"
+
+                    safe_title = str(display_name).replace("\r", " ").replace("\n", " ")
+                    safe_group = str(group).replace('"', "'").replace("\r", " ").replace("\n", " ")
+                    safe_logo = str(logo).replace('"', "'").replace("\r", " ").replace("\n", " ")
+
+                    lines.append(
+                        f'#EXTINF:-1 tvg-id="{sid}" tvg-name="{safe_title}" tvg-logo="{safe_logo}" group-title="{safe_group}",{safe_title}'
+                    )
+                    lines.append(link)
 
         return "\n".join(lines)
 

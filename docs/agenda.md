@@ -64,11 +64,12 @@ Mediante el parámetro `profile`, puedes elegir qué superficie de reproducción
 | **Transcodificado 720p** | `/agenda.m3u?profile=720p` | Ahorro de ancho de banda para conexiones móviles o remotas. |
 | **Mega-Lista Unificada (All)** | `/agenda.m3u?profile=all` | Incluye todas las surfaces agrupadas en categorías IPTV (`group-title`). |
 
-Ejemplo de agrupación en modo `profile=all`:
-* `group-title="⚽ Hoy · Directo"`
-* `group-title="⚽ Hoy · HLS Original"`
-* `group-title="⚽ Hoy · HLS 720p"`
-* `group-title="⚽ Mañana · HLS Original"`
+Ejemplo de agrupación en la lista M3U:
+* En modo estándar (`profile=original` por defecto o perfiles específicos):
+  * `group-title="[21:00] [LaLiga EA Sports] Real Madrid - Barcelona"`
+* En modo `profile=all`:
+  * `group-title="[21:00] [LaLiga EA Sports] Real Madrid - Barcelona [HLS Original]"`
+  * `group-title="[21:00] [LaLiga EA Sports] Real Madrid - Barcelona [Directo]"`
 
 ---
 

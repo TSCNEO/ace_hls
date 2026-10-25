@@ -217,7 +217,7 @@ def test_generate_agenda_m3u(monkeypatch):
         )
         assert m3u_text.startswith("#EXTM3U")
         assert "[21:00] Real Madrid - Barcelona 1080p (Fuente A · 1080)" in m3u_text
-        assert 'group-title="[LaLiga EA Sports] [21:00] Real Madrid - Barcelona [HLS Original]"' in m3u_text
+        assert 'group-title="[21:00] [LaLiga EA Sports] Real Madrid - Barcelona"' in m3u_text
         assert "http://127.0.0.1:8088/stream/stream_laliga_1080.m3u8" in m3u_text
         assert "[21:00] Real Madrid - Barcelona 720p (Fuente B · _720)" in m3u_text
 
@@ -227,9 +227,9 @@ def test_generate_agenda_m3u(monkeypatch):
             profile="all",
             catalog_channels=catalog,
         )
-        assert 'group-title="[LaLiga EA Sports] [21:00] Real Madrid - Barcelona [Directo]"' in m3u_all
-        assert 'group-title="[LaLiga EA Sports] [21:00] Real Madrid - Barcelona [HLS Original]"' in m3u_all
-        assert 'group-title="[LaLiga EA Sports] [21:00] Real Madrid - Barcelona [HLS 720p]"' in m3u_all
+        assert 'group-title="[21:00] [LaLiga EA Sports] Real Madrid - Barcelona [Directo]"' in m3u_all
+        assert 'group-title="[21:00] [LaLiga EA Sports] Real Madrid - Barcelona [HLS Original]"' in m3u_all
+        assert 'group-title="[21:00] [LaLiga EA Sports] Real Madrid - Barcelona [HLS 720p]"' in m3u_all
 
         # 3. XMLTV Generation
         xmltv_text = service.generate_xmltv(catalog_channels=catalog)
@@ -252,8 +252,8 @@ def test_generate_agenda_m3u_time_window_filter(monkeypatch):
         )
         now = fake_now
 
-        # -5h (kept), -7h (discarded by get_agenda), +1h (kept), +3h (filtered out from M3U)
-        t_kept_past = now - datetime.timedelta(hours=5)
+        # -2h (kept), -4h (discarded by get_agenda), +1h (kept), +3h (filtered out from M3U)
+        t_kept_past = now - datetime.timedelta(hours=2)
         t_kept_future = now + datetime.timedelta(hours=1)
         t_far_future = now + datetime.timedelta(hours=3)
 
@@ -294,8 +294,8 @@ def test_generate_agenda_m3u_time_window_filter(monkeypatch):
         assert "Past Match" in m3u
         assert "Soon Match" in m3u
         assert "Far Future Match" not in m3u
-        assert 'group-title="[Premier League] [' in m3u
-        assert 'group-title="[La Liga] [' in m3u
+        assert f'group-title="[{t_kept_past.strftime("%H:%M")}] [Premier League] Past Match"' in m3u
+        assert f'group-title="[{t_kept_future.strftime("%H:%M")}] [La Liga] Soon Match"' in m3u
 
 
 def test_probe_candidate_streams():
@@ -354,7 +354,7 @@ def test_calculate_live_status_and_soon():
     assert diff_far >= 150
 
 
-def test_discard_events_older_than_6_hours(monkeypatch):
+def test_discard_events_older_than_3_hours(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         service = AgendaService(data_dir=tmpdir)
         fake_now = datetime.datetime(2026, 6, 15, 14, 0, 0)
@@ -364,10 +364,10 @@ def test_discard_events_older_than_6_hours(monkeypatch):
         )
         now = fake_now
 
-        # Event 7 hours ago (older than 6h) -> should be discarded
-        t_old = now - datetime.timedelta(hours=7)
-        # Event 4 hours ago (finished, >135m, but within 6h) -> should be kept as is_past
-        t_recent = now - datetime.timedelta(hours=4)
+        # Event 4 hours ago (older than 3h / 180m) -> should be discarded
+        t_old = now - datetime.timedelta(hours=4)
+        # Event 150 minutes ago (finished, >135m, but within 180m) -> should be kept as is_past
+        t_recent = now - datetime.timedelta(minutes=150)
         # Event in 2 hours -> should be kept as future
         t_future = now + datetime.timedelta(hours=2)
 
@@ -396,3 +396,57 @@ def test_discard_events_older_than_6_hours(monkeypatch):
         assert recent_ev["is_past"] is True
         future_ev = next(e for e in events_kept if e["event"] == "Future Event")
         assert future_ev["is_past"] is False
+
+
+def test_generate_agenda_m3u_chronological_sorting(monkeypatch):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        service = AgendaService(data_dir=tmpdir)
+        fake_now = datetime.datetime(2026, 6, 15, 14, 0, 0)
+        monkeypatch.setattr(
+            "app.services.agenda_service.datetime.datetime",
+            type("MockDatetime", (datetime.datetime,), {"now": staticmethod(lambda *args: fake_now)})
+        )
+        now = fake_now
+
+        # Events intentionally defined out of order in the input feed
+        fake_days = [{
+            "date": now.strftime("%d/%m/%Y"),
+            "title": "Hoy",
+            "events": [
+                {
+                    "time": "15:30",
+                    "event": "Late Match",
+                    "competition": "Bundesliga",
+                    "channels": ["Ch3"],
+                },
+                {
+                    "time": "14:00",
+                    "event": "B Match",
+                    "competition": "La Liga",
+                    "channels": ["Ch2"],
+                },
+                {
+                    "time": "14:00",
+                    "event": "A Match",
+                    "competition": "Champions League",
+                    "channels": ["Ch1"],
+                },
+            ]
+        }]
+
+        service._memory_cache = {"days": fake_days, "updated_at": "now"}
+        service._memory_cache_time = time.time() + 9999
+        catalog = [
+            {"name": "Ch1", "stream_id": "sid_1", "source_name": "Src1", "quality": "1080p"},
+            {"name": "Ch2", "stream_id": "sid_2", "source_name": "Src2", "quality": "1080p"},
+            {"name": "Ch3", "stream_id": "sid_3", "source_name": "Src3", "quality": "1080p"},
+        ]
+
+        m3u = service.generate_agenda_m3u(host="tv:8088", profile="original", catalog_channels=catalog)
+
+        pos_a = m3u.find('group-title="[14:00] [Champions League] A Match"')
+        pos_b = m3u.find('group-title="[14:00] [La Liga] B Match"')
+        pos_late = m3u.find('group-title="[15:30] [Bundesliga] Late Match"')
+
+        assert pos_a != -1 and pos_b != -1 and pos_late != -1
+        assert pos_a < pos_b < pos_late
